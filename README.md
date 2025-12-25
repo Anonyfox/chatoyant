@@ -24,6 +24,7 @@ import { createOpenAIClient } from "chatoyant/providers/openai";
 import { createAnthropicClient } from "chatoyant/providers/anthropic";
 import { createXAIClient } from "chatoyant/providers/xai";
 import { Schema } from "chatoyant/schema";
+import * as tokens from "chatoyant/tokens";
 ```
 
 ---
@@ -121,6 +122,54 @@ const result = await client.chat(
     reasoningEffort: "high",
   }
 );
+```
+
+---
+
+## Tokens
+
+Zero-dependency utilities for token estimation, cost calculation, and context management.
+
+```typescript
+import {
+  estimateTokens,
+  estimateChatTokens,
+  calculateCost,
+  getContextWindow,
+  splitText,
+  fitMessages,
+  PRICING,
+  CONTEXT_WINDOWS,
+} from "chatoyant/tokens";
+
+// Estimate tokens in text
+const tokens = estimateTokens("Hello, world!"); // ~3
+
+// Estimate tokens for a chat conversation
+const chatTokens = estimateChatTokens([
+  { role: "system", content: "You are helpful." },
+  { role: "user", content: "Hello!" },
+]);
+
+// Calculate cost for an API call
+const cost = calculateCost({
+  model: "gpt-4o",
+  inputTokens: 1000,
+  outputTokens: 500,
+});
+console.log(`Total: $${cost.total.toFixed(4)}`);
+
+// Get context window for a model
+const maxTokens = getContextWindow("claude-3-opus"); // 200000
+
+// Split long text into chunks for embeddings/RAG
+const chunks = splitText(longDocument, { maxTokens: 512, overlap: 50 });
+
+// Fit messages into context budget
+const fitted = fitMessages(messages, {
+  maxTokens: 4000,
+  reserveForResponse: 1000,
+});
 ```
 
 ---

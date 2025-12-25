@@ -27,6 +27,16 @@
         "default": "./dist/schema.cjs"
       }
     },
+    "./tokens": {
+      "import": {
+        "types": "./dist/tokens.d.ts",
+        "default": "./dist/tokens.js"
+      },
+      "require": {
+        "types": "./dist/tokens.d.cts",
+        "default": "./dist/tokens.cjs"
+      }
+    },
     "./providers/openai": {
       "import": {
         "types": "./dist/providers/openai.d.ts",
