@@ -5,7 +5,11 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 
-**Typesafe LLM provider clients for TypeScript.** Native `fetch`, streaming, structured outputs, zero dependencies.
+<div align="center">
+  <img src="https://raw.githubusercontent.com/Anonyfox/chatoyant/main/assets/chatoyant-logo.png" alt="Chatoyant Logo" width="400" />
+</div>
+
+Unified TypeScript SDK for LLM providers (OpenAI, Anthropic, xAI) with streaming, structured outputs, and zero dependencies.
 
 > _chatoyant_ /ʃəˈtɔɪənt/ — having a changeable lustre, like a cat's eye in the dark
 
@@ -309,6 +313,14 @@ Schema.parse(user, jsonData);
 
 ---
 
-## License
+### Support
 
-MIT — **[Anonyfox](https://anonyfox.com)**
+If this package helps your project, consider sponsoring its maintenance:
+
+[![GitHub Sponsors](https://img.shields.io/badge/Sponsor-EA4AAA?style=for-the-badge&logo=github&logoColor=white)](https://github.com/sponsors/Anonyfox)
+
+---
+
+**[Anonyfox](https://anonyfox.com) • [MIT License](LICENSE)**
+
+</div>
