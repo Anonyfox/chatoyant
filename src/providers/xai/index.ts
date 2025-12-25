@@ -44,6 +44,7 @@ export {
   chatSimple,
   chatStructured,
   chatWithTools,
+  modelSupportsPenalty,
   chatWithWebSearch,
 } from './chat.js';
 // Chat Streaming
@@ -80,7 +81,9 @@ export {
 // Models
 export {
   getImageGenerationModel,
+  getImageGenerationModelList,
   getLanguageModel,
+  getLanguageModelList,
   getModel,
   listImageGenerationModels,
   listLanguageModels,

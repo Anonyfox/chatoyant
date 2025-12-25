@@ -14,7 +14,14 @@ import {
   chatStreamContent,
   chatStreamReadable,
 } from './chat-stream.js';
-import { type EmbeddingOptions, embed, embedMany, embedOne } from './embeddings.js';
+import {
+  cosineSimilarity,
+  type EmbeddingOptions,
+  embed,
+  embedMany,
+  embedOne,
+  findSimilar,
+} from './embeddings.js';
 import {
   generateImage,
   generateImageBase64,
@@ -347,6 +354,20 @@ export class OpenAIClient {
   async modelExists(modelId: string): Promise<boolean> {
     return modelExists(modelId, this.getRequestOptions());
   }
+
+  // ==========================================================================
+  // Utility Methods
+  // ==========================================================================
+
+  /**
+   * Calculate cosine similarity between two vectors.
+   */
+  cosineSimilarity = cosineSimilarity;
+
+  /**
+   * Find similar items from a corpus.
+   */
+  findSimilar = findSimilar;
 }
 
 /**

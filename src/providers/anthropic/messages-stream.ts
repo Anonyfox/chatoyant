@@ -31,8 +31,29 @@ export interface MessagesStreamOptions extends RequestOptions {
   maxTokens: number;
   /** System prompt */
   system?: SystemPrompt;
-  /** Sampling temperature */
+  /** Sampling temperature (0-1) */
   temperature?: number;
+  /**
+   * Top-p (nucleus) sampling threshold (0-1).
+   * Maps to Anthropic's `top_p` parameter.
+   */
+  topP?: number;
+  /**
+   * Top-k sampling - only sample from the top K options.
+   * Anthropic-specific feature not available in OpenAI/xAI.
+   * Maps to Anthropic's `top_k` parameter.
+   */
+  topK?: number;
+  /**
+   * Stop sequences - stops generation when any of these strings are encountered.
+   * Alias for Anthropic's `stop_sequences` parameter for API consistency with OpenAI/xAI.
+   */
+  stop?: string[];
+  /**
+   * End-user identifier for abuse monitoring and analytics.
+   * Maps to Anthropic's `metadata.user_id` parameter.
+   */
+  user?: string;
   /** Additional request parameters */
   requestOptions?: Partial<Omit<MessagesRequest, 'model' | 'messages' | 'max_tokens' | 'stream'>>;
 }
@@ -73,7 +94,27 @@ export async function* messageStream(
   messages: Message[],
   options: MessagesStreamOptions,
 ): AsyncGenerator<StreamEvent, void, undefined> {
-  const { model, maxTokens, system, temperature, requestOptions, ...reqOpts } = options;
+  const {
+    model,
+    maxTokens,
+    system,
+    temperature,
+    topP,
+    topK,
+    stop,
+    user,
+    requestOptions,
+    ...reqOpts
+  } = options;
+
+  // Validate max_tokens > budget_tokens when using extended thinking
+  const thinking = requestOptions?.thinking;
+  if (thinking && thinking.type === 'enabled' && thinking.budget_tokens >= maxTokens) {
+    throw new Error(
+      `[chatoyant/anthropic] max_tokens (${maxTokens}) must be greater than thinking.budget_tokens (${thinking.budget_tokens}). ` +
+        `Increase maxTokens to at least ${thinking.budget_tokens + 1}.`,
+    );
+  }
 
   const body: MessagesRequest = {
     model,
@@ -89,6 +130,25 @@ export async function* messageStream(
 
   if (temperature !== undefined) {
     body.temperature = temperature;
+  }
+
+  // Map topP/topK to Anthropic's parameter names
+  if (topP !== undefined) {
+    body.top_p = topP;
+  }
+
+  if (topK !== undefined) {
+    body.top_k = topK;
+  }
+
+  // Map `stop` to Anthropic's `stop_sequences` for API consistency
+  if (stop !== undefined && stop.length > 0) {
+    body.stop_sequences = stop;
+  }
+
+  // Map `user` to Anthropic's `metadata.user_id` for API consistency with OpenAI/xAI
+  if (user !== undefined) {
+    body.metadata = { ...body.metadata, user_id: user };
   }
 
   const response = await requestRaw('/messages', body, reqOpts);

@@ -114,6 +114,148 @@ describe('messages functions with mocked fetch', () => {
       assert.equal(body.temperature, 0.7);
     });
 
+    it('should map topP to top_p for API consistency', async () => {
+      mockFetch.mock.mockImplementation(async () => {
+        return new Response(JSON.stringify(mockResponse), { status: 200 });
+      });
+
+      await createMessage(messages, {
+        apiKey: 'sk-test',
+        model: 'claude-sonnet-4-20250514',
+        maxTokens: 1024,
+        topP: 0.9,
+      });
+
+      const [, options] = mockFetch.mock.calls[0].arguments;
+      const body = JSON.parse(options?.body as string);
+      assert.equal(body.top_p, 0.9);
+    });
+
+    it('should map topK to top_k (Anthropic-specific)', async () => {
+      mockFetch.mock.mockImplementation(async () => {
+        return new Response(JSON.stringify(mockResponse), { status: 200 });
+      });
+
+      await createMessage(messages, {
+        apiKey: 'sk-test',
+        model: 'claude-sonnet-4-20250514',
+        maxTokens: 1024,
+        topK: 40,
+      });
+
+      const [, options] = mockFetch.mock.calls[0].arguments;
+      const body = JSON.parse(options?.body as string);
+      assert.equal(body.top_k, 40);
+    });
+
+    it('should map stop to stop_sequences for API consistency', async () => {
+      mockFetch.mock.mockImplementation(async () => {
+        return new Response(JSON.stringify(mockResponse), { status: 200 });
+      });
+
+      await createMessage(messages, {
+        apiKey: 'sk-test',
+        model: 'claude-sonnet-4-20250514',
+        maxTokens: 1024,
+        stop: ['END', 'STOP'],
+      });
+
+      const [, options] = mockFetch.mock.calls[0].arguments;
+      const body = JSON.parse(options?.body as string);
+      assert.deepEqual(body.stop_sequences, ['END', 'STOP']);
+    });
+
+    it('should not include stop_sequences when stop is empty', async () => {
+      mockFetch.mock.mockImplementation(async () => {
+        return new Response(JSON.stringify(mockResponse), { status: 200 });
+      });
+
+      await createMessage(messages, {
+        apiKey: 'sk-test',
+        model: 'claude-sonnet-4-20250514',
+        maxTokens: 1024,
+        stop: [],
+      });
+
+      const [, options] = mockFetch.mock.calls[0].arguments;
+      const body = JSON.parse(options?.body as string);
+      assert.equal(body.stop_sequences, undefined);
+    });
+
+    it('should map user to metadata.user_id for API consistency', async () => {
+      mockFetch.mock.mockImplementation(async () => {
+        return new Response(JSON.stringify(mockResponse), { status: 200 });
+      });
+
+      await createMessage(messages, {
+        apiKey: 'sk-test',
+        model: 'claude-sonnet-4-20250514',
+        maxTokens: 1024,
+        user: 'user-123',
+      });
+
+      const [, options] = mockFetch.mock.calls[0].arguments;
+      const body = JSON.parse(options?.body as string);
+      assert.deepEqual(body.metadata, { user_id: 'user-123' });
+    });
+
+    it('should throw when max_tokens <= budget_tokens with thinking', async () => {
+      await assert.rejects(
+        async () => {
+          await createMessage(messages, {
+            apiKey: 'sk-test',
+            model: 'claude-sonnet-4-20250514',
+            maxTokens: 1024,
+            requestOptions: {
+              thinking: { type: 'enabled', budget_tokens: 1024 },
+            },
+          });
+        },
+        {
+          message: /max_tokens.*must be greater than thinking\.budget_tokens/,
+        },
+      );
+    });
+
+    it('should throw when max_tokens < budget_tokens with thinking', async () => {
+      await assert.rejects(
+        async () => {
+          await createMessage(messages, {
+            apiKey: 'sk-test',
+            model: 'claude-sonnet-4-20250514',
+            maxTokens: 512,
+            requestOptions: {
+              thinking: { type: 'enabled', budget_tokens: 1024 },
+            },
+          });
+        },
+        {
+          message: /Increase maxTokens to at least 1025/,
+        },
+      );
+    });
+
+    it('should allow max_tokens > budget_tokens with thinking', async () => {
+      mockFetch.mock.mockImplementation(async () => {
+        return new Response(JSON.stringify(mockResponse), { status: 200 });
+      });
+
+      // Should not throw
+      await createMessage(messages, {
+        apiKey: 'sk-test',
+        model: 'claude-sonnet-4-20250514',
+        maxTokens: 2048,
+        requestOptions: {
+          thinking: { type: 'enabled', budget_tokens: 1024 },
+        },
+      });
+
+      const [, options] = mockFetch.mock.calls[0].arguments;
+      const body = JSON.parse(options?.body as string);
+      assert.equal(body.max_tokens, 2048);
+      assert.deepEqual(body.thinking, { type: 'enabled', budget_tokens: 1024 });
+    });
+
     it('should return usage information', async () => {
       mockFetch.mock.mockImplementation(async () => {
         return new Response(JSON.stringify(mockResponse), { status: 200 });

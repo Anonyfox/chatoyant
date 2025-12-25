@@ -2,8 +2,8 @@
  * Tests for context window utilities.
  */
 
-import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
+import { describe, it } from 'node:test';
 import { CONTEXT_WINDOWS, getContextWindow, hasContextWindow } from './context-windows.js';
 
 describe('tokens/context-windows', () => {
@@ -72,4 +72,3 @@ describe('tokens/context-windows', () => {
     });
   });
 });
-

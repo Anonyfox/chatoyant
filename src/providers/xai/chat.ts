@@ -18,6 +18,73 @@ import type {
 } from './types.js';
 
 /**
+ * Models that support frequency_penalty and presence_penalty.
+ * Fast and mini models do not support these parameters.
+ */
+const MODELS_WITH_PENALTY_SUPPORT = new Set([
+  'grok-2-1212',
+  'grok-3',
+  'grok-4-0709',
+]);
+
+/**
+ * Check if a model supports frequency/presence penalty parameters.
+ */
+export function modelSupportsPenalty(model: string): boolean {
+  return MODELS_WITH_PENALTY_SUPPORT.has(model);
+}
+
+/**
+ * Filter out unsupported parameters for a given model.
+ * Logs a warning if parameters are removed.
+ *
+ * - `frequency_penalty` / `presence_penalty`: Only supported by grok-2, grok-3, grok-4-0709
+ * - `reasoning_effort`: Not supported by any xAI model (reasoning is baked into model choice)
+ */
+function filterUnsupportedParams(
+  model: string,
+  requestOptions?: Partial<ChatRequest>,
+  reasoningEffort?: ReasoningEffort,
+): { requestOptions?: Partial<ChatRequest>; reasoningEffort?: ReasoningEffort } {
+  const filtered: Partial<ChatRequest> = requestOptions ? { ...requestOptions } : {};
+  const unsupported: string[] = [];
+  let filteredReasoning = reasoningEffort;
+
+  // Filter penalty params for unsupported models
+  if (!modelSupportsPenalty(model)) {
+    if (filtered.frequency_penalty !== undefined) {
+      unsupported.push('frequency_penalty');
+      delete filtered.frequency_penalty;
+    }
+    if (filtered.presence_penalty !== undefined) {
+      unsupported.push('presence_penalty');
+      delete filtered.presence_penalty;
+    }
+  }
+
+  // reasoning_effort is not supported by any xAI model - reasoning is baked into model choice
+  if (reasoningEffort !== undefined) {
+    unsupported.push('reasoning_effort');
+    filteredReasoning = undefined;
+  }
+
+  if (unsupported.length > 0) {
+    const tips =
+      unsupported.includes('reasoning_effort')
+        ? ' Tip: Use model names like "grok-4-1-fast-reasoning" or "grok-4-1-fast-non-reasoning" to control reasoning.'
+        : '';
+    console.warn(
+      `[chatoyant/xai] Model "${model}" does not support: ${unsupported.join(', ')}. These parameters were ignored.${tips}`,
+    );
+  }
+
+  return {
+    requestOptions: Object.keys(filtered).length > 0 ? filtered : undefined,
+    reasoningEffort: filteredReasoning,
+  };
+}
+
+/**
  * Options for chat requests.
  */
 export interface ChatOptions extends RequestOptions {
@@ -35,6 +102,12 @@ export interface ChatOptions extends RequestOptions {
   user?: string;
   /** Deterministic sampling seed */
   seed?: number;
+  /** Whether to return log probabilities of output tokens */
+  logprobs?: boolean;
+  /** Number of most likely tokens to return at each position (1-20, requires logprobs) */
+  topLogprobs?: number;
+  /** Number of completions to generate (default: 1) */
+  n?: number;
   /** Response format */
   responseFormat?: ResponseFormat;
   /** Reasoning effort for reasoning models (xAI-specific) */
@@ -68,17 +141,23 @@ export async function chat(messages: Message[], options: ChatOptions): Promise<C
     stop,
     user,
     seed,
+    logprobs,
+    topLogprobs,
+    n,
     responseFormat,
     reasoningEffort,
     requestOptions,
     ...reqOpts
   } = options;
 
+  // Filter out unsupported parameters for this model
+  const filtered = filterUnsupportedParams(model, requestOptions, reasoningEffort);
+
   const body: ChatRequest = {
     model,
     messages,
     stream: false,
-    ...requestOptions,
+    ...filtered.requestOptions,
   };
 
   if (temperature !== undefined) body.temperature = temperature;
@@ -87,8 +166,11 @@ export async function chat(messages: Message[], options: ChatOptions): Promise<C
   if (stop !== undefined) body.stop = stop;
   if (user !== undefined) body.user = user;
   if (seed !== undefined) body.seed = seed;
+  if (logprobs !== undefined) body.logprobs = logprobs;
+  if (topLogprobs !== undefined) body.top_logprobs = topLogprobs;
+  if (n !== undefined) body.n = n;
   if (responseFormat !== undefined) body.response_format = responseFormat;
-  if (reasoningEffort !== undefined) body.reasoning_effort = reasoningEffort;
+  if (filtered.reasoningEffort !== undefined) body.reasoning_effort = filtered.reasoningEffort;
 
   return request<ChatCompletion>('/chat/completions', body, reqOpts);
 }

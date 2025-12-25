@@ -65,7 +65,7 @@ export const CONTEXT_WINDOWS = {
   'gpt-3.5-turbo-16k': 16_385,
 
   // o1 family (reasoning)
-  'o1': 200_000,
+  o1: 200_000,
   'o1-2024-12-17': 200_000,
   'o1-preview': 128_000,
   'o1-preview-2024-09-12': 128_000,
@@ -75,7 +75,7 @@ export const CONTEXT_WINDOWS = {
   'o1-pro-2025-03-19': 200_000,
 
   // o3 family (reasoning)
-  'o3': 200_000,
+  o3: 200_000,
   'o3-2025-04-16': 200_000,
   'o3-mini': 200_000,
   'o3-mini-2025-01-31': 200_000,

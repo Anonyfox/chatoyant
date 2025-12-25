@@ -42,7 +42,12 @@ export function splitText(text: string, options: ChunkOptions): string[] {
   }
 
   // Determine split points
-  const splitPattern = separator instanceof RegExp ? separator : separator ? new RegExp(separator, 'g') : /\n\n+|\n|(?<=[.!?])\s+/g;
+  const splitPattern =
+    separator instanceof RegExp
+      ? separator
+      : separator
+        ? new RegExp(separator, 'g')
+        : /\n\n+|\n|(?<=[.!?])\s+/g;
 
   // Split into segments
   const segments = text.split(splitPattern).filter((s) => s.trim());
@@ -169,7 +174,7 @@ export function fitMessages(messages: TokenMessage[], options: FitOptions): Toke
   const otherMessages = systemMessage ? messages.slice(1) : messages;
 
   const systemTokens = systemMessage ? estimateMessageTokens(systemMessage, provider) : 0;
-  let remainingBudget = budget - systemTokens;
+  const remainingBudget = budget - systemTokens;
 
   if (remainingBudget <= 0) {
     // Can't even fit system message
@@ -287,4 +292,3 @@ export function estimateChunkCount(text: string, chunkSize: number): number {
   const tokens = estimateTokens(text);
   return Math.ceil(tokens / chunkSize);
 }
-

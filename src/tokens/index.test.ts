@@ -2,8 +2,8 @@
  * Tests for token module exports.
  */
 
-import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
+import { describe, it } from 'node:test';
 import * as tokens from './index.js';
 
 describe('tokens/index', () => {
@@ -123,4 +123,3 @@ describe('tokens/index', () => {
     });
   });
 });
-

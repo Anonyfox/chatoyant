@@ -32,7 +32,14 @@
  */
 
 // Chat
-export { type ChatOptions, chat, chatSimple, chatStructured, chatWithTools } from './chat.js';
+export {
+  type ChatOptions,
+  type ReasoningEffort,
+  chat,
+  chatSimple,
+  chatStructured,
+  chatWithTools,
+} from './chat.js';
 // Chat Streaming
 export {
   type ChatStreamOptions,
@@ -79,6 +86,8 @@ export {
   requestGet,
   requestRaw,
 } from './request.js';
+// Schema utilities
+export { makeOpenAIStrict, needsOpenAIStrictTransform } from './schema-utils.js';
 // Streaming utilities
 export {
   accumulatorToToolCalls,

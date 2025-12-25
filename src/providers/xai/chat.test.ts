@@ -4,7 +4,7 @@
 
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, it, mock } from 'node:test';
-import { chat, chatSimple, chatStructured, chatWithTools, chatWithWebSearch } from './chat.js';
+import { chat, chatSimple, chatStructured, chatWithTools, chatWithWebSearch, modelSupportsPenalty } from './chat.js';
 import type { ChatCompletion, Message } from './types.js';
 
 describe('chat functions with mocked fetch', () => {
@@ -90,7 +90,11 @@ describe('chat functions with mocked fetch', () => {
       assert.equal(body.seed, 42);
     });
 
-    it('should include xAI-specific reasoning_effort parameter', async () => {
+    it('should filter xAI-specific reasoning_effort parameter (not supported by API)', async () => {
+      // Suppress console.warn for this test
+      const originalWarn = console.warn;
+      console.warn = () => {};
+
       mockFetch.mock.mockImplementation(async () => {
         return new Response(JSON.stringify(mockCompletion), { status: 200 });
       });
@@ -101,9 +105,13 @@ describe('chat functions with mocked fetch', () => {
         reasoningEffort: 'high',
       });
 
+      console.warn = originalWarn;
+
       const [, options] = mockFetch.mock.calls[0].arguments;
       const body = JSON.parse(options?.body as string);
-      assert.equal(body.reasoning_effort, 'high');
+      // reasoning_effort is filtered out because it's not actually supported by the xAI API
+      // Reasoning is controlled by model selection (e.g., *-reasoning vs *-non-reasoning)
+      assert.equal(body.reasoning_effort, undefined);
     });
   });
 
@@ -266,5 +274,108 @@ describe('chat functions with mocked fetch', () => {
       assert.equal(body.response_format.type, 'json_schema');
       assert.equal(body.response_format.json_schema.name, 'test');
     });
+  });
+
+  describe('penalty parameter filtering', () => {
+    it('should allow frequency_penalty for supported models', async () => {
+      mockFetch.mock.mockImplementation(async () => {
+        return new Response(JSON.stringify(mockCompletion), { status: 200 });
+      });
+
+      await chat(messages, {
+        apiKey: 'xai-test',
+        model: 'grok-3',
+        requestOptions: { frequency_penalty: 0.5 },
+      });
+
+      const [, options] = mockFetch.mock.calls[0].arguments;
+      const body = JSON.parse(options?.body as string);
+      assert.equal(body.frequency_penalty, 0.5);
+    });
+
+    it('should filter out frequency_penalty for unsupported models', async () => {
+      // Capture console.warn
+      const warnCalls: string[] = [];
+      const originalWarn = console.warn;
+      console.warn = (...args) => warnCalls.push(args.join(' '));
+
+      mockFetch.mock.mockImplementation(async () => {
+        return new Response(JSON.stringify(mockCompletion), { status: 200 });
+      });
+
+      await chat(messages, {
+        apiKey: 'xai-test',
+        model: 'grok-3-mini',
+        requestOptions: { frequency_penalty: 0.5, presence_penalty: 0.3 },
+      });
+
+      console.warn = originalWarn;
+
+      const [, options] = mockFetch.mock.calls[0].arguments;
+      const body = JSON.parse(options?.body as string);
+      assert.equal(body.frequency_penalty, undefined);
+      assert.equal(body.presence_penalty, undefined);
+      assert.ok(warnCalls.some(msg => msg.includes('grok-3-mini') && msg.includes('frequency_penalty')));
+    });
+
+    it('should filter out penalties for fast models', async () => {
+      mockFetch.mock.mockImplementation(async () => {
+        return new Response(JSON.stringify(mockCompletion), { status: 200 });
+      });
+
+      await chat(messages, {
+        apiKey: 'xai-test',
+        model: 'grok-4-1-fast-non-reasoning',
+        requestOptions: { frequency_penalty: 0.5 },
+      });
+
+      const [, options] = mockFetch.mock.calls[0].arguments;
+      const body = JSON.parse(options?.body as string);
+      assert.equal(body.frequency_penalty, undefined);
+    });
+
+    it('should filter out reasoning_effort (not supported by xAI API)', async () => {
+      // Capture console.warn
+      const warnCalls: string[] = [];
+      const originalWarn = console.warn;
+      console.warn = (...args) => warnCalls.push(args.join(' '));
+
+      mockFetch.mock.mockImplementation(async () => {
+        return new Response(JSON.stringify(mockCompletion), { status: 200 });
+      });
+
+      await chat(messages, {
+        apiKey: 'xai-test',
+        model: 'grok-4-1-fast-reasoning',
+        reasoningEffort: 'high',
+      });
+
+      console.warn = originalWarn;
+
+      const [, options] = mockFetch.mock.calls[0].arguments;
+      const body = JSON.parse(options?.body as string);
+      assert.equal(body.reasoning_effort, undefined);
+      assert.ok(warnCalls.some(msg => msg.includes('reasoning_effort')));
+      assert.ok(warnCalls.some(msg => msg.includes('Tip:')));
+    });
+  });
+});
+
+describe('modelSupportsPenalty', () => {
+  it('should return true for grok-3', () => {
+    assert.ok(modelSupportsPenalty('grok-3'));
+  });
+
+  it('should return true for grok-4-0709', () => {
+    assert.ok(modelSupportsPenalty('grok-4-0709'));
+  });
+
+  it('should return false for grok-3-mini', () => {
+    assert.ok(!modelSupportsPenalty('grok-3-mini'));
+  });
+
+  it('should return false for fast models', () => {
+    assert.ok(!modelSupportsPenalty('grok-4-1-fast-reasoning'));
+    assert.ok(!modelSupportsPenalty('grok-4-1-fast-non-reasoning'));
   });
 });

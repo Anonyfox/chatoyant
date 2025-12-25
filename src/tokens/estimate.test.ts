@@ -2,8 +2,8 @@
  * Tests for token estimation utilities.
  */
 
-import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
+import { describe, it } from 'node:test';
 import {
   estimatePromptTokens,
   estimateTokens,
@@ -30,7 +30,9 @@ describe('tokens/estimate', () => {
 
     it('should return higher count for longer text', () => {
       const short = estimateTokens('Hi');
-      const long = estimateTokens('Hello, this is a much longer piece of text that should have more tokens.');
+      const long = estimateTokens(
+        'Hello, this is a much longer piece of text that should have more tokens.',
+      );
       assert.ok(long > short);
     });
 
@@ -104,7 +106,10 @@ describe('tokens/estimate', () => {
       const texts = ['Hello', 'World', 'Test'];
       const total = estimateTokensMany(texts);
       const individual = texts.map(estimateTokens);
-      assert.equal(total, individual.reduce((a, b) => a + b, 0));
+      assert.equal(
+        total,
+        individual.reduce((a, b) => a + b, 0),
+      );
     });
 
     it('should handle array with empty strings', () => {
@@ -155,4 +160,3 @@ describe('tokens/estimate', () => {
     });
   });
 });
-

@@ -14,16 +14,44 @@ import {
 } from './stream.js';
 import type { ChatCompletionChunk, ChatCompletionRequest, Message, Usage } from './types.js';
 
+/** Reasoning effort level for GPT-5+ models */
+export type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high';
+
 /**
  * Options for streaming chat completion requests.
  */
 export interface ChatStreamOptions extends RequestOptions {
   /** Model ID */
   model: string;
-  /** Sampling temperature */
+  /** Sampling temperature (0-2) */
   temperature?: number;
   /** Max tokens to generate */
   maxTokens?: number;
+  /** Top-p (nucleus) sampling threshold (0-1) */
+  topP?: number;
+  /** Stop sequences - generation stops before these strings appear */
+  stop?: string | string[];
+  /** Deterministic sampling seed for reproducibility */
+  seed?: number;
+  /** End-user identifier for abuse monitoring */
+  user?: string;
+  /** Frequency penalty (-2.0 to 2.0) - reduces repetition of frequent tokens */
+  frequencyPenalty?: number;
+  /** Presence penalty (-2.0 to 2.0) - reduces repetition of any repeated tokens */
+  presencePenalty?: number;
+  /** Whether to return log probabilities of output tokens */
+  logprobs?: boolean;
+  /** Number of most likely tokens to return at each position (1-20, requires logprobs) */
+  topLogprobs?: number;
+  /**
+   * Reasoning effort for GPT-5+ models.
+   * - 'none': Zero reasoning (GPT-5.1+ only) - fastest, cheapest
+   * - 'minimal': Minimal reasoning
+   * - 'low': Low reasoning effort
+   * - 'medium': Medium reasoning effort (default)
+   * - 'high': Maximum reasoning effort
+   */
+  reasoningEffort?: ReasoningEffort;
   /** Include usage in final chunk */
   includeUsage?: boolean;
   /** Additional request parameters */
@@ -63,7 +91,23 @@ export async function* chatStream(
   messages: Message[],
   options: ChatStreamOptions,
 ): AsyncGenerator<ChatCompletionChunk, void, undefined> {
-  const { model, temperature, maxTokens, includeUsage, requestOptions, ...reqOpts } = options;
+  const {
+    model,
+    temperature,
+    maxTokens,
+    topP,
+    stop,
+    seed,
+    user,
+    frequencyPenalty,
+    presencePenalty,
+    logprobs,
+    topLogprobs,
+    reasoningEffort,
+    includeUsage,
+    requestOptions,
+    ...reqOpts
+  } = options;
 
   const body: ChatCompletionRequest = {
     model,
@@ -72,13 +116,17 @@ export async function* chatStream(
     ...requestOptions,
   };
 
-  if (temperature !== undefined) {
-    body.temperature = temperature;
-  }
-
-  if (maxTokens !== undefined) {
-    body.max_tokens = maxTokens;
-  }
+  if (temperature !== undefined) body.temperature = temperature;
+  if (maxTokens !== undefined) body.max_tokens = maxTokens;
+  if (topP !== undefined) body.top_p = topP;
+  if (stop !== undefined) body.stop = stop;
+  if (seed !== undefined) body.seed = seed;
+  if (user !== undefined) body.user = user;
+  if (frequencyPenalty !== undefined) body.frequency_penalty = frequencyPenalty;
+  if (presencePenalty !== undefined) body.presence_penalty = presencePenalty;
+  if (logprobs !== undefined) body.logprobs = logprobs;
+  if (topLogprobs !== undefined) body.top_logprobs = topLogprobs;
+  if (reasoningEffort !== undefined) body.reasoning_effort = reasoningEffort;
 
   if (includeUsage) {
     body.stream_options = { include_usage: true };

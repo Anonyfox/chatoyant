@@ -2,8 +2,8 @@
  * Tests for cost calculation utilities.
  */
 
-import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
+import { describe, it } from 'node:test';
 import {
   calculateBatchCost,
   calculateCost,
@@ -217,4 +217,3 @@ describe('tokens/cost', () => {
     });
   });
 });
-

@@ -4,9 +4,16 @@
  * These tests verify type structure at runtime.
  */
 
-import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
-import type { ChunkOptions, CostResult, FitOptions, ModelPricing, Provider, TokenMessage } from './types.js';
+import { describe, it } from 'node:test';
+import type {
+  ChunkOptions,
+  CostResult,
+  FitOptions,
+  ModelPricing,
+  Provider,
+  TokenMessage,
+} from './types.js';
 
 describe('tokens/types', () => {
   describe('Provider type', () => {
@@ -88,4 +95,3 @@ describe('tokens/types', () => {
     });
   });
 });
-

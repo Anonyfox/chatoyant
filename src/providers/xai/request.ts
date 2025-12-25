@@ -66,6 +66,11 @@ export function createTimeoutSignal(ms: number, existingSignal?: AbortSignal): A
     controller.abort(new Error(`Request timed out after ${ms}ms`));
   }, ms);
 
+  // unref the timeout so it doesn't keep the process running
+  if (typeof timeoutId === 'object' && 'unref' in timeoutId) {
+    (timeoutId as NodeJS.Timeout).unref();
+  }
+
   if (existingSignal) {
     if (existingSignal.aborted) {
       controller.abort(existingSignal.reason);

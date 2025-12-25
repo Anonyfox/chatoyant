@@ -6,7 +6,9 @@ import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, it, mock } from 'node:test';
 import {
   getImageGenerationModel,
+  getImageGenerationModelList,
   getLanguageModel,
+  getLanguageModelList,
   getModel,
   listImageGenerationModels,
   listLanguageModels,
@@ -192,6 +194,37 @@ describe('models functions with mocked fetch', () => {
 
       const [url] = mockFetch.mock.calls[0].arguments;
       assert.ok((url as string).endsWith('/image-generation-models/grok-2-image-1212'));
+    });
+  });
+
+  describe('getLanguageModelList()', () => {
+    it('should return unwrapped array of language models', async () => {
+      mockFetch.mock.mockImplementation(async () => {
+        return new Response(JSON.stringify(mockLanguageModelsResponse), { status: 200 });
+      });
+
+      const models = await getLanguageModelList({ apiKey: 'xai-test' });
+
+      // Returns array directly, not wrapped in { models: [...] }
+      assert.ok(Array.isArray(models));
+      assert.equal(models.length, 1);
+      assert.equal(models[0].id, 'grok-3');
+      assert.equal(models[0].context_length, 131072);
+    });
+  });
+
+  describe('getImageGenerationModelList()', () => {
+    it('should return unwrapped array of image models', async () => {
+      mockFetch.mock.mockImplementation(async () => {
+        return new Response(JSON.stringify(mockImageModelsResponse), { status: 200 });
+      });
+
+      const models = await getImageGenerationModelList({ apiKey: 'xai-test' });
+
+      // Returns array directly, not wrapped in { models: [...] }
+      assert.ok(Array.isArray(models));
+      assert.equal(models.length, 1);
+      assert.equal(models[0].id, 'grok-2-image-1212');
     });
   });
 });

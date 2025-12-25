@@ -2,8 +2,8 @@
  * Tests for pricing utilities.
  */
 
-import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
+import { describe, it } from 'node:test';
 import { getPricing, hasPricing, PRICING } from './pricing.js';
 
 describe('tokens/pricing', () => {
@@ -88,4 +88,3 @@ describe('tokens/pricing', () => {
     });
   });
 });
-

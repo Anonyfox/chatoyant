@@ -20,12 +20,113 @@ npm install chatoyant
 Tree-shakable submodules — import only what you need:
 
 ```typescript
+import { genText, Chat, Tool } from "chatoyant/core";
 import { createOpenAIClient } from "chatoyant/providers/openai";
-import { createAnthropicClient } from "chatoyant/providers/anthropic";
-import { createXAIClient } from "chatoyant/providers/xai";
 import { Schema } from "chatoyant/schema";
 import * as tokens from "chatoyant/tokens";
 ```
+
+---
+
+## Quick Start
+
+The unified API works across OpenAI, Anthropic, and xAI. Set your API key via environment variable (`API_KEY_OPENAI`, `API_KEY_ANTHROPIC`, or `API_KEY_XAI`). The provider is auto-detected from the model name, or defaults to OpenAI when using presets.
+
+```typescript
+import { genText, genData, genStream, Schema } from "chatoyant";
+
+// One-shot text generation
+const answer = await genText("What is 2+2?");
+
+// Structured output with type safety
+class Person extends Schema {
+  name = Schema.String();
+  age = Schema.Integer();
+}
+const person = await genData("Extract: Alice is 30 years old", Person);
+console.log(person.name, person.age); // "Alice" 30
+
+// Streaming
+for await (const chunk of genStream("Write a haiku about TypeScript")) {
+  process.stdout.write(chunk);
+}
+```
+
+**Model presets** — use intent, not model names:
+
+```typescript
+await genText("Hello", { model: "fast" }); // Fastest response
+await genText("Hello", { model: "best" }); // Highest quality
+await genText("Hello", { model: "cheap" }); // Lowest cost
+await genText("Hello", { model: "balanced" }); // Good tradeoff
+```
+
+**Unified options** — same API, any provider:
+
+```typescript
+await genText("Explain quantum physics", {
+  model: "gpt-5.1", // Provider detected from model name
+  reasoning: "high", // 'off' | 'low' | 'medium' | 'high'
+  creativity: "balanced", // 'precise' | 'balanced' | 'creative' | 'wild'
+  maxTokens: 1000,
+});
+
+// Or explicitly choose provider with presets
+await genText("Hello", { model: "fast", provider: "anthropic" });
+```
+
+---
+
+## Agentic Conversations
+
+Use `Chat` for multi-turn conversations with tools:
+
+```typescript
+import { Chat, Tool, Schema } from "chatoyant";
+
+// Define a tool
+class WeatherParams extends Schema {
+  city = Schema.String({ description: "City name" });
+}
+
+class WeatherTool extends Tool {
+  name = "get_weather";
+  description = "Get current weather for a city";
+  parameters = new WeatherParams();
+
+  async execute({ city }) {
+    return { temperature: 22, conditions: "sunny" }; // Your API call here
+  }
+}
+
+// Create chat with tool
+const chat = new Chat({ model: "gpt-4o" });
+chat.system("You are a helpful assistant with weather access.");
+chat.addTool(new WeatherTool());
+
+// Multi-turn conversation — tools are called automatically
+const reply = await chat.user("What's the weather in Tokyo?").generate();
+console.log(reply); // "The weather in Tokyo is 22°C and sunny!"
+
+// Continue the conversation
+const followUp = await chat.user("How about Paris?").generate();
+
+// Get rich metadata
+const result = await chat.user("And London?").generateWithResult();
+console.log(result.usage); // { inputTokens, outputTokens, reasoningTokens, ... }
+console.log(result.timing); // { latencyMs }
+console.log(result.cost); // { estimatedUsd }
+
+// Serialize for persistence
+const json = chat.toJSON();
+const restored = Chat.fromJSON(json);
+```
+
+---
+
+## Provider Clients
+
+For direct provider access with full control, use the low-level clients below.
 
 ---
 

@@ -58,7 +58,10 @@ const CONVERSATION_OVERHEAD: Record<Provider, number> = {
  * // ~6 tokens (2 for content + 4 overhead)
  * ```
  */
-export function estimateMessageTokens(message: TokenMessage, provider: Provider = 'openai'): number {
+export function estimateMessageTokens(
+  message: TokenMessage,
+  provider: Provider = 'openai',
+): number {
   const overhead = MESSAGE_OVERHEAD[provider];
   const contentTokens = message.content ? estimateTokens(message.content) : 0;
 
@@ -88,10 +91,16 @@ export function estimateMessageTokens(message: TokenMessage, provider: Provider 
  * // ~15 tokens
  * ```
  */
-export function estimateChatTokens(messages: TokenMessage[], provider: Provider = 'openai'): number {
+export function estimateChatTokens(
+  messages: TokenMessage[],
+  provider: Provider = 'openai',
+): number {
   if (messages.length === 0) return 0;
 
-  const messageTokens = messages.reduce((sum, msg) => sum + estimateMessageTokens(msg, provider), 0);
+  const messageTokens = messages.reduce(
+    (sum, msg) => sum + estimateMessageTokens(msg, provider),
+    0,
+  );
 
   const conversationOverhead = CONVERSATION_OVERHEAD[provider];
 
@@ -157,7 +166,12 @@ export function calculateAvailableTokens(params: {
   /** Tokens already used by conversation history */
   historyTokens?: number;
 }): number {
-  const { contextWindow, systemPromptTokens = 0, reserveForResponse = 0, historyTokens = 0 } = params;
+  const {
+    contextWindow,
+    systemPromptTokens = 0,
+    reserveForResponse = 0,
+    historyTokens = 0,
+  } = params;
 
   return Math.max(0, contextWindow - systemPromptTokens - reserveForResponse - historyTokens);
 }
@@ -177,4 +191,3 @@ export function messagesFitBudget(
 ): boolean {
   return estimateChatTokens(messages, provider) <= maxTokens;
 }
-

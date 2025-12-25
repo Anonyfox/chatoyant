@@ -92,6 +92,115 @@ describe('chat functions with mocked fetch', () => {
       assert.equal(body.max_tokens, 1000);
     });
 
+    it('should include topP when provided', async () => {
+      mockFetch.mock.mockImplementation(async () => {
+        return new Response(JSON.stringify(mockCompletion), { status: 200 });
+      });
+
+      await chat(messages, { apiKey: 'sk-test', model: 'gpt-4o', topP: 0.9 });
+
+      const [, options] = mockFetch.mock.calls[0].arguments;
+      const body = JSON.parse(options?.body as string);
+      assert.equal(body.top_p, 0.9);
+    });
+
+    it('should include stop sequences when provided', async () => {
+      mockFetch.mock.mockImplementation(async () => {
+        return new Response(JSON.stringify(mockCompletion), { status: 200 });
+      });
+
+      await chat(messages, { apiKey: 'sk-test', model: 'gpt-4o', stop: ['\n\n'] });
+
+      const [, options] = mockFetch.mock.calls[0].arguments;
+      const body = JSON.parse(options?.body as string);
+      assert.deepEqual(body.stop, ['\n\n']);
+    });
+
+    it('should include seed when provided', async () => {
+      mockFetch.mock.mockImplementation(async () => {
+        return new Response(JSON.stringify(mockCompletion), { status: 200 });
+      });
+
+      await chat(messages, { apiKey: 'sk-test', model: 'gpt-4o', seed: 42 });
+
+      const [, options] = mockFetch.mock.calls[0].arguments;
+      const body = JSON.parse(options?.body as string);
+      assert.equal(body.seed, 42);
+    });
+
+    it('should include user when provided', async () => {
+      mockFetch.mock.mockImplementation(async () => {
+        return new Response(JSON.stringify(mockCompletion), { status: 200 });
+      });
+
+      await chat(messages, { apiKey: 'sk-test', model: 'gpt-4o', user: 'user-123' });
+
+      const [, options] = mockFetch.mock.calls[0].arguments;
+      const body = JSON.parse(options?.body as string);
+      assert.equal(body.user, 'user-123');
+    });
+
+    it('should include frequencyPenalty when provided', async () => {
+      mockFetch.mock.mockImplementation(async () => {
+        return new Response(JSON.stringify(mockCompletion), { status: 200 });
+      });
+
+      await chat(messages, { apiKey: 'sk-test', model: 'gpt-4o', frequencyPenalty: 0.5 });
+
+      const [, options] = mockFetch.mock.calls[0].arguments;
+      const body = JSON.parse(options?.body as string);
+      assert.equal(body.frequency_penalty, 0.5);
+    });
+
+    it('should include presencePenalty when provided', async () => {
+      mockFetch.mock.mockImplementation(async () => {
+        return new Response(JSON.stringify(mockCompletion), { status: 200 });
+      });
+
+      await chat(messages, { apiKey: 'sk-test', model: 'gpt-4o', presencePenalty: 0.3 });
+
+      const [, options] = mockFetch.mock.calls[0].arguments;
+      const body = JSON.parse(options?.body as string);
+      assert.equal(body.presence_penalty, 0.3);
+    });
+
+    it('should include logprobs when provided', async () => {
+      mockFetch.mock.mockImplementation(async () => {
+        return new Response(JSON.stringify(mockCompletion), { status: 200 });
+      });
+
+      await chat(messages, { apiKey: 'sk-test', model: 'gpt-4o', logprobs: true, topLogprobs: 5 });
+
+      const [, options] = mockFetch.mock.calls[0].arguments;
+      const body = JSON.parse(options?.body as string);
+      assert.equal(body.logprobs, true);
+      assert.equal(body.top_logprobs, 5);
+    });
+
+    it('should include n when provided', async () => {
+      mockFetch.mock.mockImplementation(async () => {
+        return new Response(JSON.stringify(mockCompletion), { status: 200 });
+      });
+
+      await chat(messages, { apiKey: 'sk-test', model: 'gpt-4o', n: 3 });
+
+      const [, options] = mockFetch.mock.calls[0].arguments;
+      const body = JSON.parse(options?.body as string);
+      assert.equal(body.n, 3);
+    });
+
+    it('should include reasoningEffort when provided', async () => {
+      mockFetch.mock.mockImplementation(async () => {
+        return new Response(JSON.stringify(mockCompletion), { status: 200 });
+      });
+
+      await chat(messages, { apiKey: 'sk-test', model: 'gpt-5.1', reasoningEffort: 'none' });
+
+      const [, options] = mockFetch.mock.calls[0].arguments;
+      const body = JSON.parse(options?.body as string);
+      assert.equal(body.reasoning_effort, 'none');
+    });
+
     it('should merge requestOptions', async () => {
       mockFetch.mock.mockImplementation(async () => {
         return new Response(JSON.stringify(mockCompletion), { status: 200 });

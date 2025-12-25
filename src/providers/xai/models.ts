@@ -58,19 +58,41 @@ export async function modelExists(modelId: string, options: RequestOptions): Pro
  * List language models with detailed information.
  * xAI-specific endpoint.
  *
+ * Note: Returns wrapper object with `models` array. Use `getLanguageModelList()` for just the array.
+ *
  * @param options - Request options
- * @returns Language models with pricing, context length, and modalities
+ * @returns Language models response (contains `models` array)
  *
  * @example
  * ```typescript
- * const models = await listLanguageModels({ apiKey: 'xai-...' });
- * for (const model of models.models) {
- *   console.log(`${model.id}: ${model.context_length} tokens, $${model.pricing.input}/M input`);
+ * const response = await listLanguageModels({ apiKey: 'xai-...' });
+ * for (const model of response.models) {
+ *   console.log(`${model.id}: ${model.context_length} tokens`);
  * }
  * ```
  */
 export async function listLanguageModels(options: RequestOptions): Promise<LanguageModelsResponse> {
   return requestGet<LanguageModelsResponse>('/language-models', options);
+}
+
+/**
+ * Get language models as a simple array (convenience helper).
+ * xAI-specific endpoint.
+ *
+ * @param options - Request options
+ * @returns Array of language models with pricing, context length, and modalities
+ *
+ * @example
+ * ```typescript
+ * const models = await getLanguageModelList({ apiKey: 'xai-...' });
+ * for (const model of models) {
+ *   console.log(`${model.id}: ${model.context_length} tokens, $${model.pricing.input}/M input`);
+ * }
+ * ```
+ */
+export async function getLanguageModelList(options: RequestOptions): Promise<LanguageModel[]> {
+  const response = await listLanguageModels(options);
+  return response.models;
 }
 
 /**
@@ -92,13 +114,35 @@ export async function getLanguageModel(
  * List image generation models with detailed information.
  * xAI-specific endpoint.
  *
+ * Note: Returns wrapper object with `models` array. Use `getImageGenerationModelList()` for just the array.
+ *
  * @param options - Request options
- * @returns Image generation models with pricing
+ * @returns Image generation models response (contains `models` array)
  */
 export async function listImageGenerationModels(
   options: RequestOptions,
 ): Promise<ImageGenerationModelsResponse> {
   return requestGet<ImageGenerationModelsResponse>('/image-generation-models', options);
+}
+
+/**
+ * Get image generation models as a simple array (convenience helper).
+ * xAI-specific endpoint.
+ *
+ * @param options - Request options
+ * @returns Array of image generation models with pricing
+ *
+ * @example
+ * ```typescript
+ * const models = await getImageGenerationModelList({ apiKey: 'xai-...' });
+ * console.log(`Available: ${models.map(m => m.id).join(', ')}`);
+ * ```
+ */
+export async function getImageGenerationModelList(
+  options: RequestOptions,
+): Promise<ImageGenerationModel[]> {
+  const response = await listImageGenerationModels(options);
+  return response.models;
 }
 
 /**

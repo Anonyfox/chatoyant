@@ -2,8 +2,8 @@
  * Tests for text chunking utilities.
  */
 
-import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
+import { describe, it } from 'node:test';
 import {
   estimateChunkCount,
   fitMessages,
@@ -47,7 +47,8 @@ describe('tokens/chunking', () => {
     });
 
     it('should handle overlap', () => {
-      const text = 'One two three four five six seven eight nine ten. ' +
+      const text =
+        'One two three four five six seven eight nine ten. ' +
         'Eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty.';
       const chunks = splitText(text, { maxTokens: 10, overlap: 2 });
 
@@ -259,4 +260,3 @@ describe('tokens/chunking', () => {
     });
   });
 });
-

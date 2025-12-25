@@ -2,8 +2,8 @@
  * Tests for message token estimation.
  */
 
-import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
+import { describe, it } from 'node:test';
 import {
   calculateAvailableTokens,
   estimateChatTokens,
@@ -206,4 +206,3 @@ describe('tokens/messages', () => {
     });
   });
 });
-

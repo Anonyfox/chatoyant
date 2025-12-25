@@ -234,8 +234,8 @@ export interface ChatCompletionRequest {
   parallel_tool_calls?: boolean;
   /** Response format */
   response_format?: ResponseFormat;
-  /** Reasoning effort for o1/o3 */
-  reasoning_effort?: 'low' | 'medium' | 'high';
+  /** Reasoning effort for o1/o3/o4 and GPT-5 models. 'none' available on GPT-5.1+ */
+  reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high';
   /** Request metadata */
   metadata?: Record<string, string>;
   /** Store for distillation */
