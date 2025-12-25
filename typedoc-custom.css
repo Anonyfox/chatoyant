@@ -1,0 +1,108 @@
+/* Custom styling for Chatoyant documentation
+ * Brand colors: Iridescent teal/purple gradient inspired by chatoyancy
+ */
+
+:root {
+  --color-primary: #0ea5e9; /* Sky blue - shifting light */
+  --color-primary-hover: #0284c7;
+  --color-accent: #a855f7; /* Purple - deep shimmer */
+  --color-footer-bg: #0f172a;
+  --color-footer-text: #e2e8f0;
+}
+
+/* Brand color for links */
+.tsd-navigation a,
+.tsd-index-link a,
+.tsd-signature-type a,
+.tsd-breadcrumb a {
+  color: var(--color-primary);
+}
+
+.tsd-navigation a:hover,
+.tsd-index-link a:hover,
+.tsd-signature-type a:hover,
+.tsd-breadcrumb a:hover {
+  color: var(--color-primary-hover);
+}
+
+/* Better code blocks */
+pre code {
+  font-size: 0.9em;
+  line-height: 1.5;
+}
+
+/* Improved spacing */
+.tsd-page-title {
+  margin-bottom: 2rem;
+}
+
+.tsd-panel-group {
+  margin: 2rem 0;
+}
+
+/* Signature highlighting with gradient accent */
+.tsd-signature {
+  border-left: 3px solid var(--color-primary);
+  padding-left: 1rem;
+  background: linear-gradient(90deg, rgba(14, 165, 233, 0.05) 0%, transparent 100%);
+}
+
+/* Better example blocks */
+.tsd-comment pre {
+  background: var(--color-background-alt);
+  border-radius: 0.5rem;
+  padding: 1rem;
+}
+
+/* Custom Footer */
+.tsd-page-footer {
+  margin-top: 4rem;
+  padding: 2rem 0;
+  background: linear-gradient(135deg, var(--color-footer-bg) 0%, #1e293b 100%);
+  color: var(--color-footer-text);
+  text-align: center;
+  border-top: 1px solid #334155;
+}
+
+.tsd-page-footer p {
+  margin: 0.5rem 0;
+}
+
+.tsd-page-footer a {
+  color: var(--color-primary);
+  text-decoration: none;
+  margin: 0 0.5rem;
+}
+
+.tsd-page-footer a:hover {
+  color: var(--color-accent);
+  text-decoration: none;
+}
+
+/* Ensure footer is at bottom */
+body {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.container-main {
+  flex: 1;
+}
+
+/* Shimmer effect for title (chatoyant = shimmering) */
+.tsd-page-title h1 {
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-accent) 50%, var(--color-primary) 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: shimmer 3s linear infinite;
+}
+
+@keyframes shimmer {
+  to {
+    background-position: 200% center;
+  }
+}
+
