@@ -74,13 +74,13 @@ export function splitText(text: string, options: ChunkOptions): string[] {
       let wordTokens = 0;
 
       for (const word of words) {
-        const wordTokenCount = estimateTokens(word + ' ');
+        const wordTokenCount = estimateTokens(`${word} `);
         if (wordTokens + wordTokenCount > maxTokens && wordChunk) {
           chunks.push(wordChunk.trim());
           wordChunk = overlap > 0 ? getOverlapText(wordChunk, overlap) : '';
           wordTokens = estimateTokens(wordChunk);
         }
-        wordChunk += word + ' ';
+        wordChunk += `${word} `;
         wordTokens += wordTokenCount;
       }
 
@@ -98,7 +98,7 @@ export function splitText(text: string, options: ChunkOptions): string[] {
 
       // Start new chunk with overlap from previous
       if (overlap > 0) {
-        currentChunk = getOverlapText(currentChunk, overlap) + ' ' + segment;
+        currentChunk = `${getOverlapText(currentChunk, overlap)} ${segment}`;
         currentTokens = estimateTokens(currentChunk);
       } else {
         currentChunk = segment;
@@ -129,7 +129,7 @@ function getOverlapText(text: string, overlapTokens: number): string {
   // Work backwards to get overlap tokens worth of text
   for (let i = words.length - 1; i >= 0 && tokens < overlapTokens; i--) {
     const wordTokens = estimateTokens(words[i]);
-    result = words[i] + (result ? ' ' + result : '');
+    result = words[i] + (result ? ` ${result}` : '');
     tokens += wordTokens;
   }
 

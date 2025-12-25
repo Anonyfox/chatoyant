@@ -34,11 +34,11 @@
 // Chat
 export {
   type ChatOptions,
-  type ReasoningEffort,
   chat,
   chatSimple,
   chatStructured,
   chatWithTools,
+  type ReasoningEffort,
 } from './chat.js';
 // Chat Streaming
 export {

@@ -43,6 +43,7 @@ describe('tokens/estimate', () => {
 
     it('should estimate code differently than prose', () => {
       const prose = 'The quick brown fox jumps over the lazy dog';
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: intentional code sample
       const code = 'function greet(name) { return `Hello, ${name}!`; }';
 
       // Both should return reasonable estimates

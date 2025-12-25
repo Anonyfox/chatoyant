@@ -21,11 +21,7 @@ import type {
  * Models that support frequency_penalty and presence_penalty.
  * Fast and mini models do not support these parameters.
  */
-const MODELS_WITH_PENALTY_SUPPORT = new Set([
-  'grok-2-1212',
-  'grok-3',
-  'grok-4-0709',
-]);
+const MODELS_WITH_PENALTY_SUPPORT = new Set(['grok-2-1212', 'grok-3', 'grok-4-0709']);
 
 /**
  * Check if a model supports frequency/presence penalty parameters.
@@ -69,10 +65,9 @@ function filterUnsupportedParams(
   }
 
   if (unsupported.length > 0) {
-    const tips =
-      unsupported.includes('reasoning_effort')
-        ? ' Tip: Use model names like "grok-4-1-fast-reasoning" or "grok-4-1-fast-non-reasoning" to control reasoning.'
-        : '';
+    const tips = unsupported.includes('reasoning_effort')
+      ? ' Tip: Use model names like "grok-4-1-fast-reasoning" or "grok-4-1-fast-non-reasoning" to control reasoning.'
+      : '';
     console.warn(
       `[chatoyant/xai] Model "${model}" does not support: ${unsupported.join(', ')}. These parameters were ignored.${tips}`,
     );

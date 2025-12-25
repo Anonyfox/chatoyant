@@ -7,10 +7,10 @@ import { describe, it } from 'node:test';
 
 import {
   adjustXAIModelForReasoning,
+  CREATIVITY_PRESETS,
   createEmptyCost,
   createEmptyTiming,
   createEmptyUsage,
-  CREATIVITY_PRESETS,
   getReasoningConfig,
   isCreativityLevel,
   isModelPreset,
@@ -243,4 +243,3 @@ describe('Response Metadata Helpers', () => {
     });
   });
 });
-

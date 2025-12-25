@@ -215,4 +215,3 @@ describe('needsOpenAIStrictTransform', () => {
     assert.ok(!needsOpenAIStrictTransform({ type: 'boolean' }));
   });
 });
-

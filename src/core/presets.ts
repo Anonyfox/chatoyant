@@ -157,7 +157,12 @@ export function getReasoningConfig<P extends ProviderId>(
  */
 export function supportsReasoning(model: string): boolean {
   // OpenAI: Only GPT-5+ and o-series models
-  if (model.startsWith('gpt-5') || model.startsWith('o1') || model.startsWith('o3') || model.startsWith('o4')) {
+  if (
+    model.startsWith('gpt-5') ||
+    model.startsWith('o1') ||
+    model.startsWith('o3') ||
+    model.startsWith('o4')
+  ) {
     return true;
   }
   // Anthropic: All Claude models support thinking
@@ -313,4 +318,3 @@ export function createEmptyCost(): CostInfo {
     estimatedUsd: 0,
   };
 }
-

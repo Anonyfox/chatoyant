@@ -44,8 +44,8 @@ export {
   chatSimple,
   chatStructured,
   chatWithTools,
-  modelSupportsPenalty,
   chatWithWebSearch,
+  modelSupportsPenalty,
 } from './chat.js';
 // Chat Streaming
 export {

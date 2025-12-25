@@ -116,4 +116,3 @@ export function needsOpenAIStrictTransform(schema: Record<string, unknown>): boo
 
   return false;
 }
-

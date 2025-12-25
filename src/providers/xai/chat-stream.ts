@@ -59,10 +59,9 @@ function filterUnsupportedParams(
   }
 
   if (unsupported.length > 0) {
-    const tips =
-      unsupported.includes('reasoning_effort')
-        ? ' Tip: Use model names like "grok-4-1-fast-reasoning" or "grok-4-1-fast-non-reasoning" to control reasoning.'
-        : '';
+    const tips = unsupported.includes('reasoning_effort')
+      ? ' Tip: Use model names like "grok-4-1-fast-reasoning" or "grok-4-1-fast-non-reasoning" to control reasoning.'
+      : '';
     console.warn(
       `[chatoyant/xai] Model "${model}" does not support: ${unsupported.join(', ')}. These parameters were ignored.${tips}`,
     );

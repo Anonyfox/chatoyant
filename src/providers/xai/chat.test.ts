@@ -4,7 +4,14 @@
 
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, it, mock } from 'node:test';
-import { chat, chatSimple, chatStructured, chatWithTools, chatWithWebSearch, modelSupportsPenalty } from './chat.js';
+import {
+  chat,
+  chatSimple,
+  chatStructured,
+  chatWithTools,
+  chatWithWebSearch,
+  modelSupportsPenalty,
+} from './chat.js';
 import type { ChatCompletion, Message } from './types.js';
 
 describe('chat functions with mocked fetch', () => {
@@ -315,7 +322,9 @@ describe('chat functions with mocked fetch', () => {
       const body = JSON.parse(options?.body as string);
       assert.equal(body.frequency_penalty, undefined);
       assert.equal(body.presence_penalty, undefined);
-      assert.ok(warnCalls.some(msg => msg.includes('grok-3-mini') && msg.includes('frequency_penalty')));
+      assert.ok(
+        warnCalls.some((msg) => msg.includes('grok-3-mini') && msg.includes('frequency_penalty')),
+      );
     });
 
     it('should filter out penalties for fast models', async () => {
@@ -355,8 +364,8 @@ describe('chat functions with mocked fetch', () => {
       const [, options] = mockFetch.mock.calls[0].arguments;
       const body = JSON.parse(options?.body as string);
       assert.equal(body.reasoning_effort, undefined);
-      assert.ok(warnCalls.some(msg => msg.includes('reasoning_effort')));
-      assert.ok(warnCalls.some(msg => msg.includes('Tip:')));
+      assert.ok(warnCalls.some((msg) => msg.includes('reasoning_effort')));
+      assert.ok(warnCalls.some((msg) => msg.includes('Tip:')));
     });
   });
 });

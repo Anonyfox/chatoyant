@@ -10,7 +10,11 @@
 
 import { type AnthropicClient, createAnthropicClient } from '../providers/anthropic/index.js';
 import { detectProviderByModel, getApiKey, isProviderActive } from '../providers/detection.js';
-import { createOpenAIClient, makeOpenAIStrict, type OpenAIClient } from '../providers/openai/index.js';
+import {
+  createOpenAIClient,
+  makeOpenAIStrict,
+  type OpenAIClient,
+} from '../providers/openai/index.js';
 import type { ProviderId } from '../providers/types.js';
 import { createXAIClient, type XAIClient } from '../providers/xai/index.js';
 import { Schema, type SchemaInstance } from '../schema/index.js';
@@ -317,7 +321,8 @@ export class Chat {
     const messages = this._formatMessages(provider);
 
     // Resolve temperature from creativity preset if needed
-    const temperature = opts.temperature ?? (opts.creativity ? resolveCreativity(opts.creativity) : undefined);
+    const temperature =
+      opts.temperature ?? (opts.creativity ? resolveCreativity(opts.creativity) : undefined);
 
     let content: string;
     const usage = createEmptyUsage();
@@ -355,10 +360,14 @@ export class Chat {
         usage.outputTokens = response.usage.completion_tokens;
         usage.totalTokens = response.usage.total_tokens;
         // Extract reasoning tokens if available
-        const details = response.usage.completion_tokens_details as { reasoning_tokens?: number } | undefined;
+        const details = response.usage.completion_tokens_details as
+          | { reasoning_tokens?: number }
+          | undefined;
         usage.reasoningTokens = details?.reasoning_tokens ?? 0;
         // Extract cached tokens if available
-        const promptDetails = response.usage.prompt_tokens_details as { cached_tokens?: number } | undefined;
+        const promptDetails = response.usage.prompt_tokens_details as
+          | { cached_tokens?: number }
+          | undefined;
         usage.cachedTokens = promptDetails?.cached_tokens ?? 0;
         cached = usage.cachedTokens > 0;
       }
@@ -425,7 +434,9 @@ export class Chat {
         usage.outputTokens = response.usage.completion_tokens;
         usage.totalTokens = response.usage.total_tokens;
         // Extract reasoning tokens if available
-        const details = response.usage.completion_tokens_details as { reasoning_tokens?: number } | undefined;
+        const details = response.usage.completion_tokens_details as
+          | { reasoning_tokens?: number }
+          | undefined;
         usage.reasoningTokens = details?.reasoning_tokens ?? 0;
       }
     } else {
@@ -484,7 +495,8 @@ export class Chat {
     let accumulated = '';
 
     // Resolve temperature from creativity preset if needed
-    const temperature = opts.temperature ?? (opts.creativity ? resolveCreativity(opts.creativity) : undefined);
+    const temperature =
+      opts.temperature ?? (opts.creativity ? resolveCreativity(opts.creativity) : undefined);
 
     try {
       if (provider === 'openai') {
