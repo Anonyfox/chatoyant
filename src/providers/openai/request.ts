@@ -59,36 +59,14 @@ export function buildUrl(endpoint: string, baseUrl?: string): string {
  * Create an AbortSignal with timeout.
  */
 export function createTimeoutSignal(ms: number, existingSignal?: AbortSignal): AbortSignal {
-  const controller = new AbortController();
+  const timeoutSignal = AbortSignal.timeout(ms);
 
-  // Set timeout - use unref() so it doesn't keep Node.js process alive
-  const timeoutId = setTimeout(() => {
-    controller.abort(new Error(`Request timed out after ${ms}ms`));
-  }, ms);
-
-  // unref the timeout so it doesn't keep the process running
-  if (typeof timeoutId === 'object' && 'unref' in timeoutId) {
-    (timeoutId as NodeJS.Timeout).unref();
-  }
-
-  // If there's an existing signal, abort when it aborts
   if (existingSignal) {
-    if (existingSignal.aborted) {
-      controller.abort(existingSignal.reason);
-    } else {
-      existingSignal.addEventListener('abort', () => {
-        clearTimeout(timeoutId);
-        controller.abort(existingSignal.reason);
-      });
-    }
+    // Combine timeout signal with existing signal
+    return AbortSignal.any([timeoutSignal, existingSignal]);
   }
 
-  // Clean up timeout when aborted
-  controller.signal.addEventListener('abort', () => {
-    clearTimeout(timeoutId);
-  });
-
-  return controller.signal;
+  return timeoutSignal;
 }
 
 /**
