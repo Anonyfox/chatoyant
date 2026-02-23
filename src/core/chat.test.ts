@@ -529,6 +529,77 @@ describe('Chat', () => {
     });
   });
 
+  describe('stream() tool awareness', () => {
+    const testTool = new Tool({
+      name: 'lookup',
+      description: 'Look up data',
+      parameters: SearchParams,
+      execute: async () => ({ result: 'found' }),
+    });
+
+    it('should have _streamWithToolLoop method', () => {
+      const chat = new Chat();
+      assert.equal(typeof (chat as any)._streamWithToolLoop, 'function');
+    });
+
+    it('should have _streamDirect method', () => {
+      const chat = new Chat();
+      assert.equal(typeof (chat as any)._streamDirect, 'function');
+    });
+
+    it('should have _streamAccumulateWithTools method', () => {
+      const chat = new Chat();
+      assert.equal(typeof (chat as any)._streamAccumulateWithTools, 'function');
+    });
+
+    it('stream() should be an async generator', () => {
+      const chat = new Chat();
+      chat.user('Hello');
+      const gen = chat.stream();
+      assert.equal(typeof gen[Symbol.asyncIterator], 'function');
+    });
+
+    it('_buildToolDefinitions should format tools for provider', () => {
+      const chat = new Chat();
+      chat.addTool(testTool);
+      const defs = (chat as any)._buildToolDefinitions('openai');
+      assert.equal(defs.length, 1);
+      assert.equal(defs[0].name, 'lookup');
+      assert.equal(defs[0].description, 'Look up data');
+      assert.ok(defs[0].parameters);
+    });
+
+    it('_appendToolResults should format Anthropic tool results correctly', () => {
+      const chat = new Chat();
+      const messages = [{ role: 'user', content: 'test' }];
+      const calls = [{ id: 'call_1', name: 'lookup', args: { query: 'test' } }];
+      const results = [{ id: 'call_1', result: { data: 'found' }, success: true }];
+      const updated = (chat as any)._appendToolResults('anthropic', messages, calls, results);
+
+      assert.equal(updated.length, 3);
+      assert.equal(updated[1].role, 'assistant');
+      assert.ok(Array.isArray(updated[1].content));
+      assert.equal(updated[1].content[0].type, 'tool_use');
+      assert.equal(updated[2].role, 'user');
+      assert.ok(Array.isArray(updated[2].content));
+      assert.equal(updated[2].content[0].type, 'tool_result');
+    });
+
+    it('_appendToolResults should format OpenAI tool results correctly', () => {
+      const chat = new Chat();
+      const messages = [{ role: 'user', content: 'test' }];
+      const calls = [{ id: 'call_1', name: 'lookup', args: { query: 'test' } }];
+      const results = [{ id: 'call_1', result: { data: 'found' }, success: true }];
+      const updated = (chat as any)._appendToolResults('openai', messages, calls, results);
+
+      assert.equal(updated.length, 3);
+      assert.equal(updated[1].role, 'assistant');
+      assert.ok(Array.isArray(updated[1].tool_calls));
+      assert.equal(updated[2].role, 'tool');
+      assert.equal(updated[2].tool_call_id, 'call_1');
+    });
+  });
+
   describe('edge cases', () => {
     it('should handle empty content messages', () => {
       const chat = new Chat();

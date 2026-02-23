@@ -29,6 +29,7 @@ import {
   type GenerateWithToolsOptions,
   mergeOptions,
   type StreamOptions,
+  type StreamWithToolsOptions,
 } from './options.js';
 import {
   adjustXAIModelForReasoning,
@@ -475,12 +476,25 @@ export class Chat {
 
   /**
    * Stream a text response.
+   * Automatically uses registered tools if any exist.
    * Appends assistant response to history after streaming completes.
    *
-   * @param options - Stream options
+   * @param options - Stream options (includes tool options when tools registered)
    * @returns Async generator of content strings
    */
-  async *stream(options?: StreamOptions): AsyncGenerator<string, void, undefined> {
+  async *stream(options?: StreamWithToolsOptions): AsyncGenerator<string, void, undefined> {
+    if (this._tools.length > 0) {
+      yield* this._streamWithToolLoop(options);
+      return;
+    }
+
+    yield* this._streamDirect(options);
+  }
+
+  /**
+   * Stream without tool execution (direct passthrough to provider).
+   */
+  private async *_streamDirect(options?: StreamOptions): AsyncGenerator<string, void, undefined> {
     const opts = mergeOptions(this._defaults, options) as StreamOptions;
     const provider = this._resolveProvider(opts.provider);
     const client = this._getClient(provider);
@@ -592,13 +606,264 @@ export class Chat {
   }
 
   /**
+   * Stream with tool calling loop.
+   * Uses streamAccumulate per provider to collect tool calls from the stream,
+   * executes them, feeds results back, and streams again until the model
+   * produces a final text response with no tool calls.
+   */
+  private async *_streamWithToolLoop(
+    options?: StreamWithToolsOptions,
+  ): AsyncGenerator<string, void, undefined> {
+    const opts = mergeOptions(this._defaults, options) as StreamWithToolsOptions;
+    const maxIterations = opts.maxIterations ?? DEFAULT_MAX_TOOL_ITERATIONS;
+    const provider = this._resolveProvider(opts.provider);
+    const client = this._getClient(provider);
+
+    let modelToUse = this._model;
+    if (provider === 'xai' && opts.reasoning) {
+      const xaiConfig = getReasoningConfig(opts.reasoning, 'xai');
+      modelToUse = adjustXAIModelForReasoning(modelToUse, xaiConfig.preferReasoningModel);
+    }
+
+    const temperature =
+      opts.temperature ?? (opts.creativity ? resolveCreativity(opts.creativity) : undefined);
+
+    const toolDefs = this._buildToolDefinitions(provider);
+    let localMessages = this._formatMessages(provider);
+    let iteration = 0;
+    let finalContent = '';
+
+    try {
+      while (iteration < maxIterations) {
+        iteration++;
+
+        const pendingChunks: string[] = [];
+        let resolveChunk: (() => void) | null = null;
+        let streamDone = false;
+
+        const onDelta = (chunk: string) => {
+          pendingChunks.push(chunk);
+          resolveChunk?.();
+        };
+
+        const streamResult = this._streamAccumulateWithTools(
+          client,
+          provider,
+          localMessages,
+          toolDefs,
+          modelToUse,
+          temperature,
+          opts,
+          onDelta,
+        );
+
+        // Concurrently yield chunks as they arrive while the stream accumulates
+        const resultPromise = streamResult.then((r) => {
+          streamDone = true;
+          resolveChunk?.();
+          return r;
+        });
+
+        while (!streamDone) {
+          if (pendingChunks.length === 0) {
+            await new Promise<void>((resolve) => {
+              resolveChunk = resolve;
+            });
+          }
+          while (pendingChunks.length > 0) {
+            const chunk = pendingChunks.shift()!;
+            finalContent += chunk;
+            opts.onDelta?.(chunk);
+            yield chunk;
+          }
+        }
+        // Drain any remaining chunks
+        while (pendingChunks.length > 0) {
+          const chunk = pendingChunks.shift()!;
+          finalContent += chunk;
+          opts.onDelta?.(chunk);
+          yield chunk;
+        }
+
+        const result = await resultPromise;
+
+        if (!result.hasToolCalls) {
+          break;
+        }
+
+        // Tool calls detected — don't include the streamed text from this
+        // iteration in final output (it may contain partial text before tools).
+        // Execute tools and loop.
+        finalContent = '';
+
+        const ctx: ToolContext = { model: modelToUse, provider };
+        const toolResults = await this._executeToolCalls(result.toolCalls, ctx, opts);
+        localMessages = this._appendToolResults(provider, localMessages, result.toolCalls, toolResults);
+      }
+
+      this._messages.push(Message.assistant(finalContent));
+      opts.onComplete?.(finalContent);
+    } catch (error) {
+      opts.onError?.(error instanceof Error ? error : new Error(String(error)));
+      throw error;
+    }
+  }
+
+  /**
+   * Use provider-specific streamAccumulate to stream with tool definitions,
+   * yielding text via onDelta and returning accumulated tool calls.
+   */
+  private async _streamAccumulateWithTools(
+    client: OpenAIClient | AnthropicClient | XAIClient,
+    provider: ProviderId,
+    messages: Array<Record<string, unknown>>,
+    toolDefs: Array<{ name: string; description: string; parameters: Record<string, unknown> }>,
+    model: string,
+    temperature: number | undefined,
+    opts: StreamWithToolsOptions,
+    onDelta: (chunk: string) => void,
+  ): Promise<{ hasToolCalls: boolean; toolCalls: ToolCall[]; content: string }> {
+    if (provider === 'openai') {
+      const tools = toolDefs.map((t) => ({
+        type: 'function' as const,
+        function: { name: t.name, description: t.description, parameters: t.parameters },
+      }));
+
+      const reasoningOpts: Record<string, unknown> = {};
+      if (opts.reasoning && supportsReasoning(model)) {
+        const openaiConfig = getReasoningConfig(opts.reasoning, 'openai');
+        reasoningOpts.reasoning_effort = openaiConfig.reasoningEffort;
+      }
+
+      const result = await (client as OpenAIClient).streamAccumulate(
+        messages as any,
+        {
+          model,
+          temperature,
+          maxTokens: opts.maxTokens,
+          timeout: opts.timeout ?? DEFAULT_TIMEOUT,
+          requestOptions: {
+            tools,
+            top_p: opts.topP,
+            stop: opts.stop,
+            ...reasoningOpts,
+            ...opts.extra,
+          },
+        },
+        (delta) => onDelta(delta.content),
+      );
+
+      const toolCalls: ToolCall[] = result.toolCalls.map((tc) => ({
+        id: tc.id,
+        name: tc.function.name,
+        args: JSON.parse(tc.function.arguments),
+      }));
+
+      return {
+        hasToolCalls: toolCalls.length > 0,
+        toolCalls,
+        content: result.content,
+      };
+    }
+
+    if (provider === 'anthropic') {
+      const tools = toolDefs.map((t) => ({
+        name: t.name,
+        description: t.description,
+        input_schema: t.parameters,
+      }));
+
+      const thinkingOpts: Record<string, unknown> = {};
+      let maxTokens = opts.maxTokens ?? 4096;
+      if (opts.reasoning && opts.reasoning !== 'off') {
+        const anthropicConfig = getReasoningConfig(opts.reasoning, 'anthropic');
+        if (anthropicConfig.thinking) {
+          thinkingOpts.thinking = anthropicConfig.thinking;
+          const budgetTokens = anthropicConfig.thinking.budget_tokens;
+          if (maxTokens <= budgetTokens) {
+            maxTokens = budgetTokens + 4096;
+          }
+        }
+      }
+
+      const result = await (client as AnthropicClient).streamAccumulate(
+        messages as any,
+        {
+          model,
+          maxTokens,
+          temperature,
+          system: this._getSystemPrompt(),
+          timeout: opts.timeout ?? DEFAULT_TIMEOUT,
+          requestOptions: {
+            tools: tools as any,
+            top_p: opts.topP,
+            ...thinkingOpts,
+            ...opts.extra,
+          },
+        },
+        onDelta,
+      );
+
+      const toolCalls: ToolCall[] = result.toolUses.map((tu) => ({
+        id: tu.id,
+        name: tu.name,
+        args: tu.input,
+      }));
+
+      return {
+        hasToolCalls: toolCalls.length > 0,
+        toolCalls,
+        content: result.content,
+      };
+    }
+
+    if (provider === 'xai') {
+      const tools = toolDefs.map((t) => ({
+        type: 'function' as const,
+        function: { name: t.name, description: t.description, parameters: t.parameters },
+      }));
+
+      const result = await (client as XAIClient).streamAccumulate(
+        messages as any,
+        {
+          model,
+          temperature,
+          maxTokens: opts.maxTokens,
+          tools: tools as any,
+          timeout: opts.timeout ?? DEFAULT_TIMEOUT,
+          requestOptions: {
+            top_p: opts.topP,
+            stop: opts.stop,
+            ...opts.extra,
+          },
+        },
+        onDelta,
+      );
+
+      const toolCalls: ToolCall[] = result.toolCalls.map((tc) => ({
+        id: tc.id,
+        name: tc.function.name,
+        args: JSON.parse(tc.function.arguments),
+      }));
+
+      return {
+        hasToolCalls: toolCalls.length > 0,
+        toolCalls,
+        content: result.content,
+      };
+    }
+
+    throw new Error(`Unsupported provider: ${provider}`);
+  }
+
+  /**
    * Stream and accumulate the full response.
    * Convenience method that collects all chunks.
    *
    * @param options - Stream options
    * @returns Full accumulated content
    */
-  async streamAccumulate(options?: StreamOptions): Promise<string> {
+  async streamAccumulate(options?: StreamWithToolsOptions): Promise<string> {
     let content = '';
     for await (const delta of this.stream(options)) {
       content += delta;

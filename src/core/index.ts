@@ -81,6 +81,7 @@ export type {
   GenerateOptions,
   GenerateWithToolsOptions,
   StreamOptions,
+  StreamWithToolsOptions,
   ToolOptions,
 } from './options.js';
 

@@ -175,6 +175,11 @@ export interface ToolOptions {
 export interface GenerateWithToolsOptions extends GenerateOptions, ToolOptions {}
 
 /**
+ * Combined options for streaming with tools.
+ */
+export interface StreamWithToolsOptions extends StreamOptions, ToolOptions {}
+
+/**
  * Chat configuration options.
  */
 export interface ChatConfig {
