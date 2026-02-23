@@ -391,6 +391,7 @@ export class Chat {
         model: modelToUse,
         maxTokens: opts.maxTokens ?? 4096,
         temperature,
+        system: this._getSystemPrompt(),
         timeout: opts.timeout ?? DEFAULT_TIMEOUT,
         requestOptions: {
           top_p: opts.topP,
@@ -545,6 +546,7 @@ export class Chat {
           model: modelToUse,
           maxTokens,
           temperature,
+          system: this._getSystemPrompt(),
           timeout: opts.timeout ?? DEFAULT_TIMEOUT,
           requestOptions: {
             top_p: opts.topP,
@@ -682,6 +684,7 @@ export class Chat {
           model: this._model,
           maxTokens: opts.maxTokens ?? 4096,
           temperature: opts.temperature,
+          system: this._getSystemPrompt(),
           timeout: opts.timeout ?? DEFAULT_TIMEOUT,
           ...opts.extra,
         },
@@ -885,6 +888,14 @@ export class Chat {
   }
 
   /**
+   * Extract the combined system prompt from all system messages.
+   */
+  private _getSystemPrompt(): string | undefined {
+    const parts = this._messages.filter((m) => m.isSystem()).map((m) => m.content);
+    return parts.length > 0 ? parts.join('\n\n') : undefined;
+  }
+
+  /**
    * Format messages for provider.
    * Returns a loosely-typed array for provider compatibility.
    */
@@ -997,6 +1008,7 @@ export class Chat {
         {
           model: this._model,
           maxTokens: opts.maxTokens ?? 4096,
+          system: this._getSystemPrompt(),
           timeout: opts.timeout ?? DEFAULT_TIMEOUT,
         },
       );
@@ -1125,6 +1137,7 @@ export class Chat {
       return (client as AnthropicClient).messageSimple(messages as any, {
         model: this._model,
         maxTokens: opts.maxTokens ?? 4096,
+        system: this._getSystemPrompt(),
         timeout: opts.timeout ?? DEFAULT_TIMEOUT,
       });
     }

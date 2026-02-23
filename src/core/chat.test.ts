@@ -453,6 +453,82 @@ describe('Chat', () => {
     });
   });
 
+  describe('_getSystemPrompt()', () => {
+    it('should return undefined when no system messages', () => {
+      const chat = new Chat();
+      chat.user('Hello');
+      assert.equal((chat as any)._getSystemPrompt(), undefined);
+    });
+
+    it('should return single system message content', () => {
+      const chat = new Chat();
+      chat.system('You are helpful');
+      chat.user('Hello');
+      assert.equal((chat as any)._getSystemPrompt(), 'You are helpful');
+    });
+
+    it('should join multiple system messages with double newline', () => {
+      const chat = new Chat();
+      chat.system('You are helpful');
+      chat.system('Be concise');
+      chat.user('Hello');
+      assert.equal((chat as any)._getSystemPrompt(), 'You are helpful\n\nBe concise');
+    });
+
+    it('should return undefined for empty messages list', () => {
+      const chat = new Chat();
+      assert.equal((chat as any)._getSystemPrompt(), undefined);
+    });
+  });
+
+  describe('_formatMessages() for Anthropic', () => {
+    it('should strip system messages from Anthropic message array', () => {
+      const chat = new Chat();
+      chat.system('You are helpful');
+      chat.user('Hello');
+      chat.assistant('Hi');
+      const messages = (chat as any)._formatMessages('anthropic');
+      assert.equal(messages.length, 2);
+      assert.equal(messages[0].role, 'user');
+      assert.equal(messages[1].role, 'assistant');
+    });
+
+    it('should keep system messages for OpenAI', () => {
+      const chat = new Chat();
+      chat.system('You are helpful');
+      chat.user('Hello');
+      const messages = (chat as any)._formatMessages('openai');
+      assert.equal(messages.length, 2);
+      assert.equal(messages[0].role, 'system');
+      assert.equal(messages[1].role, 'user');
+    });
+
+    it('should keep system messages for xAI', () => {
+      const chat = new Chat();
+      chat.system('You are helpful');
+      chat.user('Hello');
+      const messages = (chat as any)._formatMessages('xai');
+      assert.equal(messages.length, 2);
+      assert.equal(messages[0].role, 'system');
+    });
+
+    it('system prompt and formatted messages should be complementary for Anthropic', () => {
+      const chat = new Chat();
+      chat.system('Be helpful');
+      chat.system('Be concise');
+      chat.user('Hello');
+      chat.assistant('Hi');
+      chat.user('How are you?');
+
+      const messages = (chat as any)._formatMessages('anthropic');
+      const systemPrompt = (chat as any)._getSystemPrompt();
+
+      assert.equal(systemPrompt, 'Be helpful\n\nBe concise');
+      assert.equal(messages.length, 3);
+      assert.ok(messages.every((m: any) => m.role !== 'system'));
+    });
+  });
+
   describe('edge cases', () => {
     it('should handle empty content messages', () => {
       const chat = new Chat();
