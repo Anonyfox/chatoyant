@@ -698,7 +698,12 @@ export class Chat {
 
         const ctx: ToolContext = { model: modelToUse, provider };
         const toolResults = await this._executeToolCalls(result.toolCalls, ctx, opts);
-        localMessages = this._appendToolResults(provider, localMessages, result.toolCalls, toolResults);
+        localMessages = this._appendToolResults(
+          provider,
+          localMessages,
+          result.toolCalls,
+          toolResults,
+        );
       }
 
       this._messages.push(Message.assistant(finalContent));
