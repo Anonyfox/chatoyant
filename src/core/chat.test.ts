@@ -600,6 +600,75 @@ describe('Chat', () => {
     });
   });
 
+  describe('tool result serialization (_serializeToolResult)', () => {
+    it('should pass strings through without double-stringifying', () => {
+      const chat = new Chat();
+      const serialize = (chat as any)._serializeToolResult.bind(chat);
+      assert.equal(serialize('hello world'), 'hello world');
+      assert.equal(serialize('result with "quotes"'), 'result with "quotes"');
+    });
+
+    it('should JSON.stringify objects', () => {
+      const chat = new Chat();
+      const serialize = (chat as any)._serializeToolResult.bind(chat);
+      assert.equal(serialize({ key: 'value' }), '{"key":"value"}');
+    });
+
+    it('should JSON.stringify arrays', () => {
+      const chat = new Chat();
+      const serialize = (chat as any)._serializeToolResult.bind(chat);
+      assert.equal(serialize([1, 2, 3]), '[1,2,3]');
+    });
+
+    it('should JSON.stringify numbers', () => {
+      const chat = new Chat();
+      const serialize = (chat as any)._serializeToolResult.bind(chat);
+      assert.equal(serialize(42), '42');
+    });
+
+    it('should JSON.stringify null', () => {
+      const chat = new Chat();
+      const serialize = (chat as any)._serializeToolResult.bind(chat);
+      assert.equal(serialize(null), 'null');
+    });
+
+    it('should produce correct content in _appendToolResults for string results', () => {
+      const chat = new Chat();
+      const messages = [{ role: 'user', content: 'test' }];
+      const calls = [{ id: 'call_1', name: 'lookup', args: {} }];
+      const results = [{ id: 'call_1', result: 'plain string result', success: true }];
+
+      const openai = (chat as any)._appendToolResults('openai', messages, calls, results);
+      assert.equal(openai[2].content, 'plain string result');
+
+      const anthropic = (chat as any)._appendToolResults('anthropic', messages, calls, results);
+      assert.equal(anthropic[2].content[0].content, 'plain string result');
+    });
+
+    it('should produce correct content in _appendToolResults for object results', () => {
+      const chat = new Chat();
+      const messages = [{ role: 'user', content: 'test' }];
+      const calls = [{ id: 'call_1', name: 'lookup', args: {} }];
+      const results = [{ id: 'call_1', result: { data: 'found' }, success: true }];
+
+      const openai = (chat as any)._appendToolResults('openai', messages, calls, results);
+      assert.equal(openai[2].content, '{"data":"found"}');
+
+      const anthropic = (chat as any)._appendToolResults('anthropic', messages, calls, results);
+      assert.equal(anthropic[2].content[0].content, '{"data":"found"}');
+    });
+
+    it('should handle error results with fallback message', () => {
+      const chat = new Chat();
+      const messages = [{ role: 'user', content: 'test' }];
+      const calls = [{ id: 'call_1', name: 'lookup', args: {} }];
+      const results = [{ id: 'call_1', result: null, success: false, error: undefined }];
+
+      const openai = (chat as any)._appendToolResults('openai', messages, calls, results);
+      assert.equal(openai[2].content, 'Unknown error');
+    });
+  });
+
   describe('edge cases', () => {
     it('should handle empty content messages', () => {
       const chat = new Chat();

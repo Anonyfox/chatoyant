@@ -213,8 +213,17 @@ export class Tool<TArgs = unknown, TResult = unknown> {
   /**
    * Execute a tool call (validates args, executes, validates result).
    * Returns ToolResult with success/error info.
+   *
+   * @param call - The tool call from the model
+   * @param ctx - Execution context
+   * @param timeoutOverride - Optional timeout override (ms). If provided,
+   *   takes precedence over the tool's own timeout.
    */
-  async executeCall(call: ToolCall, ctx: ToolContext): Promise<ToolResult> {
+  async executeCall(
+    call: ToolCall,
+    ctx: ToolContext,
+    timeoutOverride?: number,
+  ): Promise<ToolResult> {
     try {
       // Validate arguments
       if (!this.validateArgs(call.args)) {
@@ -229,8 +238,9 @@ export class Tool<TArgs = unknown, TResult = unknown> {
       // Parse args
       const args = this.parseArgs(call.args);
 
-      // Execute with timeout
-      const result = await this.executeWithTimeout({ args, ctx });
+      // Execute with timeout (override takes precedence)
+      const effectiveTimeout = timeoutOverride ?? this.timeout;
+      const result = await withTimeout(this.executeFn({ args, ctx }), effectiveTimeout);
 
       // Validate result
       if (!this.validateResult(result)) {

@@ -13,9 +13,14 @@ import { validateOrThrow } from './validate.js';
  * Populate a field descriptor with a value.
  */
 function populateField(field: FieldDescriptor, value: unknown): void {
-  // Handle missing values (undefined) - keep default
+  // Handle missing values (undefined)
   if (value === undefined) {
-    // Keep default value for optional fields or fields with defaults
+    if (field.options.optional && field.options.default === undefined) {
+      // Optional field with no explicit default: set to undefined so tools
+      // can distinguish "not provided" from "provided as 0 or empty string"
+      field.value = undefined;
+    }
+    // Otherwise keep the explicit default or the type's zero value
     return;
   }
 

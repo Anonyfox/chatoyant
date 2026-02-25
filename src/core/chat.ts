@@ -610,6 +610,11 @@ export class Chat {
    * Uses streamAccumulate per provider to collect tool calls from the stream,
    * executes them, feeds results back, and streams again until the model
    * produces a final text response with no tool calls.
+   *
+   * Text is buffered during each iteration. If the model calls tools, the
+   * buffered text is discarded (it's pre-tool "thinking" text). Only the
+   * final iteration's text — where no tools are called — is yielded to the
+   * consumer and saved to message history.
    */
   private async *_streamWithToolLoop(
     options?: StreamWithToolsOptions,
@@ -631,22 +636,15 @@ export class Chat {
     const toolDefs = this._buildToolDefinitions(provider);
     let localMessages = this._formatMessages(provider);
     let iteration = 0;
-    let finalContent = '';
 
     try {
       while (iteration < maxIterations) {
         iteration++;
 
-        const pendingChunks: string[] = [];
-        let resolveChunk: (() => void) | null = null;
-        let streamDone = false;
+        // Buffer text during tool iterations; only stream on final turn
+        const bufferedChunks: string[] = [];
 
-        const onDelta = (chunk: string) => {
-          pendingChunks.push(chunk);
-          resolveChunk?.();
-        };
-
-        const streamResult = this._streamAccumulateWithTools(
+        const result = await this._streamAccumulateWithTools(
           client,
           provider,
           localMessages,
@@ -654,48 +652,22 @@ export class Chat {
           modelToUse,
           temperature,
           opts,
-          onDelta,
+          (chunk) => bufferedChunks.push(chunk),
         );
 
-        // Concurrently yield chunks as they arrive while the stream accumulates
-        const resultPromise = streamResult.then((r) => {
-          streamDone = true;
-          resolveChunk?.();
-          return r;
-        });
-
-        while (!streamDone) {
-          if (pendingChunks.length === 0) {
-            await new Promise<void>((resolve) => {
-              resolveChunk = resolve;
-            });
-          }
-          while (pendingChunks.length > 0) {
-            const chunk = pendingChunks.shift()!;
-            finalContent += chunk;
+        if (!result.hasToolCalls) {
+          // Final response — yield all buffered chunks to the consumer
+          for (const chunk of bufferedChunks) {
             opts.onDelta?.(chunk);
             yield chunk;
           }
-        }
-        // Drain any remaining chunks
-        while (pendingChunks.length > 0) {
-          const chunk = pendingChunks.shift()!;
-          finalContent += chunk;
-          opts.onDelta?.(chunk);
-          yield chunk;
+
+          this._messages.push(Message.assistant(result.content));
+          opts.onComplete?.(result.content);
+          return;
         }
 
-        const result = await resultPromise;
-
-        if (!result.hasToolCalls) {
-          break;
-        }
-
-        // Tool calls detected — don't include the streamed text from this
-        // iteration in final output (it may contain partial text before tools).
-        // Execute tools and loop.
-        finalContent = '';
-
+        // Tool calls detected — discard buffered text and execute tools
         const ctx: ToolContext = { model: modelToUse, provider };
         const toolResults = await this._executeToolCalls(result.toolCalls, ctx, opts);
         localMessages = this._appendToolResults(
@@ -706,8 +678,13 @@ export class Chat {
         );
       }
 
-      this._messages.push(Message.assistant(finalContent));
-      opts.onComplete?.(finalContent);
+      // Max iterations — make a final request without tools to get a response
+      const content = await this._extractFinalContent(client, provider, localMessages, opts);
+      this._messages.push(Message.assistant(content));
+
+      opts.onDelta?.(content);
+      yield content;
+      opts.onComplete?.(content);
     } catch (error) {
       opts.onError?.(error instanceof Error ? error : new Error(String(error)));
       throw error;
@@ -992,7 +969,7 @@ export class Chat {
       iteration++;
 
       // Make request with tools
-      const toolCalls = await this._requestWithTools(
+      const response = await this._requestWithTools(
         client,
         provider,
         localMessages,
@@ -1000,20 +977,18 @@ export class Chat {
         opts,
       );
 
-      // No tool calls = final response
-      if (!toolCalls || toolCalls.length === 0) {
-        // Get final content and return
-        const content = await this._extractFinalContent(client, provider, localMessages, opts);
-        this._messages.push(Message.assistant(content));
-        return content;
+      // No tool calls = final response — use the content directly
+      if (response.type === 'content') {
+        this._messages.push(Message.assistant(response.content));
+        return response.content;
       }
 
       // Execute tools
       const ctx: ToolContext = { model: this._model, provider };
-      const results = await this._executeToolCalls(toolCalls, ctx, opts);
+      const results = await this._executeToolCalls(response.calls, ctx, opts);
 
       // Append tool results to local messages
-      localMessages = this._appendToolResults(provider, localMessages, toolCalls, results);
+      localMessages = this._appendToolResults(provider, localMessages, response.calls, results);
     }
 
     // Max iterations reached - get whatever response we have
@@ -1202,7 +1177,8 @@ export class Chat {
   }
 
   /**
-   * Request with tools and extract tool calls.
+   * Result from a tool-aware request: either tool calls to execute,
+   * or a final text response (no tools invoked).
    */
   private async _requestWithTools(
     client: OpenAIClient | AnthropicClient | XAIClient,
@@ -1210,11 +1186,7 @@ export class Chat {
     messages: Array<Record<string, unknown>>,
     toolDefs: Array<{ name: string; description: string; parameters: Record<string, unknown> }>,
     opts: GenerateWithToolsOptions,
-  ): Promise<ToolCall[] | null> {
-    // This is a simplified implementation
-    // In practice, we'd call the provider's tool-aware endpoint
-    // and parse the tool calls from the response
-
+  ): Promise<{ type: 'tool_calls'; calls: ToolCall[] } | { type: 'content'; content: string }> {
     if (provider === 'openai') {
       const tools = toolDefs.map((t) => ({
         type: 'function' as const,
@@ -1231,13 +1203,16 @@ export class Chat {
       });
 
       if (result.type === 'tool_calls') {
-        return result.toolCalls.map((tc) => ({
-          id: tc.id,
-          name: tc.function.name,
-          args: JSON.parse(tc.function.arguments),
-        }));
+        return {
+          type: 'tool_calls',
+          calls: result.toolCalls.map((tc) => ({
+            id: tc.id,
+            name: tc.function.name,
+            args: JSON.parse(tc.function.arguments),
+          })),
+        };
       }
-      return null;
+      return { type: 'content', content: result.content };
     }
 
     if (provider === 'xai') {
@@ -1256,13 +1231,16 @@ export class Chat {
       });
 
       if (result.type === 'tool_calls') {
-        return result.toolCalls.map((tc) => ({
-          id: tc.id,
-          name: tc.function.name,
-          args: JSON.parse(tc.function.arguments),
-        }));
+        return {
+          type: 'tool_calls',
+          calls: result.toolCalls.map((tc) => ({
+            id: tc.id,
+            name: tc.function.name,
+            args: JSON.parse(tc.function.arguments),
+          })),
+        };
       }
-      return null;
+      return { type: 'content', content: result.content };
     }
 
     if (provider === 'anthropic') {
@@ -1284,16 +1262,19 @@ export class Chat {
       );
 
       if (result.type === 'tool_use') {
-        return result.toolUses.map((tu) => ({
-          id: tu.id,
-          name: tu.name,
-          args: tu.input,
-        }));
+        return {
+          type: 'tool_calls',
+          calls: result.toolUses.map((tu) => ({
+            id: tu.id,
+            name: tu.name,
+            args: tu.input,
+          })),
+        };
       }
-      return null;
+      return { type: 'content', content: result.text };
     }
 
-    return null;
+    throw new Error(`Unsupported provider: ${provider}`);
   }
 
   /**
@@ -1302,7 +1283,7 @@ export class Chat {
   private async _executeToolCalls(
     calls: ToolCall[],
     ctx: ToolContext,
-    opts: GenerateWithToolsOptions,
+    opts: GenerateWithToolsOptions | StreamWithToolsOptions,
   ): Promise<ToolResult[]> {
     const results: ToolResult[] = [];
 
@@ -1319,7 +1300,7 @@ export class Chat {
         continue;
       }
 
-      const result = await tool.executeCall(call, ctx);
+      const result = await tool.executeCall(call, ctx, opts.toolTimeout);
 
       if (!result.success && opts.onToolError === 'throw') {
         throw new Error(result.error);
@@ -1329,6 +1310,15 @@ export class Chat {
     }
 
     return results;
+  }
+
+  /**
+   * Serialize a tool result to a string suitable for the provider API.
+   * Strings pass through as-is; everything else gets JSON.stringify'd.
+   */
+  private _serializeToolResult(value: unknown): string {
+    if (typeof value === 'string') return value;
+    return JSON.stringify(value);
   }
 
   /**
@@ -1356,7 +1346,7 @@ export class Chat {
       const toolResultContent = results.map((r) => ({
         type: 'tool_result',
         tool_use_id: r.id,
-        content: r.success ? JSON.stringify(r.result) : r.error,
+        content: r.success ? this._serializeToolResult(r.result) : (r.error ?? 'Unknown error'),
       }));
 
       newMessages.push({ role: 'user', content: toolResultContent });
@@ -1378,7 +1368,9 @@ export class Chat {
         newMessages.push({
           role: 'tool',
           tool_call_id: result.id,
-          content: result.success ? JSON.stringify(result.result) : result.error!,
+          content: result.success
+            ? this._serializeToolResult(result.result)
+            : (result.error ?? 'Unknown error'),
         } as any);
       }
     }

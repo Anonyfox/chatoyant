@@ -132,13 +132,13 @@ describe('parse', () => {
   });
 
   describe('optional fields', () => {
-    it('should handle missing optional field', () => {
+    it('should handle missing optional field as undefined', () => {
       const instance = create(WithOptional);
 
       parse(instance, { name: 'Alice' });
 
       assert.equal(instance.name, 'Alice');
-      assert.equal(instance.email, ''); // Default value preserved
+      assert.equal(instance.email, undefined);
     });
 
     it('should handle null optional field', () => {
@@ -155,6 +155,58 @@ describe('parse', () => {
       parse(instance, { name: 'Alice', email: 'alice@test.com' });
 
       assert.equal(instance.email, 'alice@test.com');
+    });
+
+    it('should distinguish missing optional number from explicit 0', () => {
+      class WithOptionalInt {
+        name = String();
+        startLine = Integer({ optional: true });
+      }
+      const a = create(WithOptionalInt);
+      parse(a, { name: 'test' });
+      assert.equal(a.startLine, undefined);
+
+      const b = create(WithOptionalInt);
+      parse(b, { name: 'test', startLine: 0 });
+      assert.equal(b.startLine, 0);
+    });
+
+    it('should distinguish missing optional string from explicit empty string', () => {
+      class WithOptionalStr {
+        name = String();
+        label = String({ optional: true });
+      }
+      const a = create(WithOptionalStr);
+      parse(a, { name: 'test' });
+      assert.equal(a.label, undefined);
+
+      const b = create(WithOptionalStr);
+      parse(b, { name: 'test', label: '' });
+      assert.equal(b.label, '');
+    });
+
+    it('should distinguish missing optional boolean from explicit false', () => {
+      class WithOptionalBool {
+        name = String();
+        verbose = Boolean({ optional: true });
+      }
+      const a = create(WithOptionalBool);
+      parse(a, { name: 'test' });
+      assert.equal(a.verbose, undefined);
+
+      const b = create(WithOptionalBool);
+      parse(b, { name: 'test', verbose: false });
+      assert.equal(b.verbose, false);
+    });
+
+    it('should keep explicit default for optional field when value is missing', () => {
+      class WithOptionalDefault {
+        name = String();
+        timeout = Integer({ optional: true, default: 30 });
+      }
+      const instance = create(WithOptionalDefault);
+      parse(instance, { name: 'test' });
+      assert.equal(instance.timeout, 30);
     });
   });
 

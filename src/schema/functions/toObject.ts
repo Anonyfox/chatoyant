@@ -52,7 +52,12 @@ function extractInstance(instance: SchemaInstance): Record<string, unknown> {
 
   for (const [key, field] of Object.entries(instance)) {
     if (isFieldDescriptor(field)) {
-      result[key] = extractFieldValue(field);
+      const value = extractFieldValue(field);
+      // Omit optional fields with undefined values — "not provided" means
+      // the key shouldn't exist, distinguishing from explicit 0/""/false
+      if (value !== undefined) {
+        result[key] = value;
+      }
     }
   }
 

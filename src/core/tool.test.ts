@@ -356,5 +356,51 @@ describe('Tool', () => {
       assert.ok(!result.success);
       assert.ok(result.error?.includes('Invalid result'));
     });
+
+    it('should respect timeoutOverride parameter', async () => {
+      const slowTool = new Tool({
+        name: 'slow',
+        description: 'Slow tool',
+        parameters: TestParams,
+        timeout: 50,
+        execute: async () => {
+          await new Promise((r) => setTimeout(r, 200));
+          return { items: ['done'], total: 1 };
+        },
+      });
+
+      // Without override: should timeout at 50ms
+      const result1 = await slowTool.executeCall(
+        { id: 'call_5', name: 'slow', args: { query: 'test' } },
+        ctx,
+      );
+      assert.ok(!result1.success);
+      assert.ok(result1.error?.includes('timed out'));
+
+      // With override: 500ms should be enough
+      const result2 = await slowTool.executeCall(
+        { id: 'call_6', name: 'slow', args: { query: 'test' } },
+        ctx,
+        500,
+      );
+      assert.ok(result2.success);
+      assert.deepEqual(result2.result, { items: ['done'], total: 1 });
+    });
+
+    it('should use tool default timeout when no override provided', async () => {
+      const fastTool = new Tool({
+        name: 'fast',
+        description: 'Fast tool',
+        parameters: TestParams,
+        timeout: 5000,
+        execute: async () => ({ items: ['ok'], total: 1 }),
+      });
+
+      const result = await fastTool.executeCall(
+        { id: 'call_7', name: 'fast', args: { query: 'test' } },
+        ctx,
+      );
+      assert.ok(result.success);
+    });
   });
 });

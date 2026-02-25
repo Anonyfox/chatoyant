@@ -231,6 +231,66 @@ describe('toObject', () => {
     });
   });
 
+  describe('optional fields', () => {
+    it('should omit missing optional fields from output', () => {
+      class WithOptional {
+        name = String();
+        label = String({ optional: true });
+        count = Integer({ optional: true });
+      }
+      const instance = create(WithOptional);
+      parse(instance, { name: 'test' });
+      const obj = toObject(instance);
+
+      assert.equal(obj.name, 'test');
+      assert.ok(!('label' in obj));
+      assert.ok(!('count' in obj));
+    });
+
+    it('should include optional fields when explicitly provided', () => {
+      class WithOptional {
+        name = String();
+        label = String({ optional: true });
+        count = Integer({ optional: true });
+      }
+      const instance = create(WithOptional);
+      parse(instance, { name: 'test', label: 'hello', count: 0 });
+      const obj = toObject(instance);
+
+      assert.equal(obj.name, 'test');
+      assert.equal(obj.label, 'hello');
+      assert.equal(obj.count, 0);
+    });
+
+    it('should include optional fields with explicit defaults when omitted', () => {
+      class WithOptionalDefault {
+        name = String();
+        timeout = Integer({ optional: true, default: 30 });
+      }
+      const instance = create(WithOptionalDefault);
+      parse(instance, { name: 'test' });
+      const obj = toObject(instance);
+
+      assert.equal(obj.name, 'test');
+      assert.equal(obj.timeout, 30);
+    });
+
+    it('should produce clean JSON without undefined keys', () => {
+      class WithOptional {
+        name = String();
+        label = String({ optional: true });
+      }
+      const instance = create(WithOptional);
+      parse(instance, { name: 'test' });
+      const obj = toObject(instance);
+      const json = JSON.stringify(obj);
+      const parsed = JSON.parse(json);
+
+      assert.deepEqual(parsed, { name: 'test' });
+      assert.ok(!('label' in parsed));
+    });
+  });
+
   describe('JSON serialization', () => {
     it('should produce JSON-serializable object', () => {
       const instance = create(SimpleSchema);
