@@ -13,6 +13,16 @@
 export type MessageRole = 'system' | 'user' | 'assistant' | 'tool';
 
 /**
+ * A tool call requested by the assistant.
+ * Stored in provider-agnostic form; _formatMessages converts per-provider.
+ */
+export interface ToolCallData {
+  id: string;
+  name: string;
+  arguments: string;
+}
+
+/**
  * Serialized message format (JSON-compatible).
  */
 export interface MessageJSON {
@@ -20,6 +30,7 @@ export interface MessageJSON {
   content: string;
   name?: string;
   toolCallId?: string;
+  toolCalls?: ToolCallData[];
   metadata?: Record<string, unknown>;
 }
 
@@ -54,6 +65,9 @@ export class Message {
   /** Tool call ID (for tool responses) */
   readonly toolCallId?: string;
 
+  /** Tool calls requested by the assistant */
+  readonly toolCalls?: ToolCallData[];
+
   /** Optional metadata for extensions */
   readonly metadata?: Record<string, unknown>;
 
@@ -62,7 +76,7 @@ export class Message {
    *
    * @param role - The message role
    * @param content - The message content
-   * @param options - Optional name, toolCallId, metadata
+   * @param options - Optional name, toolCallId, toolCalls, metadata
    */
   constructor(
     role: MessageRole,
@@ -70,6 +84,7 @@ export class Message {
     options?: {
       name?: string;
       toolCallId?: string;
+      toolCalls?: ToolCallData[];
       metadata?: Record<string, unknown>;
     },
   ) {
@@ -84,6 +99,7 @@ export class Message {
     this.content = content;
     this.name = options?.name;
     this.toolCallId = options?.toolCallId;
+    this.toolCalls = options?.toolCalls;
     this.metadata = options?.metadata;
   }
 
@@ -97,6 +113,7 @@ export class Message {
     };
     if (this.name !== undefined) json.name = this.name;
     if (this.toolCallId !== undefined) json.toolCallId = this.toolCallId;
+    if (this.toolCalls !== undefined) json.toolCalls = this.toolCalls;
     if (this.metadata !== undefined) json.metadata = this.metadata;
     return json;
   }
@@ -118,6 +135,7 @@ export class Message {
     return new Message(obj.role as MessageRole, obj.content, {
       name: typeof obj.name === 'string' ? obj.name : undefined,
       toolCallId: typeof obj.toolCallId === 'string' ? obj.toolCallId : undefined,
+      toolCalls: Array.isArray(obj.toolCalls) ? (obj.toolCalls as ToolCallData[]) : undefined,
       metadata:
         typeof obj.metadata === 'object' ? (obj.metadata as Record<string, unknown>) : undefined,
     });
@@ -149,6 +167,13 @@ export class Message {
   }
 
   /**
+   * Create an assistant message that requests tool calls.
+   */
+  static assistantToolCall(toolCalls: ToolCallData[], metadata?: Record<string, unknown>): Message {
+    return new Message('assistant', '', { toolCalls, metadata });
+  }
+
+  /**
    * Create a tool response message.
    */
   static tool(content: string, toolCallId: string, metadata?: Record<string, unknown>): Message {
@@ -166,6 +191,7 @@ export class Message {
     return new Message(this.role, content, {
       name: this.name,
       toolCallId: this.toolCallId,
+      toolCalls: this.toolCalls,
       metadata: this.metadata,
     });
   }
@@ -177,6 +203,7 @@ export class Message {
     return new Message(this.role, this.content, {
       name: this.name,
       toolCallId: this.toolCallId,
+      toolCalls: this.toolCalls,
       metadata: { ...this.metadata, ...metadata },
     });
   }
@@ -207,5 +234,12 @@ export class Message {
    */
   isTool(): boolean {
     return this.role === 'tool';
+  }
+
+  /**
+   * Check if this is an assistant message that requests tool calls.
+   */
+  hasToolCalls(): boolean {
+    return this.role === 'assistant' && Array.isArray(this.toolCalls) && this.toolCalls.length > 0;
   }
 }

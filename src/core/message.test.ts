@@ -219,6 +219,71 @@ describe('Message', () => {
       assert.ok(Message.tool('test', 'id').isTool());
       assert.ok(!Message.user('test').isTool());
     });
+
+    it('hasToolCalls() should return true only for assistant messages with tool calls', () => {
+      const tc = Message.assistantToolCall([
+        { id: 'call_1', name: 'search', arguments: '{"q":"test"}' },
+      ]);
+      assert.ok(tc.hasToolCalls());
+      assert.ok(tc.isAssistant());
+
+      assert.ok(!Message.assistant('test').hasToolCalls());
+      assert.ok(!Message.user('test').hasToolCalls());
+      assert.ok(!Message.tool('result', 'id').hasToolCalls());
+    });
+  });
+
+  describe('tool call messages', () => {
+    it('assistantToolCall should create assistant message with toolCalls', () => {
+      const calls = [
+        { id: 'call_1', name: 'search', arguments: '{"q":"hello"}' },
+        { id: 'call_2', name: 'write', arguments: '{"path":"a.txt"}' },
+      ];
+      const msg = Message.assistantToolCall(calls);
+
+      assert.equal(msg.role, 'assistant');
+      assert.equal(msg.content, '');
+      assert.deepEqual(msg.toolCalls, calls);
+    });
+
+    it('toolCalls should round-trip through toJSON/fromJSON', () => {
+      const calls = [{ id: 'call_1', name: 'search', arguments: '{"q":"test"}' }];
+      const msg = Message.assistantToolCall(calls);
+      const json = msg.toJSON();
+      const restored = Message.fromJSON(json);
+
+      assert.equal(restored.role, 'assistant');
+      assert.deepEqual(restored.toolCalls, calls);
+      assert.ok(restored.hasToolCalls());
+    });
+
+    it('tool result should round-trip through toJSON/fromJSON', () => {
+      const msg = Message.tool('{"status":"ok"}', 'call_1');
+      const json = msg.toJSON();
+      const restored = Message.fromJSON(json);
+
+      assert.equal(restored.role, 'tool');
+      assert.equal(restored.toolCallId, 'call_1');
+      assert.equal(restored.content, '{"status":"ok"}');
+    });
+
+    it('withContent should preserve toolCalls', () => {
+      const calls = [{ id: 'call_1', name: 'search', arguments: '{}' }];
+      const msg = Message.assistantToolCall(calls);
+      const updated = msg.withContent('modified');
+
+      assert.equal(updated.content, 'modified');
+      assert.deepEqual(updated.toolCalls, calls);
+    });
+
+    it('withMetadata should preserve toolCalls', () => {
+      const calls = [{ id: 'call_1', name: 'search', arguments: '{}' }];
+      const msg = Message.assistantToolCall(calls);
+      const updated = msg.withMetadata({ tag: 'test' });
+
+      assert.deepEqual(updated.toolCalls, calls);
+      assert.deepEqual(updated.metadata, { tag: 'test' });
+    });
   });
 
   describe('immutability', () => {

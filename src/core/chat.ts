@@ -670,6 +670,9 @@ export class Chat {
         // Tool calls detected — discard buffered text and execute tools
         const ctx: ToolContext = { model: modelToUse, provider };
         const toolResults = await this._executeToolCalls(result.toolCalls, ctx, opts);
+
+        // Persist to conversation history and append to local provider messages
+        this._persistToolInteraction(result.toolCalls, toolResults);
         localMessages = this._appendToolResults(
           provider,
           localMessages,
@@ -738,7 +741,7 @@ export class Chat {
       const toolCalls: ToolCall[] = result.toolCalls.map((tc) => ({
         id: tc.id,
         name: tc.function.name,
-        args: JSON.parse(tc.function.arguments),
+        args: this._parseToolArgs(tc.function.arguments),
       }));
 
       return {
@@ -825,7 +828,7 @@ export class Chat {
       const toolCalls: ToolCall[] = result.toolCalls.map((tc) => ({
         id: tc.id,
         name: tc.function.name,
-        args: JSON.parse(tc.function.arguments),
+        args: this._parseToolArgs(tc.function.arguments),
       }));
 
       return {
@@ -987,7 +990,8 @@ export class Chat {
       const ctx: ToolContext = { model: this._model, provider };
       const results = await this._executeToolCalls(response.calls, ctx, opts);
 
-      // Append tool results to local messages
+      // Persist to conversation history and append to local provider messages
+      this._persistToolInteraction(response.calls, results);
       localMessages = this._appendToolResults(provider, localMessages, response.calls, results);
     }
 
@@ -1063,6 +1067,7 @@ export class Chat {
         new Message(m.role, m.content, {
           name: m.name,
           toolCallId: m.toolCallId,
+          toolCalls: m.toolCalls ? [...m.toolCalls] : undefined,
           metadata: m.metadata ? { ...m.metadata } : undefined,
         }),
     );
@@ -1146,21 +1151,77 @@ export class Chat {
    */
   private _formatMessages(_provider: ProviderId): Array<Record<string, unknown>> {
     if (_provider === 'anthropic') {
-      // Anthropic: system messages go to top-level system param
-      // Filter them out of messages array
-      return this._messages
-        .filter((m) => m.role !== 'system')
-        .map((m) => ({
+      const result: Array<Record<string, unknown>> = [];
+      let pendingToolResults: Array<{ type: string; tool_use_id: string; content: string }> = [];
+
+      const flushToolResults = () => {
+        if (pendingToolResults.length > 0) {
+          result.push({ role: 'user', content: pendingToolResults });
+          pendingToolResults = [];
+        }
+      };
+
+      for (const m of this._messages) {
+        if (m.isSystem()) continue;
+
+        if (m.hasToolCalls()) {
+          flushToolResults();
+          result.push({
+            role: 'assistant',
+            content: m.toolCalls!.map((tc) => ({
+              type: 'tool_use',
+              id: tc.id,
+              name: tc.name,
+              input: JSON.parse(tc.arguments),
+            })),
+          });
+          continue;
+        }
+
+        if (m.isTool()) {
+          pendingToolResults.push({
+            type: 'tool_result',
+            tool_use_id: m.toolCallId!,
+            content: m.content,
+          });
+          continue;
+        }
+
+        flushToolResults();
+        result.push({
           role: m.role === 'assistant' ? 'assistant' : 'user',
           content: m.content,
-        }));
+        });
+      }
+
+      flushToolResults();
+      return result;
     }
 
     // OpenAI and xAI use same format
-    return this._messages.map((m) => ({
-      role: m.role,
-      content: m.content,
-    }));
+    return this._messages.map((m) => {
+      if (m.hasToolCalls()) {
+        return {
+          role: 'assistant',
+          content: null,
+          tool_calls: m.toolCalls!.map((tc) => ({
+            id: tc.id,
+            type: 'function',
+            function: { name: tc.name, arguments: tc.arguments },
+          })),
+        };
+      }
+
+      if (m.isTool()) {
+        return {
+          role: 'tool',
+          tool_call_id: m.toolCallId,
+          content: m.content,
+        };
+      }
+
+      return { role: m.role, content: m.content };
+    });
   }
 
   /**
@@ -1208,7 +1269,7 @@ export class Chat {
           calls: result.toolCalls.map((tc) => ({
             id: tc.id,
             name: tc.function.name,
-            args: JSON.parse(tc.function.arguments),
+            args: this._parseToolArgs(tc.function.arguments),
           })),
         };
       }
@@ -1236,7 +1297,7 @@ export class Chat {
           calls: result.toolCalls.map((tc) => ({
             id: tc.id,
             name: tc.function.name,
-            args: JSON.parse(tc.function.arguments),
+            args: this._parseToolArgs(tc.function.arguments),
           })),
         };
       }
@@ -1319,6 +1380,62 @@ export class Chat {
   private _serializeToolResult(value: unknown): string {
     if (typeof value === 'string') return value;
     return JSON.stringify(value);
+  }
+
+  /**
+   * Repair invalid JSON escape sequences in tool call argument strings.
+   * Some models (notably Grok/xAI) generate backslash sequences like \s, \D, \w
+   * that are not valid JSON escapes. V8's JSON.parse silently strips the
+   * backslash from these, destroying regex patterns and other literal content.
+   * This pre-processes the string to double those lone backslashes so
+   * JSON.parse preserves them as literal backslash + character.
+   */
+  private _repairJsonEscapes(jsonStr: string): string {
+    return jsonStr.replace(/\\(u[0-9a-fA-F]{4}|["\\/bfnrt]|.)/gs, (match, captured: string) => {
+      if (
+        (captured.length === 1 && '"\\/bfnrt'.includes(captured)) ||
+        /^u[0-9a-fA-F]{4}$/.test(captured)
+      ) {
+        return match;
+      }
+      return `\\\\${captured}`;
+    });
+  }
+
+  /**
+   * Parse tool call arguments JSON, applying escape repair for robustness.
+   * Repair runs unconditionally because V8 may silently accept invalid
+   * escapes (stripping the backslash) rather than throwing.
+   */
+  private _parseToolArgs(argsJson: string): Record<string, unknown> {
+    return JSON.parse(this._repairJsonEscapes(argsJson));
+  }
+
+  /**
+   * Persist a tool call/result exchange into the conversation history
+   * so it survives across generate()/stream() calls and serialization.
+   */
+  private _persistToolInteraction(calls: ToolCall[], results: ToolResult[]): void {
+    this._messages.push(
+      Message.assistantToolCall(
+        calls.map((c) => ({
+          id: c.id,
+          name: c.name,
+          arguments: JSON.stringify(c.args),
+        })),
+      ),
+    );
+
+    for (const result of results) {
+      this._messages.push(
+        Message.tool(
+          result.success
+            ? this._serializeToolResult(result.result)
+            : (result.error ?? 'Unknown error'),
+          result.id,
+        ),
+      );
+    }
   }
 
   /**

@@ -527,6 +527,211 @@ describe('Chat', () => {
       assert.equal(messages.length, 3);
       assert.ok(messages.every((m: any) => m.role !== 'system'));
     });
+
+    it('should format assistant tool call messages for OpenAI/xAI', () => {
+      const chat = new Chat();
+      chat.user('search for cats');
+      (chat as any)._messages.push(
+        Message.assistantToolCall([{ id: 'call_1', name: 'search', arguments: '{"q":"cats"}' }]),
+      );
+      (chat as any)._messages.push(Message.tool('found 5 results', 'call_1'));
+      chat.assistant('Here are the results.');
+
+      const messages = (chat as any)._formatMessages('openai');
+      assert.equal(messages.length, 4);
+
+      assert.equal(messages[1].role, 'assistant');
+      assert.equal(messages[1].content, null);
+      assert.equal(messages[1].tool_calls.length, 1);
+      assert.equal(messages[1].tool_calls[0].id, 'call_1');
+      assert.equal(messages[1].tool_calls[0].type, 'function');
+      assert.equal(messages[1].tool_calls[0].function.name, 'search');
+
+      assert.equal(messages[2].role, 'tool');
+      assert.equal(messages[2].tool_call_id, 'call_1');
+      assert.equal(messages[2].content, 'found 5 results');
+    });
+
+    it('should format assistant tool call messages for Anthropic', () => {
+      const chat = new Chat();
+      chat.user('search for cats');
+      (chat as any)._messages.push(
+        Message.assistantToolCall([{ id: 'call_1', name: 'search', arguments: '{"q":"cats"}' }]),
+      );
+      (chat as any)._messages.push(Message.tool('found 5 results', 'call_1'));
+      chat.assistant('Here are the results.');
+
+      const messages = (chat as any)._formatMessages('anthropic');
+      assert.equal(messages.length, 4);
+
+      assert.equal(messages[1].role, 'assistant');
+      assert.equal(messages[1].content[0].type, 'tool_use');
+      assert.equal(messages[1].content[0].id, 'call_1');
+      assert.equal(messages[1].content[0].name, 'search');
+      assert.deepEqual(messages[1].content[0].input, { q: 'cats' });
+
+      assert.equal(messages[2].role, 'user');
+      assert.equal(messages[2].content[0].type, 'tool_result');
+      assert.equal(messages[2].content[0].tool_use_id, 'call_1');
+    });
+
+    it('should group consecutive tool results for Anthropic', () => {
+      const chat = new Chat();
+      chat.user('search for cats and dogs');
+      (chat as any)._messages.push(
+        Message.assistantToolCall([
+          { id: 'call_1', name: 'search', arguments: '{"q":"cats"}' },
+          { id: 'call_2', name: 'search', arguments: '{"q":"dogs"}' },
+        ]),
+      );
+      (chat as any)._messages.push(Message.tool('cats result', 'call_1'));
+      (chat as any)._messages.push(Message.tool('dogs result', 'call_2'));
+      chat.assistant('Here are both results.');
+
+      const messages = (chat as any)._formatMessages('anthropic');
+      assert.equal(messages.length, 4);
+
+      // tool_use content should have both calls
+      assert.equal(messages[1].content.length, 2);
+
+      // tool_result user message should have both results grouped
+      assert.equal(messages[2].role, 'user');
+      assert.equal(messages[2].content.length, 2);
+      assert.equal(messages[2].content[0].tool_use_id, 'call_1');
+      assert.equal(messages[2].content[1].tool_use_id, 'call_2');
+    });
+
+    it('should persist tool interactions through toJSON/fromJSON', () => {
+      const chat = new Chat({ model: 'gpt-4o' });
+      chat.user('search for cats');
+      (chat as any)._messages.push(
+        Message.assistantToolCall([{ id: 'call_1', name: 'search', arguments: '{"q":"cats"}' }]),
+      );
+      (chat as any)._messages.push(Message.tool('found 5 results', 'call_1'));
+      chat.assistant('Here are the results.');
+
+      const json = chat.toJSON();
+      const restored = Chat.fromJSON(json);
+      const restoredMessages = (restored as any)._messages;
+
+      assert.equal(restoredMessages.length, 4);
+      assert.ok(restoredMessages[1].hasToolCalls());
+      assert.equal(restoredMessages[1].toolCalls[0].name, 'search');
+      assert.ok(restoredMessages[2].isTool());
+      assert.equal(restoredMessages[2].toolCallId, 'call_1');
+    });
+  });
+
+  describe('_repairJsonEscapes / _parseToolArgs', () => {
+    it('should preserve all valid JSON escape sequences', () => {
+      const chat = new Chat();
+      const repair = (s: string) => (chat as any)._repairJsonEscapes(s);
+
+      assert.equal(repair('{"a": "hello\\nworld"}'), '{"a": "hello\\nworld"}');
+      assert.equal(repair('{"a": "tab\\there"}'), '{"a": "tab\\there"}');
+      assert.equal(repair('{"a": "quote\\"here"}'), '{"a": "quote\\"here"}');
+      assert.equal(repair('{"a": "back\\\\slash"}'), '{"a": "back\\\\slash"}');
+      assert.equal(repair('{"a": "slash\\/here"}'), '{"a": "slash\\/here"}');
+      assert.equal(repair('{"a": "\\u0041"}'), '{"a": "\\u0041"}');
+      assert.equal(repair('{"a": "\\b\\f\\r"}'), '{"a": "\\b\\f\\r"}');
+    });
+
+    it('should fix invalid regex-style escapes', () => {
+      const chat = new Chat();
+      const repair = (s: string) => (chat as any)._repairJsonEscapes(s);
+
+      assert.equal(repair('{"code": "\\s+"}'), '{"code": "\\\\s+"}');
+      assert.equal(repair('{"code": "\\D+"}'), '{"code": "\\\\D+"}');
+      assert.equal(repair('{"code": "\\w+"}'), '{"code": "\\\\w+"}');
+      assert.equal(repair('{"code": "\\W\\S"}'), '{"code": "\\\\W\\\\S"}');
+      assert.equal(repair('{"code": "\\d{3}"}'), '{"code": "\\\\d{3}"}');
+      assert.equal(repair('{"code": "\\p{L}"}'), '{"code": "\\\\p{L}"}');
+    });
+
+    it('should handle mixed valid and invalid escapes in one string', () => {
+      const chat = new Chat();
+      const repair = (s: string) => (chat as any)._repairJsonEscapes(s);
+
+      // \n is valid, \s is not → only \s gets repaired
+      const input = '{"code": "line1\\n\\s+line2"}';
+      const expected = '{"code": "line1\\n\\\\s+line2"}';
+      assert.equal(repair(input), expected);
+    });
+
+    it('should not touch already-correct escaped backslashes before letters', () => {
+      const chat = new Chat();
+      const repair = (s: string) => (chat as any)._repairJsonEscapes(s);
+
+      // \\s means: JSON escape \\ (backslash) then literal s → no change
+      assert.equal(repair('{"code": "\\\\s+"}'), '{"code": "\\\\s+"}');
+      // \\D same
+      assert.equal(repair('{"code": "\\\\D+"}'), '{"code": "\\\\D+"}');
+    });
+
+    it('should handle incomplete unicode escapes', () => {
+      const chat = new Chat();
+      const repair = (s: string) => (chat as any)._repairJsonEscapes(s);
+
+      // \u00 is incomplete → not valid → double the backslash
+      assert.equal(repair('{"a": "\\u00"}'), '{"a": "\\\\u00"}');
+      // \u0041 is complete → leave alone
+      assert.equal(repair('{"a": "\\u0041"}'), '{"a": "\\u0041"}');
+    });
+
+    it('should handle Windows-style paths correctly', () => {
+      const chat = new Chat();
+      const repair = (s: string) => (chat as any)._repairJsonEscapes(s);
+
+      // C:\\Users\\foo → each \\ is a valid escape pair → no change
+      assert.equal(repair('{"path": "C:\\\\Users\\\\foo"}'), '{"path": "C:\\\\Users\\\\foo"}');
+    });
+
+    it('should parse tool args with invalid escapes and preserve backslashes', () => {
+      const chat = new Chat();
+      const parse = (s: string) => (chat as any)._parseToolArgs(s);
+
+      // The JSON string has \s (invalid) → repair makes it \\s → parse produces \s
+      const result = parse('{"pattern": "\\s+"}');
+      assert.equal(result.pattern, '\\s+');
+    });
+
+    it('should parse tool args with multiple regex patterns', () => {
+      const chat = new Chat();
+      const parse = (s: string) => (chat as any)._parseToolArgs(s);
+
+      const result = parse('{"re": "^\\d{3}-\\d{2}-\\d{4}$"}');
+      assert.equal(result.re, '^\\d{3}-\\d{2}-\\d{4}$');
+    });
+
+    it('should parse valid tool args with no repair needed', () => {
+      const chat = new Chat();
+      const parse = (s: string) => (chat as any)._parseToolArgs(s);
+
+      const result = parse('{"q": "hello world", "limit": 10}');
+      assert.equal(result.q, 'hello world');
+      assert.equal(result.limit, 10);
+    });
+
+    it('should preserve real newlines and tabs', () => {
+      const chat = new Chat();
+      const parse = (s: string) => (chat as any)._parseToolArgs(s);
+
+      const result = parse('{"content": "line1\\nline2\\ttab"}');
+      assert.equal(result.content, 'line1\nline2\ttab');
+    });
+
+    it('should handle complex code content with mixed escapes', () => {
+      const chat = new Chat();
+      const parse = (s: string) => (chat as any)._parseToolArgs(s);
+
+      // Code containing: const re = /\s+\d/g;\n (newline) console.log(re);
+      // In correct JSON: \\s and \\d are literal, \n is newline
+      const json = '{"code": "const re = /\\\\s+\\\\d/g;\\nconsole.log(re);"}';
+      const result = parse(json);
+      assert.ok(result.code.includes('\\s+'));
+      assert.ok(result.code.includes('\\d'));
+      assert.ok(result.code.includes('\n'));
+    });
   });
 
   describe('stream() tool awareness', () => {

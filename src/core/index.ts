@@ -45,6 +45,7 @@ export {
   Message,
   type MessageJSON,
   type MessageRole,
+  type ToolCallData,
 } from './message.js';
 
 export {
