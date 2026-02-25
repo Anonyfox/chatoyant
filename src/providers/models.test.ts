@@ -38,14 +38,12 @@ describe('providers/models', () => {
     });
 
     it('should contain specialized models', () => {
-      assert.ok(OPENAI_MODELS.includes('gpt-realtime'));
       assert.ok(OPENAI_MODELS.includes('gpt-audio'));
       assert.ok(OPENAI_MODELS.includes('gpt-image-1'));
     });
 
     it('should contain ChatGPT models', () => {
       assert.ok(OPENAI_MODELS.includes('chatgpt-4o-latest'));
-      assert.ok(OPENAI_MODELS.includes('chatgpt-image-latest'));
     });
 
     it('should contain open-source models', () => {
@@ -55,29 +53,29 @@ describe('providers/models', () => {
   });
 
   describe('ANTHROPIC_MODELS', () => {
+    it('should contain Claude 4.6 models', () => {
+      assert.ok(ANTHROPIC_MODELS.includes('claude-opus-4-6'));
+      assert.ok(ANTHROPIC_MODELS.includes('claude-sonnet-4-6'));
+    });
+
+    it('should contain Claude 4.5 models', () => {
+      assert.ok(ANTHROPIC_MODELS.includes('claude-opus-4-5'));
+      assert.ok(ANTHROPIC_MODELS.includes('claude-sonnet-4-5'));
+      assert.ok(ANTHROPIC_MODELS.includes('claude-haiku-4-5'));
+    });
+
     it('should contain Claude 4 models', () => {
-      assert.ok(ANTHROPIC_MODELS.includes('claude-opus-4'));
-      assert.ok(ANTHROPIC_MODELS.includes('claude-sonnet-4'));
-      assert.ok(ANTHROPIC_MODELS.includes('claude-opus-4.5'));
-      assert.ok(ANTHROPIC_MODELS.includes('claude-haiku-4.5'));
+      assert.ok(ANTHROPIC_MODELS.includes('claude-sonnet-4-20250514'));
+      assert.ok(ANTHROPIC_MODELS.includes('claude-opus-4-20250514'));
     });
 
     it('should contain Claude 3.5 models', () => {
-      assert.ok(ANTHROPIC_MODELS.includes('claude-3-5-sonnet-latest'));
       assert.ok(ANTHROPIC_MODELS.includes('claude-3-5-sonnet-20241022'));
-      assert.ok(ANTHROPIC_MODELS.includes('claude-3-5-haiku-latest'));
+      assert.ok(ANTHROPIC_MODELS.includes('claude-3-5-haiku-20241022'));
     });
 
     it('should contain Claude 3 models', () => {
-      assert.ok(ANTHROPIC_MODELS.includes('claude-3-opus-latest'));
-      assert.ok(ANTHROPIC_MODELS.includes('claude-3-sonnet-20240229'));
       assert.ok(ANTHROPIC_MODELS.includes('claude-3-haiku-20240307'));
-    });
-
-    it('should contain legacy Claude 2 models', () => {
-      assert.ok(ANTHROPIC_MODELS.includes('claude-2.1'));
-      assert.ok(ANTHROPIC_MODELS.includes('claude-2.0'));
-      assert.ok(ANTHROPIC_MODELS.includes('claude-instant-1.2'));
     });
   });
 
@@ -94,7 +92,6 @@ describe('providers/models', () => {
     });
 
     it('should contain Grok 2 models', () => {
-      assert.ok(XAI_MODELS.includes('grok-2'));
       assert.ok(XAI_MODELS.includes('grok-2-vision-1212'));
       assert.ok(XAI_MODELS.includes('grok-2-image-1212'));
     });
@@ -143,12 +140,12 @@ describe('providers/models', () => {
     });
 
     it('should return true for known Anthropic models', () => {
-      assert.equal(isKnownModel('claude-opus-4'), true);
-      assert.equal(isKnownModel('claude-3-5-sonnet-latest'), true);
+      assert.equal(isKnownModel('claude-opus-4-6'), true);
+      assert.equal(isKnownModel('claude-3-5-sonnet-20241022'), true);
     });
 
     it('should return true for known xAI models', () => {
-      assert.equal(isKnownModel('grok-4'), true);
+      assert.equal(isKnownModel('grok-4-0709'), true);
       assert.equal(isKnownModel('grok-3-mini'), true);
     });
 
@@ -160,8 +157,8 @@ describe('providers/models', () => {
 
     it('should be case-insensitive', () => {
       assert.equal(isKnownModel('GPT-5.2'), true);
-      assert.equal(isKnownModel('CLAUDE-OPUS-4'), true);
-      assert.equal(isKnownModel('GROK-4'), true);
+      assert.equal(isKnownModel('CLAUDE-OPUS-4-6'), true);
+      assert.equal(isKnownModel('GROK-4-0709'), true);
     });
   });
 
@@ -178,9 +175,9 @@ describe('providers/models', () => {
       assert.ok(all.includes('gpt-5.2'));
       assert.ok(all.includes('o1-preview'));
       // Anthropic
-      assert.ok(all.includes('claude-opus-4'));
+      assert.ok(all.includes('claude-opus-4-6'));
       // xAI
-      assert.ok(all.includes('grok-4'));
+      assert.ok(all.includes('grok-4-0709'));
     });
 
     it('should return a readonly array', () => {

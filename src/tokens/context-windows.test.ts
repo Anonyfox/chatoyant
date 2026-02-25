@@ -26,13 +26,13 @@ describe('tokens/context-windows', () => {
     });
 
     it('should include known Anthropic models', () => {
-      assert.ok('claude-sonnet-4-20250514' in CONTEXT_WINDOWS);
-      assert.ok('claude-3-opus' in CONTEXT_WINDOWS);
+      assert.ok('claude-sonnet-4-6' in CONTEXT_WINDOWS);
+      assert.ok('claude-opus-4-6' in CONTEXT_WINDOWS);
     });
 
     it('should include known xAI models', () => {
       assert.ok('grok-3' in CONTEXT_WINDOWS);
-      assert.ok('grok-2' in CONTEXT_WINDOWS);
+      assert.ok('grok-4-0709' in CONTEXT_WINDOWS);
     });
   });
 
@@ -62,7 +62,7 @@ describe('tokens/context-windows', () => {
   describe('hasContextWindow', () => {
     it('should return true for known model', () => {
       assert.equal(hasContextWindow('gpt-4o'), true);
-      assert.equal(hasContextWindow('claude-3-opus'), true);
+      assert.equal(hasContextWindow('claude-opus-4-6'), true);
       assert.equal(hasContextWindow('grok-3'), true);
     });
 

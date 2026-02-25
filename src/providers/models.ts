@@ -14,23 +14,31 @@ import type { ProviderId } from './types.js';
  * Known OpenAI models.
  *
  * Includes:
- * - GPT series (gpt-5, gpt-4.1, gpt-4o, etc.)
- * - O-series reasoning models (o1, o3)
- * - Specialized models (realtime, audio, image, codex)
+ * - GPT-5 series (gpt-5.2, gpt-5.1, gpt-5)
+ * - GPT-4.1 series
+ * - GPT-4o series
+ * - GPT-4 / GPT-3.5 legacy
+ * - O-series reasoning models (o1, o3, o4-mini)
+ * - Specialized models (audio, image, codex, oss)
  */
 export const OPENAI_MODELS = [
-  // GPT-5 series
+  // GPT-5.2 series
   'gpt-5.2',
   'gpt-5.2-pro',
+  'gpt-5.2-codex',
+  // GPT-5.1 series
   'gpt-5.1',
   'gpt-5.1-codex',
   'gpt-5.1-codex-max',
+  'gpt-5.1-codex-mini',
+  // GPT-5 series
   'gpt-5',
   'gpt-5-pro',
   'gpt-5-mini',
   'gpt-5-nano',
   'gpt-5-codex',
-  'gpt-5-chat-latest',
+  'gpt-5-image',
+  'gpt-5-image-mini',
   // GPT-4.1 series
   'gpt-4.1',
   'gpt-4.1-mini',
@@ -57,54 +65,57 @@ export const OPENAI_MODELS = [
   'o3-mini',
   'o3-pro',
   'o3-deep-research',
+  'o4-mini',
   // Open-source models
   'gpt-oss-120b',
   'gpt-oss-20b',
-  // Realtime/Audio models
-  'gpt-realtime',
-  'gpt-realtime-mini',
+  // Audio models
   'gpt-audio',
   'gpt-audio-mini',
   // Image models
-  'gpt-image-1.5',
   'gpt-image-1',
   'gpt-image-1-mini',
   // ChatGPT-specific
   'chatgpt-4o-latest',
-  'chatgpt-image-latest',
 ] as const;
 
 /**
  * Known Anthropic Claude models.
  *
  * Includes:
- * - Claude 4 series (opus, sonnet, haiku)
+ * - Claude 4.6 series (latest generation)
+ * - Claude 4.5 series
+ * - Claude 4.1 series
+ * - Claude 4 series
  * - Claude 3.5 series
- * - Claude 3 series
- * - Legacy Claude 2 series
+ * - Claude 3 series (Haiku only, deprecated)
  */
 export const ANTHROPIC_MODELS = [
-  // Claude 4 series
-  'claude-opus-4.5',
-  'claude-sonnet-4.5',
-  'claude-haiku-4.5',
-  'claude-opus-4',
-  'claude-sonnet-4',
-  // Claude 3.5 series
-  'claude-3-5-sonnet-latest',
+  // Claude 4.6 (latest)
+  'claude-opus-4-6',
+  'claude-sonnet-4-6',
+  // Claude 4.5
+  'claude-opus-4-5-20251101',
+  'claude-opus-4-5',
+  'claude-sonnet-4-5-20250929',
+  'claude-sonnet-4-5',
+  'claude-haiku-4-5-20251001',
+  'claude-haiku-4-5',
+  // Claude 4.1
+  'claude-opus-4-1-20250805',
+  'claude-opus-4-1',
+  // Claude 4
+  'claude-sonnet-4-20250514',
+  'claude-sonnet-4-0',
+  'claude-opus-4-20250514',
+  'claude-opus-4-0',
+  // Claude 3.5
   'claude-3-5-sonnet-20241022',
   'claude-3-5-sonnet-20240620',
-  'claude-3-5-haiku-latest',
   'claude-3-5-haiku-20241022',
-  // Claude 3 series
-  'claude-3-opus-latest',
+  // Claude 3 (deprecated)
   'claude-3-opus-20240229',
-  'claude-3-sonnet-20240229',
   'claude-3-haiku-20240307',
-  // Legacy Claude 2
-  'claude-2.1',
-  'claude-2.0',
-  'claude-instant-1.2',
 ] as const;
 
 /**
@@ -117,9 +128,10 @@ export const ANTHROPIC_MODELS = [
  * - Specialized models (code)
  */
 export const XAI_MODELS = [
-  // Grok 4 series
+  // Grok 4.1 fast series (2M context)
   'grok-4-1-fast-reasoning',
   'grok-4-1-fast-non-reasoning',
+  // Grok 4 series
   'grok-4-fast-reasoning',
   'grok-4-fast-non-reasoning',
   'grok-4-0709',
@@ -128,14 +140,14 @@ export const XAI_MODELS = [
   'grok-3',
   'grok-3-mini',
   // Grok 2 series
-  'grok-2',
   'grok-2-vision-1212',
   'grok-2-image-1212',
-  'grok-2-1212',
   // Specialized
   'grok-code-fast-1',
-  // Legacy/aliases
-  'grok-beta',
+  // Image/Video generation
+  'grok-imagine-image',
+  'grok-imagine-image-pro',
+  'grok-imagine-video',
 ] as const;
 
 /**

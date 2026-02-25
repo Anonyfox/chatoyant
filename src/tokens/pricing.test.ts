@@ -35,13 +35,13 @@ describe('tokens/pricing', () => {
     });
 
     it('should include known Anthropic models', () => {
-      assert.ok('claude-sonnet-4' in PRICING);
-      assert.ok('claude-3-opus' in PRICING);
+      assert.ok('claude-sonnet-4-6' in PRICING);
+      assert.ok('claude-opus-4-6' in PRICING);
     });
 
     it('should include known xAI models', () => {
       assert.ok('grok-3' in PRICING);
-      assert.ok('grok-2' in PRICING);
+      assert.ok('grok-4-0709' in PRICING);
     });
 
     it('should include embedding models', () => {
@@ -78,7 +78,7 @@ describe('tokens/pricing', () => {
   describe('hasPricing', () => {
     it('should return true for known model', () => {
       assert.equal(hasPricing('gpt-4o'), true);
-      assert.equal(hasPricing('claude-3-opus'), true);
+      assert.equal(hasPricing('claude-opus-4-6'), true);
       assert.equal(hasPricing('grok-3'), true);
     });
 

@@ -52,6 +52,15 @@ export {
   messageStreamToWritable,
   type StreamDelta,
 } from './messages-stream.js';
+// Models
+export {
+  getModel,
+  type ListModelsParams,
+  listAllModels,
+  listModelIds,
+  listModels,
+  modelExists,
+} from './models.js';
 // Request utilities
 export {
   API_VERSION,

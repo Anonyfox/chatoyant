@@ -22,11 +22,21 @@ import {
   messageStreamContent,
   messageStreamReadable,
 } from './messages-stream.js';
+import {
+  getModel,
+  type ListModelsParams,
+  listAllModels,
+  listModelIds,
+  listModels,
+  modelExists,
+} from './models.js';
 import { BASE_URL, DEFAULT_TIMEOUT, type RequestOptions } from './request.js';
 import type {
   AnyTool,
   Message,
   MessagesResponse,
+  Model,
+  ModelsResponse,
   StreamEvent,
   ToolUseBlock,
   Usage,
@@ -59,7 +69,7 @@ export interface AnthropicClientConfig {
  * ```typescript
  * const client = new AnthropicClient({
  *   apiKey: process.env.API_KEY_ANTHROPIC!,
- *   defaultModel: 'claude-sonnet-4-20250514',
+ *   defaultModel: 'claude-sonnet-4-6',
  * });
  *
  * // Message
@@ -111,7 +121,7 @@ export class AnthropicClient {
   private getMessagesOptions(overrides?: Partial<MessagesOptions>): MessagesOptions {
     return {
       ...this.getRequestOptions(),
-      model: overrides?.model ?? this.config.defaultModel ?? 'claude-sonnet-4-20250514',
+      model: overrides?.model ?? this.config.defaultModel ?? 'claude-sonnet-4-6',
       maxTokens: overrides?.maxTokens ?? this.config.defaultMaxTokens ?? 4096,
       ...overrides,
     };
@@ -183,7 +193,7 @@ export class AnthropicClient {
   ): AsyncGenerator<StreamEvent, void, undefined> {
     return messageStream(messages, {
       ...this.getRequestOptions(),
-      model: options?.model ?? this.config.defaultModel ?? 'claude-sonnet-4-20250514',
+      model: options?.model ?? this.config.defaultModel ?? 'claude-sonnet-4-6',
       maxTokens: options?.maxTokens ?? this.config.defaultMaxTokens ?? 4096,
       ...options,
     });
@@ -195,7 +205,7 @@ export class AnthropicClient {
   streamContent(messages: Message[], options?: Partial<MessagesStreamOptions>) {
     return messageStreamContent(messages, {
       ...this.getRequestOptions(),
-      model: options?.model ?? this.config.defaultModel ?? 'claude-sonnet-4-20250514',
+      model: options?.model ?? this.config.defaultModel ?? 'claude-sonnet-4-6',
       maxTokens: options?.maxTokens ?? this.config.defaultMaxTokens ?? 4096,
       ...options,
     });
@@ -213,7 +223,7 @@ export class AnthropicClient {
       messages,
       {
         ...this.getRequestOptions(),
-        model: options?.model ?? this.config.defaultModel ?? 'claude-sonnet-4-20250514',
+        model: options?.model ?? this.config.defaultModel ?? 'claude-sonnet-4-6',
         maxTokens: options?.maxTokens ?? this.config.defaultMaxTokens ?? 4096,
         ...options,
       },
@@ -230,10 +240,49 @@ export class AnthropicClient {
   ): ReadableStream<string> {
     return messageStreamReadable(messages, {
       ...this.getRequestOptions(),
-      model: options?.model ?? this.config.defaultModel ?? 'claude-sonnet-4-20250514',
+      model: options?.model ?? this.config.defaultModel ?? 'claude-sonnet-4-6',
       maxTokens: options?.maxTokens ?? this.config.defaultMaxTokens ?? 4096,
       ...options,
     });
+  }
+
+  // ==========================================================================
+  // Model Methods
+  // ==========================================================================
+
+  /**
+   * List available models (single page).
+   */
+  async listModels(params?: ListModelsParams): Promise<ModelsResponse> {
+    return listModels(this.getRequestOptions(), params);
+  }
+
+  /**
+   * Get details for a specific model.
+   */
+  async getModel(modelId: string): Promise<Model> {
+    return getModel(modelId, this.getRequestOptions());
+  }
+
+  /**
+   * List all available models, automatically paginating through all pages.
+   */
+  async listAllModels(): Promise<Model[]> {
+    return listAllModels(this.getRequestOptions());
+  }
+
+  /**
+   * List model IDs only.
+   */
+  async listModelIds(): Promise<string[]> {
+    return listModelIds(this.getRequestOptions());
+  }
+
+  /**
+   * Check if a model exists.
+   */
+  async modelExists(modelId: string): Promise<boolean> {
+    return modelExists(modelId, this.getRequestOptions());
   }
 
   // ==========================================================================

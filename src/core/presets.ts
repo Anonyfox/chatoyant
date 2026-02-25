@@ -26,31 +26,31 @@ export const MODEL_PRESETS: Record<ModelPreset, Record<ProviderId, string>> = {
   /** Fastest response time */
   fast: {
     openai: 'gpt-4o-mini',
-    anthropic: 'claude-3-5-haiku-20241022',
+    anthropic: 'claude-haiku-4-5',
     xai: 'grok-4-1-fast-non-reasoning',
   },
   /** Lowest cost per token */
   cheap: {
-    openai: 'gpt-4o-mini',
-    anthropic: 'claude-3-5-haiku-20241022',
+    openai: 'gpt-5-nano',
+    anthropic: 'claude-haiku-4-5',
     xai: 'grok-3-mini',
   },
   /** Highest quality output */
   best: {
-    openai: 'gpt-5.1',
-    anthropic: 'claude-sonnet-4-20250514',
+    openai: 'gpt-5.2',
+    anthropic: 'claude-opus-4-6',
     xai: 'grok-4-0709',
   },
   /** Good balance of quality/speed/cost */
   balanced: {
-    openai: 'gpt-4o',
-    anthropic: 'claude-sonnet-4-20250514',
+    openai: 'gpt-5.1',
+    anthropic: 'claude-sonnet-4-6',
     xai: 'grok-3',
   },
   /** Best reasoning capabilities */
   reasoning: {
-    openai: 'gpt-5.1',
-    anthropic: 'claude-sonnet-4-20250514',
+    openai: 'gpt-5.2',
+    anthropic: 'claude-opus-4-6',
     xai: 'grok-4-1-fast-reasoning',
   },
 };

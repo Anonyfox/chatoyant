@@ -29,8 +29,25 @@ export const CONTEXT_WINDOWS = {
   // https://platform.openai.com/docs/models
   // ==========================================================================
 
-  // GPT-5.x family (latest)
-  'gpt-5.2': 128_000,
+  // GPT-5.2 family (400K context)
+  'gpt-5.2': 400_000,
+  'gpt-5.2-pro': 400_000,
+  'gpt-5.2-codex': 400_000,
+
+  // GPT-5.1 family (400K context)
+  'gpt-5.1': 400_000,
+  'gpt-5.1-codex': 400_000,
+  'gpt-5.1-codex-max': 400_000,
+  'gpt-5.1-codex-mini': 400_000,
+
+  // GPT-5 family (400K context)
+  'gpt-5': 400_000,
+  'gpt-5-pro': 400_000,
+  'gpt-5-mini': 400_000,
+  'gpt-5-nano': 400_000,
+  'gpt-5-codex': 400_000,
+  'gpt-5-image': 400_000,
+  'gpt-5-image-mini': 400_000,
 
   // GPT-4o family
   'gpt-4o': 128_000,
@@ -40,8 +57,8 @@ export const CONTEXT_WINDOWS = {
   'gpt-4o-mini': 128_000,
   'gpt-4o-mini-2024-07-18': 128_000,
 
-  // GPT-4.1 family
-  'gpt-4.1': 1_047_576, // ~1M tokens
+  // GPT-4.1 family (~1M tokens)
+  'gpt-4.1': 1_047_576,
   'gpt-4.1-mini': 1_047_576,
   'gpt-4.1-nano': 1_047_576,
 
@@ -49,75 +66,83 @@ export const CONTEXT_WINDOWS = {
   'gpt-4-turbo': 128_000,
   'gpt-4-turbo-2024-04-09': 128_000,
   'gpt-4-turbo-preview': 128_000,
-  'gpt-4-1106-preview': 128_000,
-  'gpt-4-0125-preview': 128_000,
 
   // GPT-4
   'gpt-4': 8_192,
   'gpt-4-0613': 8_192,
   'gpt-4-32k': 32_768,
-  'gpt-4-32k-0613': 32_768,
 
   // GPT-3.5 Turbo
   'gpt-3.5-turbo': 16_385,
   'gpt-3.5-turbo-0125': 16_385,
-  'gpt-3.5-turbo-1106': 16_385,
   'gpt-3.5-turbo-16k': 16_385,
 
   // o1 family (reasoning)
   o1: 200_000,
   'o1-2024-12-17': 200_000,
   'o1-preview': 128_000,
-  'o1-preview-2024-09-12': 128_000,
   'o1-mini': 128_000,
-  'o1-mini-2024-09-12': 128_000,
   'o1-pro': 200_000,
-  'o1-pro-2025-03-19': 200_000,
 
   // o3 family (reasoning)
   o3: 200_000,
   'o3-2025-04-16': 200_000,
   'o3-mini': 200_000,
   'o3-mini-2025-01-31': 200_000,
+  'o3-pro': 200_000,
+  'o3-deep-research': 200_000,
+
+  // o4 family (reasoning)
   'o4-mini': 200_000,
+
+  // Open-source models
+  'gpt-oss-120b': 131_072,
+  'gpt-oss-20b': 131_072,
 
   // ==========================================================================
   // Anthropic
   // https://docs.anthropic.com/en/docs/about-claude/models
   // ==========================================================================
 
-  // Claude 4.5 (latest)
-  'claude-4.5-sonnet': 200_000,
-  'claude-4.5-haiku': 200_000,
+  // Claude 4.6 (200K default, 1M with beta header)
+  'claude-opus-4-6': 200_000,
+  'claude-sonnet-4-6': 200_000,
+
+  // Claude 4.5
+  'claude-opus-4-5-20251101': 200_000,
+  'claude-opus-4-5': 200_000,
+  'claude-sonnet-4-5-20250929': 200_000,
+  'claude-sonnet-4-5': 200_000,
+  'claude-haiku-4-5-20251001': 200_000,
+  'claude-haiku-4-5': 200_000,
+
+  // Claude 4.1
+  'claude-opus-4-1-20250805': 200_000,
+  'claude-opus-4-1': 200_000,
 
   // Claude 4
   'claude-sonnet-4-20250514': 200_000,
-  'claude-sonnet-4': 200_000,
+  'claude-sonnet-4-0': 200_000,
+  'claude-opus-4-20250514': 200_000,
+  'claude-opus-4-0': 200_000,
 
   // Claude 3.5
   'claude-3-5-sonnet-20241022': 200_000,
   'claude-3-5-sonnet-20240620': 200_000,
   'claude-3-5-haiku-20241022': 200_000,
-  'claude-3.5-sonnet': 200_000,
-  'claude-3.5-haiku': 200_000,
 
   // Claude 3
   'claude-3-opus-20240229': 200_000,
-  'claude-3-sonnet-20240229': 200_000,
   'claude-3-haiku-20240307': 200_000,
-  'claude-3-opus': 200_000,
-  'claude-3-sonnet': 200_000,
-  'claude-3-haiku': 200_000,
 
   // ==========================================================================
   // xAI (Grok)
   // https://docs.x.ai/docs/models
   // ==========================================================================
 
-  // Grok 4.1 family (latest) - 2M context
+  // Grok 4.1 fast series (2M context)
   'grok-4-1-fast-reasoning': 2_000_000,
   'grok-4-1-fast-non-reasoning': 2_000_000,
-  'grok-4.1-fast': 2_000_000,
 
   // Grok 4 family
   'grok-4-fast-reasoning': 2_000_000,
@@ -130,14 +155,9 @@ export const CONTEXT_WINDOWS = {
 
   // Grok 3
   'grok-3': 131_072,
-  'grok-3-fast': 131_072,
   'grok-3-mini': 131_072,
-  'grok-3-mini-fast': 131_072,
 
   // Grok 2
-  'grok-2': 131_072,
-  'grok-2-1212': 131_072,
-  'grok-2-vision': 32_768,
   'grok-2-vision-1212': 32_768,
 } as const;
 
