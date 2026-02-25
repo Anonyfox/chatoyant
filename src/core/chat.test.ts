@@ -874,6 +874,209 @@ describe('Chat', () => {
     });
   });
 
+  describe('lastResult and usage tracking', () => {
+    it('should be null before any generation', () => {
+      const chat = new Chat();
+      assert.equal(chat.lastResult, null);
+    });
+
+    it('should not be copied by clone()', () => {
+      const chat = new Chat();
+      (chat as any)._lastResult = {
+        content: 'test',
+        usage: {
+          inputTokens: 10,
+          outputTokens: 5,
+          reasoningTokens: 0,
+          cachedTokens: 0,
+          totalTokens: 15,
+        },
+        timing: { latencyMs: 100 },
+        cost: { estimatedUsd: 0.001 },
+        provider: 'openai',
+        model: 'gpt-4o',
+        cached: false,
+        iterations: 1,
+      };
+      const cloned = chat.clone();
+      assert.equal(cloned.lastResult, null);
+    });
+
+    it('_extractUsage should normalize OpenAI usage', () => {
+      const chat = new Chat();
+      const extract = (u: unknown, p: string) => (chat as any)._extractUsage(u, p);
+      const usage = extract(
+        {
+          prompt_tokens: 100,
+          completion_tokens: 50,
+          total_tokens: 150,
+          completion_tokens_details: { reasoning_tokens: 10 },
+          prompt_tokens_details: { cached_tokens: 20 },
+        },
+        'openai',
+      );
+      assert.equal(usage.inputTokens, 100);
+      assert.equal(usage.outputTokens, 50);
+      assert.equal(usage.totalTokens, 150);
+      assert.equal(usage.reasoningTokens, 10);
+      assert.equal(usage.cachedTokens, 20);
+    });
+
+    it('_extractUsage should normalize Anthropic usage', () => {
+      const chat = new Chat();
+      const extract = (u: unknown, p: string) => (chat as any)._extractUsage(u, p);
+      const usage = extract(
+        {
+          input_tokens: 200,
+          output_tokens: 80,
+          cache_read_input_tokens: 50,
+        },
+        'anthropic',
+      );
+      assert.equal(usage.inputTokens, 200);
+      assert.equal(usage.outputTokens, 80);
+      assert.equal(usage.totalTokens, 280);
+      assert.equal(usage.cachedTokens, 50);
+    });
+
+    it('_extractUsage should normalize xAI usage', () => {
+      const chat = new Chat();
+      const extract = (u: unknown, p: string) => (chat as any)._extractUsage(u, p);
+      const usage = extract(
+        {
+          prompt_tokens: 300,
+          completion_tokens: 100,
+          total_tokens: 400,
+          completion_tokens_details: { reasoning_tokens: 30 },
+        },
+        'xai',
+      );
+      assert.equal(usage.inputTokens, 300);
+      assert.equal(usage.outputTokens, 100);
+      assert.equal(usage.totalTokens, 400);
+      assert.equal(usage.reasoningTokens, 30);
+      assert.equal(usage.cachedTokens, 0);
+    });
+
+    it('_extractUsage should handle null/undefined usage gracefully', () => {
+      const chat = new Chat();
+      const extract = (u: unknown, p: string) => (chat as any)._extractUsage(u, p);
+
+      const fromNull = extract(null, 'openai');
+      assert.equal(fromNull.inputTokens, 0);
+      assert.equal(fromNull.outputTokens, 0);
+      assert.equal(fromNull.totalTokens, 0);
+
+      const fromUndefined = extract(undefined, 'anthropic');
+      assert.equal(fromUndefined.inputTokens, 0);
+    });
+
+    it('_addUsage should accumulate token counts', () => {
+      const chat = new Chat();
+      const add = (t: any, a: any) => (chat as any)._addUsage(t, a);
+      const total = {
+        inputTokens: 100,
+        outputTokens: 50,
+        reasoningTokens: 10,
+        cachedTokens: 5,
+        totalTokens: 150,
+      };
+      add(total, {
+        inputTokens: 200,
+        outputTokens: 80,
+        reasoningTokens: 20,
+        cachedTokens: 10,
+        totalTokens: 280,
+      });
+      assert.equal(total.inputTokens, 300);
+      assert.equal(total.outputTokens, 130);
+      assert.equal(total.reasoningTokens, 30);
+      assert.equal(total.cachedTokens, 15);
+      assert.equal(total.totalTokens, 430);
+    });
+
+    it('_buildAndStoreResult should create and store a GenerateResult', () => {
+      const chat = new Chat();
+      const build = (
+        content: string,
+        usage: any,
+        start: number,
+        prov: string,
+        model: string,
+        iter: number,
+      ) => (chat as any)._buildAndStoreResult(content, usage, start, prov, model, iter);
+      const usage = {
+        inputTokens: 100,
+        outputTokens: 50,
+        reasoningTokens: 0,
+        cachedTokens: 0,
+        totalTokens: 150,
+      };
+      const startTime = Date.now() - 500;
+      const result = build('Hello', usage, startTime, 'openai', 'gpt-4o', 3);
+
+      assert.equal(result.content, 'Hello');
+      assert.equal(result.provider, 'openai');
+      assert.equal(result.model, 'gpt-4o');
+      assert.equal(result.iterations, 3);
+      assert.equal(result.cached, false);
+      assert.ok(result.timing.latencyMs >= 400);
+      assert.equal(result.usage.inputTokens, 100);
+      assert.equal(result.usage.outputTokens, 50);
+      assert.equal(chat.lastResult, result);
+    });
+
+    it('_buildAndStoreResult should detect cached responses', () => {
+      const chat = new Chat();
+      const build = (...args: any[]) => (chat as any)._buildAndStoreResult(...args);
+      const usage = {
+        inputTokens: 100,
+        outputTokens: 50,
+        reasoningTokens: 0,
+        cachedTokens: 30,
+        totalTokens: 150,
+      };
+      const result = build('Hi', usage, Date.now(), 'openai', 'gpt-4o', 1);
+      assert.equal(result.cached, true);
+    });
+
+    it('GenerateResult should include iterations field', () => {
+      const chat = new Chat();
+      const build = (...args: any[]) => (chat as any)._buildAndStoreResult(...args);
+      const usage = {
+        inputTokens: 0,
+        outputTokens: 0,
+        reasoningTokens: 0,
+        cachedTokens: 0,
+        totalTokens: 0,
+      };
+      const r1 = build('a', usage, Date.now(), 'openai', 'gpt-4o', 1);
+      assert.equal(r1.iterations, 1);
+
+      const r5 = build('b', usage, Date.now(), 'xai', 'grok-3', 5);
+      assert.equal(r5.iterations, 5);
+    });
+
+    it('successive calls should overwrite lastResult', () => {
+      const chat = new Chat();
+      const build = (...args: any[]) => (chat as any)._buildAndStoreResult(...args);
+      const usage = {
+        inputTokens: 0,
+        outputTokens: 0,
+        reasoningTokens: 0,
+        cachedTokens: 0,
+        totalTokens: 0,
+      };
+      build('first', usage, Date.now(), 'openai', 'gpt-4o', 1);
+      assert.equal(chat.lastResult?.content, 'first');
+
+      build('second', usage, Date.now(), 'anthropic', 'claude-sonnet-4-20250514', 2);
+      assert.equal(chat.lastResult?.content, 'second');
+      assert.equal(chat.lastResult?.provider, 'anthropic');
+      assert.equal(chat.lastResult?.iterations, 2);
+    });
+  });
+
   describe('edge cases', () => {
     it('should handle empty content messages', () => {
       const chat = new Chat();

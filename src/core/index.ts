@@ -19,6 +19,8 @@
  * for await (const chunk of chat.user("Hello!").stream()) {
  *   process.stdout.write(chunk);
  * }
+ * // Usage metadata available after any generate/stream call
+ * console.log(chat.lastResult?.usage);
  *
  * // Structured output
  * class Person extends Schema {

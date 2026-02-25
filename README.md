@@ -112,14 +112,19 @@ chat.addTool(new WeatherTool());
 const reply = await chat.user("What's the weather in Tokyo?").generate();
 console.log(reply); // "The weather in Tokyo is 22°C and sunny!"
 
+// Usage metadata is always available after generate() or stream()
+console.log(chat.lastResult?.usage); // { inputTokens, outputTokens, ... }
+console.log(chat.lastResult?.cost); // { estimatedUsd }
+console.log(chat.lastResult?.iterations); // 2 (1 tool call + 1 final response)
+
 // Continue the conversation
 const followUp = await chat.user("How about Paris?").generate();
 
-// Get rich metadata
-const result = await chat.user("And London?").generateWithResult();
-console.log(result.usage); // { inputTokens, outputTokens, reasoningTokens, ... }
-console.log(result.timing); // { latencyMs }
-console.log(result.cost); // { estimatedUsd }
+// Streaming also populates lastResult after the generator completes
+for await (const chunk of chat.user("Tell me more").stream()) {
+  process.stdout.write(chunk);
+}
+console.log(chat.lastResult?.timing); // { latencyMs }
 
 // Serialize for persistence
 const json = chat.toJSON();

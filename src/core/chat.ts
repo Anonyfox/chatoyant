@@ -74,6 +74,8 @@ export interface GenerateResult {
   model: string;
   /** Whether response used cached tokens */
   cached: boolean;
+  /** Number of API round-trips (>1 when tools are used) */
+  iterations: number;
 }
 
 /**
@@ -89,6 +91,11 @@ export interface StreamDelta {
 /**
  * Chat class for unified LLM interactions.
  *
+ * After any generation call (`generate()`, `stream()`, `generateWithResult()`,
+ * `streamAccumulate()`), access `chat.lastResult` for accumulated metadata
+ * including token usage, cost, timing, and iteration count across all API
+ * round-trips (including tool-calling loops).
+ *
  * @example
  * ```typescript
  * // Simple conversation
@@ -97,6 +104,7 @@ export interface StreamDelta {
  *
  * const reply = await chat.user("Hello!").generate();
  * console.log(reply);
+ * console.log(chat.lastResult?.usage); // { inputTokens, outputTokens, ... }
  *
  * // Streaming
  * for await (const delta of chat.user("Tell me a story").stream()) {
@@ -130,6 +138,9 @@ export class Chat {
     anthropic?: AnthropicClient;
     xai?: XAIClient;
   } = {};
+
+  /** Result metadata from the last generate/stream call */
+  private _lastResult: GenerateResult | null = null;
 
   /**
    * Create a new Chat instance.
@@ -185,6 +196,16 @@ export class Chat {
   /** Get registered tools (readonly) */
   get tools(): readonly Tool[] {
     return this._tools;
+  }
+
+  /**
+   * Metadata from the most recent generate() or stream() call.
+   * Includes accumulated usage, cost, and timing across all API round-trips
+   * (including tool-calling iterations). Available after any generation call
+   * completes. Returns null before any generation has occurred.
+   */
+  get lastResult(): GenerateResult | null {
+    return this._lastResult;
   }
 
   // ===========================================================================
@@ -284,6 +305,7 @@ export class Chat {
    * Generate a text response.
    * Automatically uses registered tools if any exist.
    * Appends assistant response to message history.
+   * Populates {@link lastResult} with accumulated usage metadata.
    *
    * @param options - Generation options (includes tool options when tools registered)
    * @returns Generated text content
@@ -302,6 +324,7 @@ export class Chat {
    * Generate a text response with full result metadata.
    * Does NOT use tools - for direct generation only.
    * Appends assistant response to message history.
+   * Also populates {@link lastResult} with the same result.
    *
    * @param options - Generation options
    * @returns Full generation result with rich metadata (usage, timing, cost)
@@ -463,7 +486,7 @@ export class Chat {
     // Append assistant message to history
     this._messages.push(Message.assistant(content));
 
-    return {
+    const result: GenerateResult = {
       content,
       usage,
       timing,
@@ -471,13 +494,18 @@ export class Chat {
       provider,
       model: modelToUse,
       cached,
+      iterations: 1,
     };
+    this._lastResult = result;
+    return result;
   }
 
   /**
    * Stream a text response.
    * Automatically uses registered tools if any exist.
    * Appends assistant response to history after streaming completes.
+   * Populates {@link lastResult} with accumulated usage metadata once the
+   * generator is fully consumed.
    *
    * @param options - Stream options (includes tool options when tools registered)
    * @returns Async generator of content strings
@@ -498,8 +526,8 @@ export class Chat {
     const opts = mergeOptions(this._defaults, options) as StreamOptions;
     const provider = this._resolveProvider(opts.provider);
     const client = this._getClient(provider);
+    const startTime = Date.now();
 
-    // Handle model adjustment for xAI reasoning
     let modelToUse = this._model;
     if (provider === 'xai' && opts.reasoning) {
       const xaiConfig = getReasoningConfig(opts.reasoning, 'xai');
@@ -508,14 +536,13 @@ export class Chat {
 
     const messages = this._formatMessages(provider);
     let accumulated = '';
+    let lastUsage: Record<string, unknown> | null = null;
 
-    // Resolve temperature from creativity preset if needed
     const temperature =
       opts.temperature ?? (opts.creativity ? resolveCreativity(opts.creativity) : undefined);
 
     try {
       if (provider === 'openai') {
-        // Build reasoning options for OpenAI
         const reasoningOpts: Record<string, unknown> = {};
         if (opts.reasoning && supportsReasoning(modelToUse)) {
           const openaiConfig = getReasoningConfig(opts.reasoning, 'openai');
@@ -537,18 +564,17 @@ export class Chat {
 
         for await (const delta of stream) {
           accumulated += delta.content;
+          if (delta.usage) lastUsage = delta.usage as unknown as Record<string, unknown>;
           opts.onDelta?.(delta.content);
           yield delta.content;
         }
       } else if (provider === 'anthropic') {
-        // Build thinking options for Anthropic
         const thinkingOpts: Record<string, unknown> = {};
         let maxTokens = opts.maxTokens ?? 4096;
         if (opts.reasoning && opts.reasoning !== 'off') {
           const anthropicConfig = getReasoningConfig(opts.reasoning, 'anthropic');
           if (anthropicConfig.thinking) {
             thinkingOpts.thinking = anthropicConfig.thinking;
-            // Ensure maxTokens > budget_tokens
             const budgetTokens = anthropicConfig.thinking.budget_tokens;
             if (maxTokens <= budgetTokens) {
               maxTokens = budgetTokens + 4096;
@@ -571,6 +597,7 @@ export class Chat {
 
         for await (const delta of stream) {
           accumulated += delta.text;
+          if (delta.usage) lastUsage = delta.usage as unknown as Record<string, unknown>;
           opts.onDelta?.(delta.text);
           yield delta.text;
         }
@@ -589,6 +616,7 @@ export class Chat {
 
         for await (const delta of stream) {
           accumulated += delta.content;
+          if (delta.usage) lastUsage = delta.usage as unknown as Record<string, unknown>;
           opts.onDelta?.(delta.content);
           yield delta.content;
         }
@@ -596,8 +624,9 @@ export class Chat {
         throw new Error(`Unsupported provider: ${provider}`);
       }
 
-      // Append to history after successful stream
       this._messages.push(Message.assistant(accumulated));
+      const usage = this._extractUsage(lastUsage, provider);
+      this._buildAndStoreResult(accumulated, usage, startTime, provider, modelToUse, 1);
       opts.onComplete?.(accumulated);
     } catch (error) {
       opts.onError?.(error instanceof Error ? error : new Error(String(error)));
@@ -623,6 +652,8 @@ export class Chat {
     const maxIterations = opts.maxIterations ?? DEFAULT_MAX_TOOL_ITERATIONS;
     const provider = this._resolveProvider(opts.provider);
     const client = this._getClient(provider);
+    const startTime = Date.now();
+    const totalUsage = createEmptyUsage();
 
     let modelToUse = this._model;
     if (provider === 'xai' && opts.reasoning) {
@@ -641,7 +672,6 @@ export class Chat {
       while (iteration < maxIterations) {
         iteration++;
 
-        // Buffer text during tool iterations; only stream on final turn
         const bufferedChunks: string[] = [];
 
         const result = await this._streamAccumulateWithTools(
@@ -654,24 +684,30 @@ export class Chat {
           opts,
           (chunk) => bufferedChunks.push(chunk),
         );
+        this._addUsage(totalUsage, result.usage);
 
         if (!result.hasToolCalls) {
-          // Final response — yield all buffered chunks to the consumer
           for (const chunk of bufferedChunks) {
             opts.onDelta?.(chunk);
             yield chunk;
           }
 
           this._messages.push(Message.assistant(result.content));
+          this._buildAndStoreResult(
+            result.content,
+            totalUsage,
+            startTime,
+            provider,
+            modelToUse,
+            iteration,
+          );
           opts.onComplete?.(result.content);
           return;
         }
 
-        // Tool calls detected — discard buffered text and execute tools
         const ctx: ToolContext = { model: modelToUse, provider };
         const toolResults = await this._executeToolCalls(result.toolCalls, ctx, opts);
 
-        // Persist to conversation history and append to local provider messages
         this._persistToolInteraction(result.toolCalls, toolResults);
         localMessages = this._appendToolResults(
           provider,
@@ -681,13 +717,22 @@ export class Chat {
         );
       }
 
-      // Max iterations — make a final request without tools to get a response
-      const content = await this._extractFinalContent(client, provider, localMessages, opts);
-      this._messages.push(Message.assistant(content));
+      // Max iterations — final request without tools
+      const final = await this._extractFinalContent(client, provider, localMessages, opts);
+      this._addUsage(totalUsage, final.usage);
+      this._messages.push(Message.assistant(final.content));
+      this._buildAndStoreResult(
+        final.content,
+        totalUsage,
+        startTime,
+        provider,
+        modelToUse,
+        iteration + 1,
+      );
 
-      opts.onDelta?.(content);
-      yield content;
-      opts.onComplete?.(content);
+      opts.onDelta?.(final.content);
+      yield final.content;
+      opts.onComplete?.(final.content);
     } catch (error) {
       opts.onError?.(error instanceof Error ? error : new Error(String(error)));
       throw error;
@@ -707,7 +752,12 @@ export class Chat {
     temperature: number | undefined,
     opts: StreamWithToolsOptions,
     onDelta: (chunk: string) => void,
-  ): Promise<{ hasToolCalls: boolean; toolCalls: ToolCall[]; content: string }> {
+  ): Promise<{
+    hasToolCalls: boolean;
+    toolCalls: ToolCall[];
+    content: string;
+    usage: TokenUsage;
+  }> {
     if (provider === 'openai') {
       const tools = toolDefs.map((t) => ({
         type: 'function' as const,
@@ -743,11 +793,13 @@ export class Chat {
         name: tc.function.name,
         args: this._parseToolArgs(tc.function.arguments),
       }));
+      const usage = this._extractUsage(result.usage, provider);
 
       return {
         hasToolCalls: toolCalls.length > 0,
         toolCalls,
         content: result.content,
+        usage,
       };
     }
 
@@ -794,11 +846,13 @@ export class Chat {
         name: tu.name,
         args: tu.input,
       }));
+      const usage = this._extractUsage(result.usage, provider);
 
       return {
         hasToolCalls: toolCalls.length > 0,
         toolCalls,
         content: result.content,
+        usage,
       };
     }
 
@@ -830,11 +884,13 @@ export class Chat {
         name: tc.function.name,
         args: this._parseToolArgs(tc.function.arguments),
       }));
+      const usage = this._extractUsage(result.usage, provider);
 
       return {
         hasToolCalls: toolCalls.length > 0,
         toolCalls,
         content: result.content,
+        usage,
       };
     }
 
@@ -844,6 +900,7 @@ export class Chat {
   /**
    * Stream and accumulate the full response.
    * Convenience method that collects all chunks.
+   * Populates {@link lastResult} with accumulated usage metadata.
    *
    * @param options - Stream options
    * @returns Full accumulated content
@@ -960,18 +1017,16 @@ export class Chat {
     const maxIterations = opts.maxIterations ?? DEFAULT_MAX_TOOL_ITERATIONS;
     const provider = this._resolveProvider(opts.provider);
     const client = this._getClient(provider);
+    const startTime = Date.now();
+    const totalUsage = createEmptyUsage();
 
-    // Build tool definitions for provider
     const toolDefs = this._buildToolDefinitions(provider);
-
-    // Track local message state for tool loop
     let localMessages = this._formatMessages(provider);
     let iteration = 0;
 
     while (iteration < maxIterations) {
       iteration++;
 
-      // Make request with tools
       const response = await this._requestWithTools(
         client,
         provider,
@@ -979,26 +1034,41 @@ export class Chat {
         toolDefs,
         opts,
       );
+      this._addUsage(totalUsage, response.usage);
 
-      // No tool calls = final response — use the content directly
       if (response.type === 'content') {
         this._messages.push(Message.assistant(response.content));
+        this._buildAndStoreResult(
+          response.content,
+          totalUsage,
+          startTime,
+          provider,
+          this._model,
+          iteration,
+        );
         return response.content;
       }
 
-      // Execute tools
       const ctx: ToolContext = { model: this._model, provider };
       const results = await this._executeToolCalls(response.calls, ctx, opts);
 
-      // Persist to conversation history and append to local provider messages
       this._persistToolInteraction(response.calls, results);
       localMessages = this._appendToolResults(provider, localMessages, response.calls, results);
     }
 
-    // Max iterations reached - get whatever response we have
-    const content = await this._extractFinalContent(client, provider, localMessages, opts);
-    this._messages.push(Message.assistant(content));
-    return content;
+    // Max iterations reached — final request without tools
+    const final = await this._extractFinalContent(client, provider, localMessages, opts);
+    this._addUsage(totalUsage, final.usage);
+    this._messages.push(Message.assistant(final.content));
+    this._buildAndStoreResult(
+      final.content,
+      totalUsage,
+      startTime,
+      provider,
+      this._model,
+      iteration + 1,
+    );
+    return final.content;
   }
 
   // ===========================================================================
@@ -1085,6 +1155,82 @@ export class Chat {
   // ===========================================================================
   // Private Helpers
   // ===========================================================================
+
+  /**
+   * Accumulate token usage from one API round-trip onto a running total.
+   */
+  private _addUsage(total: TokenUsage, add: TokenUsage): void {
+    total.inputTokens += add.inputTokens;
+    total.outputTokens += add.outputTokens;
+    total.reasoningTokens += add.reasoningTokens;
+    total.cachedTokens += add.cachedTokens;
+    total.totalTokens += add.totalTokens;
+  }
+
+  /**
+   * Extract provider-specific usage into a normalized TokenUsage.
+   */
+  private _extractUsage(providerUsage: unknown, provider: ProviderId): TokenUsage {
+    const usage = createEmptyUsage();
+    if (!providerUsage || typeof providerUsage !== 'object') return usage;
+    const u = providerUsage as Record<string, unknown>;
+
+    if (provider === 'anthropic') {
+      usage.inputTokens = (u.input_tokens as number) ?? 0;
+      usage.outputTokens = (u.output_tokens as number) ?? 0;
+      usage.totalTokens = usage.inputTokens + usage.outputTokens;
+      usage.cachedTokens = (u.cache_read_input_tokens as number) ?? 0;
+    } else {
+      usage.inputTokens = (u.prompt_tokens as number) ?? 0;
+      usage.outputTokens = (u.completion_tokens as number) ?? 0;
+      usage.totalTokens = (u.total_tokens as number) ?? 0;
+      const details = u.completion_tokens_details as { reasoning_tokens?: number } | undefined;
+      usage.reasoningTokens = details?.reasoning_tokens ?? 0;
+      if (provider === 'openai') {
+        const promptDetails = u.prompt_tokens_details as { cached_tokens?: number } | undefined;
+        usage.cachedTokens = promptDetails?.cached_tokens ?? 0;
+      }
+    }
+
+    return usage;
+  }
+
+  /**
+   * Build a GenerateResult from accumulated data and store as _lastResult.
+   */
+  private _buildAndStoreResult(
+    content: string,
+    usage: TokenUsage,
+    startTime: number,
+    provider: ProviderId,
+    model: string,
+    iterations: number,
+  ): GenerateResult {
+    const timing: TimingInfo = { latencyMs: Date.now() - startTime };
+    const cost = createEmptyCost();
+    try {
+      const costResult = calculateCost({
+        model,
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+      });
+      cost.estimatedUsd = costResult.total;
+    } catch {
+      // Cost calculation may fail for unknown models
+    }
+    const result: GenerateResult = {
+      content,
+      usage,
+      timing,
+      cost,
+      provider,
+      model,
+      cached: usage.cachedTokens > 0,
+      iterations,
+    };
+    this._lastResult = result;
+    return result;
+  }
 
   /**
    * Resolve provider from option or model detection.
@@ -1247,7 +1393,10 @@ export class Chat {
     messages: Array<Record<string, unknown>>,
     toolDefs: Array<{ name: string; description: string; parameters: Record<string, unknown> }>,
     opts: GenerateWithToolsOptions,
-  ): Promise<{ type: 'tool_calls'; calls: ToolCall[] } | { type: 'content'; content: string }> {
+  ): Promise<
+    | { type: 'tool_calls'; calls: ToolCall[]; usage: TokenUsage }
+    | { type: 'content'; content: string; usage: TokenUsage }
+  > {
     if (provider === 'openai') {
       const tools = toolDefs.map((t) => ({
         type: 'function' as const,
@@ -1262,10 +1411,12 @@ export class Chat {
         model: this._model,
         timeout: opts.timeout ?? DEFAULT_TIMEOUT,
       });
+      const usage = this._extractUsage(result.usage, provider);
 
       if (result.type === 'tool_calls') {
         return {
           type: 'tool_calls',
+          usage,
           calls: result.toolCalls.map((tc) => ({
             id: tc.id,
             name: tc.function.name,
@@ -1273,7 +1424,7 @@ export class Chat {
           })),
         };
       }
-      return { type: 'content', content: result.content };
+      return { type: 'content', content: result.content, usage };
     }
 
     if (provider === 'xai') {
@@ -1290,10 +1441,12 @@ export class Chat {
         model: this._model,
         timeout: opts.timeout ?? DEFAULT_TIMEOUT,
       });
+      const usage = this._extractUsage(result.usage, provider);
 
       if (result.type === 'tool_calls') {
         return {
           type: 'tool_calls',
+          usage,
           calls: result.toolCalls.map((tc) => ({
             id: tc.id,
             name: tc.function.name,
@@ -1301,7 +1454,7 @@ export class Chat {
           })),
         };
       }
-      return { type: 'content', content: result.content };
+      return { type: 'content', content: result.content, usage };
     }
 
     if (provider === 'anthropic') {
@@ -1321,10 +1474,12 @@ export class Chat {
           timeout: opts.timeout ?? DEFAULT_TIMEOUT,
         },
       );
+      const usage = this._extractUsage(result.usage, provider);
 
       if (result.type === 'tool_use') {
         return {
           type: 'tool_calls',
+          usage,
           calls: result.toolUses.map((tu) => ({
             id: tu.id,
             name: tu.name,
@@ -1332,7 +1487,7 @@ export class Chat {
           })),
         };
       }
-      return { type: 'content', content: result.text };
+      return { type: 'content', content: result.text, usage };
     }
 
     throw new Error(`Unsupported provider: ${provider}`);
@@ -1503,31 +1658,42 @@ export class Chat {
     provider: ProviderId,
     messages: Array<Record<string, unknown>>,
     opts: GenerateWithToolsOptions,
-  ): Promise<string> {
-    // Make a final request to get text content
+  ): Promise<{ content: string; usage: TokenUsage }> {
     if (provider === 'openai') {
-      return (client as OpenAIClient).chatSimple(messages as any, {
+      const response = await (client as OpenAIClient).chat(messages as any, {
         model: this._model,
         timeout: opts.timeout ?? DEFAULT_TIMEOUT,
       });
+      return {
+        content: response.choices[0]?.message?.content ?? '',
+        usage: this._extractUsage(response.usage, provider),
+      };
     }
 
     if (provider === 'anthropic') {
-      return (client as AnthropicClient).messageSimple(messages as any, {
+      const response = await (client as AnthropicClient).message(messages as any, {
         model: this._model,
         maxTokens: opts.maxTokens ?? 4096,
         system: this._getSystemPrompt(),
         timeout: opts.timeout ?? DEFAULT_TIMEOUT,
       });
+      return {
+        content: (client as AnthropicClient).extractText(response.content),
+        usage: this._extractUsage(response.usage, provider),
+      };
     }
 
     if (provider === 'xai') {
-      return (client as XAIClient).chatSimple(messages as any, {
+      const response = await (client as XAIClient).chat(messages as any, {
         model: this._model,
         timeout: opts.timeout ?? DEFAULT_TIMEOUT,
       });
+      return {
+        content: response.choices[0]?.message?.content ?? '',
+        usage: this._extractUsage(response.usage, provider),
+      };
     }
 
-    return '';
+    return { content: '', usage: createEmptyUsage() };
   }
 }
