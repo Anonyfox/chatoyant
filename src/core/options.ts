@@ -9,6 +9,7 @@
 
 import type { ProviderId } from '../providers/types.js';
 import type { CreativityLevel, ReasoningLevel } from './presets.js';
+import type { ToolCall, ToolResult } from './tool.js';
 
 /**
  * Common options shared across all generation methods.
@@ -167,6 +168,18 @@ export interface ToolOptions {
    * @default 'respond'
    */
   onToolError?: 'respond' | 'throw';
+
+  /**
+   * Callback fired when the model issues tool calls, before execution begins.
+   * Useful for showing tool activity indicators in UIs.
+   */
+  onToolCallStart?: (calls: ToolCall[]) => void;
+
+  /**
+   * Callback fired after all tool calls in an iteration have been executed.
+   * Receives the results (including success/failure status) for each call.
+   */
+  onToolCallComplete?: (results: ToolResult[]) => void;
 }
 
 /**

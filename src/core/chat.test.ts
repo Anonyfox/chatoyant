@@ -803,6 +803,37 @@ describe('Chat', () => {
       assert.equal(updated[2].role, 'tool');
       assert.equal(updated[2].tool_call_id, 'call_1');
     });
+
+    it('onToolCallStart and onToolCallComplete should be accepted as options', () => {
+      const chat = new Chat();
+      chat.addTool(testTool);
+      chat.user('Hello');
+
+      const startCalls: unknown[] = [];
+      const completedResults: unknown[] = [];
+
+      const gen = chat.stream({
+        onToolCallStart: (calls) => startCalls.push(calls),
+        onToolCallComplete: (results) => completedResults.push(results),
+      });
+      assert.equal(typeof gen[Symbol.asyncIterator], 'function');
+    });
+
+    it('onToolCallStart/onToolCallComplete should be accepted in generate options', () => {
+      const chat = new Chat();
+      chat.addTool(testTool);
+      chat.user('Hello');
+
+      const opts = {
+        onToolCallStart: (_calls: unknown[]) => {},
+        onToolCallComplete: (_results: unknown[]) => {},
+      };
+
+      assert.doesNotThrow(() => {
+        const promise = chat.generate(opts);
+        promise.catch(() => {});
+      });
+    });
   });
 
   describe('tool result serialization (_serializeToolResult)', () => {

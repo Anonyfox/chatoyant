@@ -769,7 +769,9 @@ export class Chat {
         }
 
         const ctx: ToolContext = { model: modelToUse, provider };
+        opts.onToolCallStart?.(result.toolCalls);
         const toolResults = await this._executeToolCalls(result.toolCalls, ctx, opts);
+        opts.onToolCallComplete?.(toolResults);
 
         this._persistToolInteraction(result.toolCalls, toolResults);
         localMessages = this._appendToolResults(
@@ -1112,7 +1114,9 @@ export class Chat {
       }
 
       const ctx: ToolContext = { model: this._model, provider };
+      opts.onToolCallStart?.(response.calls);
       const results = await this._executeToolCalls(response.calls, ctx, opts);
+      opts.onToolCallComplete?.(results);
 
       this._persistToolInteraction(response.calls, results);
       localMessages = this._appendToolResults(provider, localMessages, response.calls, results);
