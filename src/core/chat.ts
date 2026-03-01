@@ -48,6 +48,56 @@ import {
 import type { Tool, ToolCall, ToolContext, ToolResult } from './tool.js';
 
 /**
+ * Minimal async push/pull channel bridging a callback-based producer
+ * (like streamAccumulate's onDelta) with a pull-based async iterator
+ * (like an async generator's `for await`).
+ */
+export function createAsyncChannel<T>(): {
+  push(value: T): void;
+  close(): void;
+  [Symbol.asyncIterator](): AsyncIterator<T>;
+} {
+  const queue: T[] = [];
+  let resolve: ((result: IteratorResult<T>) => void) | null = null;
+  let done = false;
+
+  return {
+    push(value: T) {
+      if (resolve) {
+        const r = resolve;
+        resolve = null;
+        r({ value, done: false });
+      } else {
+        queue.push(value);
+      }
+    },
+    close() {
+      done = true;
+      if (resolve) {
+        const r = resolve;
+        resolve = null;
+        r({ value: undefined as T, done: true });
+      }
+    },
+    [Symbol.asyncIterator]() {
+      return {
+        next(): Promise<IteratorResult<T>> {
+          if (queue.length > 0) {
+            return Promise.resolve({ value: queue.shift()!, done: false });
+          }
+          if (done) {
+            return Promise.resolve({ value: undefined as T, done: true });
+          }
+          return new Promise<IteratorResult<T>>((r) => {
+            resolve = r;
+          });
+        },
+      };
+    },
+  };
+}
+
+/**
  * Serialized Chat state.
  */
 export interface ChatJSON {
@@ -636,14 +686,16 @@ export class Chat {
 
   /**
    * Stream with tool calling loop.
-   * Uses streamAccumulate per provider to collect tool calls from the stream,
-   * executes them, feeds results back, and streams again until the model
-   * produces a final text response with no tool calls.
    *
-   * Text is buffered during each iteration. If the model calls tools, the
-   * buffered text is discarded (it's pre-tool "thinking" text). Only the
-   * final iteration's text — where no tools are called — is yielded to the
-   * consumer and saved to message history.
+   * Uses an async channel to bridge the callback-based
+   * `_streamAccumulateWithTools` with this pull-based async generator,
+   * so every provider chunk is yielded (and `onDelta` fires) in real-time.
+   *
+   * On tool iterations the streamed "thinking" text is yielded to the
+   * consumer before we know tools will be called — this matches modern
+   * chat UIs that show intermediate text while tools execute.  Only the
+   * final (tool-free) iteration's content is persisted to message history
+   * and surfaced via `lastResult.content` / `onComplete`.
    */
   private async *_streamWithToolLoop(
     options?: StreamWithToolsOptions,
@@ -672,9 +724,9 @@ export class Chat {
       while (iteration < maxIterations) {
         iteration++;
 
-        const bufferedChunks: string[] = [];
+        const channel = createAsyncChannel<string>();
 
-        const result = await this._streamAccumulateWithTools(
+        const resultPromise = this._streamAccumulateWithTools(
           client,
           provider,
           localMessages,
@@ -682,16 +734,27 @@ export class Chat {
           modelToUse,
           temperature,
           opts,
-          (chunk) => bufferedChunks.push(chunk),
+          (chunk) => channel.push(chunk),
+        ).then(
+          (result) => {
+            channel.close();
+            return result;
+          },
+          (error) => {
+            channel.close();
+            throw error;
+          },
         );
+
+        for await (const chunk of channel) {
+          opts.onDelta?.(chunk);
+          yield chunk;
+        }
+
+        const result = await resultPromise;
         this._addUsage(totalUsage, result.usage);
 
         if (!result.hasToolCalls) {
-          for (const chunk of bufferedChunks) {
-            opts.onDelta?.(chunk);
-            yield chunk;
-          }
-
           this._messages.push(Message.assistant(result.content));
           this._buildAndStoreResult(
             result.content,
@@ -906,11 +969,10 @@ export class Chat {
    * @returns Full accumulated content
    */
   async streamAccumulate(options?: StreamWithToolsOptions): Promise<string> {
-    let content = '';
-    for await (const delta of this.stream(options)) {
-      content += delta;
+    for await (const _delta of this.stream(options)) {
+      // consume stream to completion; side-effects (onDelta, onComplete) fire inside stream()
     }
-    return content;
+    return this._lastResult?.content ?? '';
   }
 
   /**

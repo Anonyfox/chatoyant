@@ -10,7 +10,7 @@
 import { strict as assert } from 'node:assert';
 import { describe, it } from 'node:test';
 import { Schema } from '../schema/index.js';
-import { Chat, type ChatJSON } from './chat.js';
+import { Chat, type ChatJSON, createAsyncChannel } from './chat.js';
 import { Message } from './message.js';
 import { Tool } from './tool.js';
 
@@ -1112,6 +1112,135 @@ describe('Chat', () => {
       for (let i = 0; i < 100; i++) {
         assert.equal(chat.messages[i].content, `Message ${i}`);
       }
+    });
+  });
+
+  describe('createAsyncChannel', () => {
+    it('should yield values pushed before consumption', async () => {
+      const ch = createAsyncChannel<string>();
+      ch.push('a');
+      ch.push('b');
+      ch.push('c');
+      ch.close();
+
+      const collected: string[] = [];
+      for await (const v of ch) {
+        collected.push(v);
+      }
+      assert.deepEqual(collected, ['a', 'b', 'c']);
+    });
+
+    it('should yield values pushed asynchronously', async () => {
+      const ch = createAsyncChannel<string>();
+
+      setTimeout(() => {
+        ch.push('x');
+        ch.push('y');
+        ch.close();
+      }, 10);
+
+      const collected: string[] = [];
+      for await (const v of ch) {
+        collected.push(v);
+      }
+      assert.deepEqual(collected, ['x', 'y']);
+    });
+
+    it('should handle interleaved push and pull', async () => {
+      const ch = createAsyncChannel<number>();
+
+      const producer = async () => {
+        for (let i = 0; i < 5; i++) {
+          await new Promise((r) => setTimeout(r, 5));
+          ch.push(i);
+        }
+        ch.close();
+      };
+
+      producer();
+      const collected: number[] = [];
+      for await (const v of ch) {
+        collected.push(v);
+      }
+      assert.deepEqual(collected, [0, 1, 2, 3, 4]);
+    });
+
+    it('should terminate immediately when closed with no data', async () => {
+      const ch = createAsyncChannel<string>();
+      ch.close();
+
+      const collected: string[] = [];
+      for await (const v of ch) {
+        collected.push(v);
+      }
+      assert.deepEqual(collected, []);
+    });
+
+    it('should deliver values in order under rapid push', async () => {
+      const ch = createAsyncChannel<number>();
+      const count = 1000;
+
+      setTimeout(() => {
+        for (let i = 0; i < count; i++) ch.push(i);
+        ch.close();
+      }, 0);
+
+      const collected: number[] = [];
+      for await (const v of ch) {
+        collected.push(v);
+      }
+      assert.equal(collected.length, count);
+      assert.equal(collected[0], 0);
+      assert.equal(collected[count - 1], count - 1);
+    });
+
+    it('should bridge callback-based producer with async consumer', async () => {
+      const ch = createAsyncChannel<string>();
+
+      const simulateProvider = (onChunk: (c: string) => void) => {
+        return new Promise<string>((resolve) => {
+          const chunks = ['Hello', ' ', 'world', '!'];
+          let i = 0;
+          const timer = setInterval(() => {
+            if (i < chunks.length) {
+              onChunk(chunks[i]);
+              i++;
+            } else {
+              clearInterval(timer);
+              resolve(chunks.join(''));
+            }
+          }, 5);
+        });
+      };
+
+      const resultPromise = simulateProvider((chunk) => ch.push(chunk)).then((result) => {
+        ch.close();
+        return result;
+      });
+
+      const collected: string[] = [];
+      for await (const chunk of ch) {
+        collected.push(chunk);
+      }
+
+      const finalResult = await resultPromise;
+      assert.deepEqual(collected, ['Hello', ' ', 'world', '!']);
+      assert.equal(finalResult, 'Hello world!');
+    });
+  });
+
+  describe('streamAccumulate with tools', () => {
+    it('streamAccumulate should be a function', () => {
+      const chat = new Chat();
+      assert.equal(typeof chat.streamAccumulate, 'function');
+    });
+
+    it('streamAccumulate should return a promise', () => {
+      const chat = new Chat();
+      chat.user('Hello');
+      const result = chat.streamAccumulate();
+      assert.ok(result instanceof Promise);
+      result.catch(() => {});
     });
   });
 });
