@@ -35,6 +35,16 @@ describe('tokens/types', () => {
       const pricing: ModelPricing = { input: 1.0, output: 2.0, cached: 0.5 };
       assert.equal(pricing.cached, 0.5);
     });
+
+    it('should allow per-image pricing for image generation models', () => {
+      const pricing: ModelPricing = { input: 0, output: 0, perImage: 0.02 };
+      assert.equal(pricing.perImage, 0.02);
+    });
+
+    it('should allow per-second pricing for video generation models', () => {
+      const pricing: ModelPricing = { input: 0, output: 0, perSecond: 0.05 };
+      assert.equal(pricing.perSecond, 0.05);
+    });
   });
 
   describe('CostResult interface', () => {

@@ -161,6 +161,13 @@ const PRICING_DATA: Record<string, ModelPricing> = {
   // Grok 2
   'grok-2-vision-1212': { input: 2.0, output: 10.0 },
 
+  // Image generation
+  'grok-imagine-image': { input: 0, output: 0, perImage: 0.02 },
+  'grok-imagine-image-pro': { input: 0, output: 0, perImage: 0.07 },
+
+  // Video generation
+  'grok-imagine-video': { input: 0, output: 0, perSecond: 0.05 },
+
   // Embeddings
   'grok-embedding-1': { input: 0.0, output: 0 },
 };
@@ -197,6 +204,9 @@ const PRICING_FAMILIES: [RegExp, string][] = [
   [/^grok-.*fast-non-reasoning/, 'grok-4-1-fast-non-reasoning'],
   [/^grok-.*mini/, 'grok-3-mini'],
   [/^grok-.*code/, 'grok-code-fast-1'],
+  [/^grok-imagine-image-pro/, 'grok-imagine-image-pro'],
+  [/^grok-imagine-image/, 'grok-imagine-image'],
+  [/^grok-imagine-video/, 'grok-imagine-video'],
   [/^grok-/, 'grok-4-0709'],
 ];
 

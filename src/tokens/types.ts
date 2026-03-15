@@ -11,6 +11,9 @@ export type Provider = 'openai' | 'anthropic' | 'xai';
 
 /**
  * Model pricing information (per 1 million tokens).
+ *
+ * For media generation models (image, video), token-based fields
+ * (`input`, `output`) are 0 and pricing is via `perImage` or `perSecond`.
  */
 export interface ModelPricing {
   /** Cost per 1M input tokens in USD */
@@ -19,6 +22,10 @@ export interface ModelPricing {
   output: number;
   /** Cost per 1M cached input tokens in USD (if supported) */
   cached?: number;
+  /** Cost per generated image in USD (for image generation models) */
+  perImage?: number;
+  /** Cost per second of generated video in USD (for video generation models) */
+  perSecond?: number;
 }
 
 /**

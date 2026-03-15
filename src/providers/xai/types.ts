@@ -357,17 +357,17 @@ export interface ChatCompletionChunk {
 // ============================================================================
 
 /**
- * Image size options.
+ * Legacy image size options (OpenAI-compatible, for grok-2-image-1212).
  */
 export type ImageSize = '256x256' | '512x512' | '1024x1024' | '1792x1024' | '1024x1792';
 
 /**
- * Image quality options.
+ * Legacy image quality options (OpenAI-compatible).
  */
 export type ImageQuality = 'standard' | 'hd';
 
 /**
- * Image style options.
+ * Legacy image style options (OpenAI-compatible).
  */
 export type ImageStyle = 'vivid' | 'natural';
 
@@ -375,6 +375,30 @@ export type ImageStyle = 'vivid' | 'natural';
  * Image response format.
  */
 export type ImageResponseFormat = 'url' | 'b64_json';
+
+/**
+ * Image aspect ratio for grok-imagine-image models.
+ */
+export type ImageAspectRatio =
+  | '1:1'
+  | '16:9'
+  | '9:16'
+  | '4:3'
+  | '3:4'
+  | '3:2'
+  | '2:3'
+  | '2:1'
+  | '1:2'
+  | '19.5:9'
+  | '9:19.5'
+  | '20:9'
+  | '9:20'
+  | 'auto';
+
+/**
+ * Image resolution for grok-imagine-image models.
+ */
+export type ImageResolution = '1k' | '2k';
 
 /**
  * Image generation request.
@@ -386,14 +410,18 @@ export interface ImageGenerationRequest {
   prompt: string;
   /** Number of images (1-10) */
   n?: number;
-  /** Image size */
+  /** Legacy image size (for grok-2-image-1212) */
   size?: ImageSize;
-  /** Image quality */
+  /** Legacy image quality (for grok-2-image-1212) */
   quality?: ImageQuality;
-  /** Image style */
+  /** Legacy image style (for grok-2-image-1212) */
   style?: ImageStyle;
   /** Response format */
   response_format?: ImageResponseFormat;
+  /** Aspect ratio (for grok-imagine-image) */
+  aspect_ratio?: ImageAspectRatio;
+  /** Resolution (for grok-imagine-image) */
+  resolution?: ImageResolution;
   /** End-user identifier */
   user?: string;
 }
@@ -413,6 +441,104 @@ export interface ImageData {
 export interface ImageGenerationResponse {
   created: number;
   data: ImageData[];
+}
+
+/**
+ * Source image reference for image editing.
+ */
+export interface ImageEditSource {
+  /** Image URL or base64 data URI */
+  url: string;
+  type: 'image_url';
+}
+
+/**
+ * Image editing request (POST /images/edits).
+ */
+export interface ImageEditRequest {
+  /** Model ID */
+  model?: string;
+  /** Edit prompt describing the desired changes (required) */
+  prompt: string;
+  /** Single source image */
+  image?: ImageEditSource;
+  /** Multiple source images (up to 3) */
+  images?: ImageEditSource[];
+  /** Number of images to generate (1-10) */
+  n?: number;
+  /** Aspect ratio override (only for multi-image edits) */
+  aspect_ratio?: ImageAspectRatio;
+  /** Resolution */
+  resolution?: ImageResolution;
+  /** Response format */
+  response_format?: ImageResponseFormat;
+}
+
+// ============================================================================
+// Video Generation Types
+// ============================================================================
+
+/**
+ * Video aspect ratio.
+ */
+export type VideoAspectRatio = '1:1' | '16:9' | '9:16' | '4:3' | '3:4' | '3:2' | '2:3';
+
+/**
+ * Video resolution.
+ */
+export type VideoResolution = '480p' | '720p';
+
+/**
+ * Video generation status.
+ */
+export type VideoGenerationStatus = 'pending' | 'done' | 'expired';
+
+/**
+ * Video generation request (POST /videos/generations).
+ */
+export interface VideoGenerationRequest {
+  /** Model ID (required) */
+  model: string;
+  /** Text prompt describing the video (required) */
+  prompt: string;
+  /** Video duration in seconds (1-15) */
+  duration?: number;
+  /** Aspect ratio */
+  aspect_ratio?: VideoAspectRatio;
+  /** Resolution */
+  resolution?: VideoResolution;
+  /** Source image URL for image-to-video (URL or base64 data URI) */
+  image_url?: string;
+  /** Source video URL for video editing */
+  video_url?: string;
+}
+
+/**
+ * Response from starting a video generation request.
+ */
+export interface VideoGenerationStartResponse {
+  request_id: string;
+}
+
+/**
+ * Video data in a completed generation response.
+ */
+export interface VideoData {
+  /** Temporary URL to the generated video */
+  url: string;
+  /** Actual duration in seconds */
+  duration: number;
+  /** Whether the video passed content moderation */
+  respect_moderation: boolean;
+}
+
+/**
+ * Video generation status response (GET /videos/{request_id}).
+ */
+export interface VideoGenerationStatusResponse {
+  status: VideoGenerationStatus;
+  video?: VideoData;
+  model?: string;
 }
 
 // ============================================================================

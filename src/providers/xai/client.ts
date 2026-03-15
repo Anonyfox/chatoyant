@@ -30,9 +30,16 @@ import {
   findSimilar,
 } from './embeddings.js';
 import {
+  editImage,
+  editImageBase64,
+  editImageUrl,
+  editMultipleImages,
   generateImage,
   generateImageBase64,
+  generateImages,
   generateImageUrl,
+  generateImageWithPrompt,
+  type ImageEditOptions,
   type ImageGenerationOptions,
 } from './images.js';
 import {
@@ -49,6 +56,7 @@ import type {
   ChatCompletion,
   ChatCompletionChunk,
   EmbeddingResponse,
+  ImageData,
   ImageGenerationModel,
   ImageGenerationModelsResponse,
   ImageGenerationResponse,
@@ -61,7 +69,19 @@ import type {
   ToolCall,
   ToolChoice,
   Usage,
+  VideoGenerationStatusResponse,
 } from './types.js';
+import {
+  editVideo,
+  generateVideo,
+  generateVideoFromImage,
+  generateVideoUrl,
+  getVideoStatus,
+  startVideoGeneration,
+  type VideoGenerationOptions,
+  type VideoGenerationResult,
+  type VideoPollingOptions,
+} from './videos.js';
 
 /**
  * xAI client configuration.
@@ -79,6 +99,8 @@ export interface XAIClientConfig {
   defaultEmbeddingModel?: string;
   /** Default model for image generation */
   defaultImageModel?: string;
+  /** Default model for video generation */
+  defaultVideoModel?: string;
   /** Additional headers */
   headers?: Record<string, string>;
 }
@@ -315,6 +337,14 @@ export class XAIClient {
   // Image Generation Methods
   // ==========================================================================
 
+  private getImageOptions(overrides?: Partial<ImageGenerationOptions>): ImageGenerationOptions {
+    return {
+      ...this.getRequestOptions(),
+      model: overrides?.model ?? this.config.defaultImageModel ?? 'grok-imagine-image',
+      ...overrides,
+    };
+  }
+
   /**
    * Generate images from a prompt.
    */
@@ -322,11 +352,7 @@ export class XAIClient {
     prompt: string,
     options?: Partial<ImageGenerationOptions>,
   ): Promise<ImageGenerationResponse> {
-    return generateImage(prompt, {
-      ...this.getRequestOptions(),
-      model: options?.model ?? this.config.defaultImageModel ?? 'grok-2-image-1212',
-      ...options,
-    });
+    return generateImage(prompt, this.getImageOptions(options));
   }
 
   /**
@@ -336,11 +362,7 @@ export class XAIClient {
     prompt: string,
     options?: Partial<ImageGenerationOptions>,
   ): Promise<string> {
-    return generateImageUrl(prompt, {
-      ...this.getRequestOptions(),
-      model: options?.model ?? this.config.defaultImageModel ?? 'grok-2-image-1212',
-      ...options,
-    });
+    return generateImageUrl(prompt, this.getImageOptions(options));
   }
 
   /**
@@ -350,11 +372,84 @@ export class XAIClient {
     prompt: string,
     options?: Partial<ImageGenerationOptions>,
   ): Promise<string> {
-    return generateImageBase64(prompt, {
+    return generateImageBase64(prompt, this.getImageOptions(options));
+  }
+
+  /**
+   * Generate multiple images from a single prompt.
+   */
+  async generateImages(
+    prompt: string,
+    count: number,
+    options?: Partial<ImageGenerationOptions>,
+  ): Promise<ImageData[]> {
+    return generateImages(prompt, count, this.getImageOptions(options));
+  }
+
+  /**
+   * Generate image and return both URL and revised prompt.
+   */
+  async generateImageWithPrompt(
+    prompt: string,
+    options?: Partial<ImageGenerationOptions>,
+  ): Promise<{ url: string; revisedPrompt: string }> {
+    return generateImageWithPrompt(prompt, this.getImageOptions(options));
+  }
+
+  // ==========================================================================
+  // Image Editing Methods
+  // ==========================================================================
+
+  private getImageEditOptions(overrides?: Partial<ImageEditOptions>): ImageEditOptions {
+    return {
       ...this.getRequestOptions(),
-      model: options?.model ?? this.config.defaultImageModel ?? 'grok-2-image-1212',
-      ...options,
-    });
+      model: overrides?.model ?? this.config.defaultImageModel ?? 'grok-imagine-image',
+      ...overrides,
+    };
+  }
+
+  /**
+   * Edit an existing image with natural language instructions.
+   */
+  async editImage(
+    prompt: string,
+    imageUrl: string,
+    options?: Partial<ImageEditOptions>,
+  ): Promise<ImageGenerationResponse> {
+    return editImage(prompt, imageUrl, this.getImageEditOptions(options));
+  }
+
+  /**
+   * Edit an image and return just the URL.
+   */
+  async editImageUrl(
+    prompt: string,
+    imageUrl: string,
+    options?: Partial<ImageEditOptions>,
+  ): Promise<string> {
+    return editImageUrl(prompt, imageUrl, this.getImageEditOptions(options));
+  }
+
+  /**
+   * Edit an image and return base64 data.
+   */
+  async editImageBase64(
+    prompt: string,
+    imageUrl: string,
+    options?: Partial<ImageEditOptions>,
+  ): Promise<string> {
+    return editImageBase64(prompt, imageUrl, this.getImageEditOptions(options));
+  }
+
+  /**
+   * Edit with multiple source images (up to 3).
+   */
+  async editMultipleImages(
+    prompt: string,
+    imageUrls: string[],
+    options?: Partial<ImageEditOptions>,
+  ): Promise<ImageGenerationResponse> {
+    return editMultipleImages(prompt, imageUrls, this.getImageEditOptions(options));
   }
 
   // ==========================================================================
@@ -408,6 +503,86 @@ export class XAIClient {
    */
   async getImageGenerationModel(modelId: string): Promise<ImageGenerationModel> {
     return getImageGenerationModel(modelId, this.getRequestOptions());
+  }
+
+  // ==========================================================================
+  // Video Generation Methods
+  // ==========================================================================
+
+  private getVideoOptions(overrides?: Partial<VideoGenerationOptions>): VideoGenerationOptions {
+    return {
+      ...this.getRequestOptions(),
+      model: overrides?.model ?? this.config.defaultVideoModel ?? 'grok-imagine-video',
+      ...overrides,
+    };
+  }
+
+  /**
+   * Generate a video and wait for completion (handles polling automatically).
+   *
+   * Video generation is asynchronous and can take several minutes.
+   * This method handles polling automatically.
+   */
+  async generateVideo(
+    prompt: string,
+    options?: Partial<VideoGenerationOptions>,
+    pollingOptions?: VideoPollingOptions,
+  ): Promise<VideoGenerationResult> {
+    return generateVideo(prompt, this.getVideoOptions(options), pollingOptions);
+  }
+
+  /**
+   * Generate a video and return just the URL.
+   */
+  async generateVideoUrl(
+    prompt: string,
+    options?: Partial<VideoGenerationOptions>,
+    pollingOptions?: VideoPollingOptions,
+  ): Promise<string> {
+    return generateVideoUrl(prompt, this.getVideoOptions(options), pollingOptions);
+  }
+
+  /**
+   * Generate a video from a still image (image-to-video).
+   */
+  async generateVideoFromImage(
+    prompt: string,
+    imageUrl: string,
+    options?: Partial<VideoGenerationOptions>,
+    pollingOptions?: VideoPollingOptions,
+  ): Promise<VideoGenerationResult> {
+    return generateVideoFromImage(prompt, imageUrl, this.getVideoOptions(options), pollingOptions);
+  }
+
+  /**
+   * Edit an existing video with natural language instructions.
+   */
+  async editVideo(
+    prompt: string,
+    videoUrl: string,
+    options?: Partial<VideoGenerationOptions>,
+    pollingOptions?: VideoPollingOptions,
+  ): Promise<VideoGenerationResult> {
+    return editVideo(prompt, videoUrl, this.getVideoOptions(options), pollingOptions);
+  }
+
+  /**
+   * Start a video generation request without waiting (manual polling).
+   *
+   * Use `getVideoStatus` to poll for results.
+   */
+  async startVideoGeneration(
+    prompt: string,
+    options?: Partial<VideoGenerationOptions>,
+  ): Promise<{ requestId: string }> {
+    return startVideoGeneration(prompt, this.getVideoOptions(options));
+  }
+
+  /**
+   * Check the status of a video generation request.
+   */
+  async getVideoStatus(requestId: string): Promise<VideoGenerationStatusResponse> {
+    return getVideoStatus(requestId, this.getRequestOptions());
   }
 
   // ==========================================================================

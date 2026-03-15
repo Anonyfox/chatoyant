@@ -44,6 +44,25 @@ describe('tokens/pricing', () => {
       assert.ok('grok-4-0709' in PRICING);
     });
 
+    it('should include xAI image generation models', () => {
+      assert.ok('grok-imagine-image' in PRICING);
+      assert.ok('grok-imagine-image-pro' in PRICING);
+      const img = PRICING['grok-imagine-image'];
+      assert.equal(img.perImage, 0.02);
+      assert.equal(img.input, 0);
+      assert.equal(img.output, 0);
+      const imgPro = PRICING['grok-imagine-image-pro'];
+      assert.equal(imgPro.perImage, 0.07);
+    });
+
+    it('should include xAI video generation model', () => {
+      assert.ok('grok-imagine-video' in PRICING);
+      const video = PRICING['grok-imagine-video'];
+      assert.equal(video.perSecond, 0.05);
+      assert.equal(video.input, 0);
+      assert.equal(video.output, 0);
+    });
+
     it('should include embedding models', () => {
       assert.ok('text-embedding-3-small' in PRICING);
     });

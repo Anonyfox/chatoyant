@@ -8,6 +8,8 @@ import {
   calculateBatchCost,
   calculateCost,
   calculateCostCustom,
+  calculateImageCost,
+  calculateVideoCost,
   estimateCost,
   getCostPerToken,
 } from './cost.js';
@@ -181,6 +183,51 @@ describe('tokens/cost', () => {
         outputTokens: 0,
       });
       assert.ok(Math.abs(cost1M.input - perToken!.input * 1_000_000) < 0.0001);
+    });
+  });
+
+  describe('calculateImageCost', () => {
+    it('should calculate cost for grok-imagine-image', () => {
+      const cost = calculateImageCost({ model: 'grok-imagine-image', count: 4 });
+      assert.ok(Math.abs(cost - 0.08) < 0.0001);
+    });
+
+    it('should calculate cost for grok-imagine-image-pro', () => {
+      const cost = calculateImageCost({ model: 'grok-imagine-image-pro', count: 1 });
+      assert.ok(Math.abs(cost - 0.07) < 0.0001);
+    });
+
+    it('should return 0 for non-image models', () => {
+      const cost = calculateImageCost({ model: 'gpt-4o', count: 5 });
+      assert.equal(cost, 0);
+    });
+
+    it('should return 0 for unknown models', () => {
+      const cost = calculateImageCost({ model: 'unknown-model', count: 3 });
+      assert.equal(cost, 0);
+    });
+  });
+
+  describe('calculateVideoCost', () => {
+    it('should calculate cost for grok-imagine-video', () => {
+      const cost = calculateVideoCost({ model: 'grok-imagine-video', durationSeconds: 10 });
+      assert.ok(Math.abs(cost - 0.5) < 0.0001);
+    });
+
+    it('should scale linearly with duration', () => {
+      const cost5 = calculateVideoCost({ model: 'grok-imagine-video', durationSeconds: 5 });
+      const cost15 = calculateVideoCost({ model: 'grok-imagine-video', durationSeconds: 15 });
+      assert.ok(Math.abs(cost15 / cost5 - 3) < 0.0001);
+    });
+
+    it('should return 0 for non-video models', () => {
+      const cost = calculateVideoCost({ model: 'gpt-4o', durationSeconds: 10 });
+      assert.equal(cost, 0);
+    });
+
+    it('should return 0 for unknown models', () => {
+      const cost = calculateVideoCost({ model: 'unknown-model', durationSeconds: 10 });
+      assert.equal(cost, 0);
     });
   });
 

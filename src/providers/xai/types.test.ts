@@ -10,6 +10,7 @@ import type {
   ContentPart,
   EmbeddingResponse,
   FinishReason,
+  ImageEditRequest,
   ImageGenerationRequest,
   LanguageModel,
   Message,
@@ -19,6 +20,8 @@ import type {
   Tool,
   ToolChoice,
   Usage,
+  VideoGenerationRequest,
+  VideoGenerationStatusResponse,
   WebSearchTool,
 } from './types.js';
 
@@ -211,7 +214,7 @@ describe('xAI types', () => {
       assert.equal(req.prompt, 'A sunset');
     });
 
-    it('should allow optional parameters', () => {
+    it('should allow legacy parameters', () => {
       const req: ImageGenerationRequest = {
         prompt: 'A sunset',
         model: 'grok-2-image-1212',
@@ -221,6 +224,108 @@ describe('xAI types', () => {
         n: 2,
       };
       assert.equal(req.quality, 'hd');
+    });
+
+    it('should allow new grok-imagine-image parameters', () => {
+      const req: ImageGenerationRequest = {
+        prompt: 'A sunset',
+        model: 'grok-imagine-image',
+        aspect_ratio: '16:9',
+        resolution: '2k',
+        n: 4,
+      };
+      assert.equal(req.aspect_ratio, '16:9');
+      assert.equal(req.resolution, '2k');
+    });
+  });
+
+  describe('ImageEditRequest', () => {
+    it('should support single image editing', () => {
+      const req: ImageEditRequest = {
+        prompt: 'Make it a sketch',
+        model: 'grok-imagine-image',
+        image: { url: 'https://example.com/photo.jpg', type: 'image_url' },
+      };
+      assert.equal(req.image?.type, 'image_url');
+    });
+
+    it('should support multi-image editing', () => {
+      const req: ImageEditRequest = {
+        prompt: 'Combine them',
+        images: [
+          { url: 'https://example.com/a.jpg', type: 'image_url' },
+          { url: 'https://example.com/b.jpg', type: 'image_url' },
+        ],
+      };
+      assert.equal(req.images?.length, 2);
+    });
+  });
+
+  describe('VideoGenerationRequest', () => {
+    it('should require model and prompt', () => {
+      const req: VideoGenerationRequest = {
+        model: 'grok-imagine-video',
+        prompt: 'A rocket launching from Mars',
+      };
+      assert.equal(req.model, 'grok-imagine-video');
+    });
+
+    it('should allow configuration options', () => {
+      const req: VideoGenerationRequest = {
+        model: 'grok-imagine-video',
+        prompt: 'A timelapse',
+        duration: 10,
+        aspect_ratio: '16:9',
+        resolution: '720p',
+      };
+      assert.equal(req.duration, 10);
+      assert.equal(req.aspect_ratio, '16:9');
+      assert.equal(req.resolution, '720p');
+    });
+
+    it('should support image-to-video', () => {
+      const req: VideoGenerationRequest = {
+        model: 'grok-imagine-video',
+        prompt: 'Animate this',
+        image_url: 'https://example.com/photo.jpg',
+      };
+      assert.equal(req.image_url, 'https://example.com/photo.jpg');
+    });
+
+    it('should support video editing', () => {
+      const req: VideoGenerationRequest = {
+        model: 'grok-imagine-video',
+        prompt: 'Add a hat',
+        video_url: 'https://example.com/video.mp4',
+      };
+      assert.equal(req.video_url, 'https://example.com/video.mp4');
+    });
+  });
+
+  describe('VideoGenerationStatusResponse', () => {
+    it('should represent pending status', () => {
+      const res: VideoGenerationStatusResponse = { status: 'pending' };
+      assert.equal(res.status, 'pending');
+      assert.equal(res.video, undefined);
+    });
+
+    it('should represent done status with video data', () => {
+      const res: VideoGenerationStatusResponse = {
+        status: 'done',
+        video: {
+          url: 'https://vidgen.x.ai/video.mp4',
+          duration: 8,
+          respect_moderation: true,
+        },
+        model: 'grok-imagine-video',
+      };
+      assert.equal(res.video?.url, 'https://vidgen.x.ai/video.mp4');
+      assert.equal(res.video?.duration, 8);
+    });
+
+    it('should represent expired status', () => {
+      const res: VideoGenerationStatusResponse = { status: 'expired' };
+      assert.equal(res.status, 'expired');
     });
   });
 

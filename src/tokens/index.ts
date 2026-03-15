@@ -68,6 +68,8 @@ export {
   calculateBatchCost,
   calculateCost,
   calculateCostCustom,
+  calculateImageCost,
+  calculateVideoCost,
   estimateCost,
   getCostPerToken,
 } from './cost.js';

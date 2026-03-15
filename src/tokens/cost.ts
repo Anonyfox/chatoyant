@@ -195,5 +195,61 @@ export function calculateBatchCost(
   });
 }
 
+/**
+ * Calculate cost for image generation.
+ *
+ * @param params - Image generation details
+ * @returns Total cost in USD
+ *
+ * @example
+ * ```typescript
+ * import { calculateImageCost } from 'chatoyant/tokens';
+ *
+ * const cost = calculateImageCost({
+ *   model: 'grok-imagine-image',
+ *   count: 4,
+ * });
+ * // 0.08 (4 × $0.02)
+ * ```
+ */
+export function calculateImageCost(params: {
+  /** Model ID for pricing lookup */
+  model: string;
+  /** Number of images generated */
+  count: number;
+}): number {
+  const pricing = getPricing(params.model);
+  if (!pricing?.perImage) return 0;
+  return pricing.perImage * params.count;
+}
+
+/**
+ * Calculate cost for video generation.
+ *
+ * @param params - Video generation details
+ * @returns Total cost in USD
+ *
+ * @example
+ * ```typescript
+ * import { calculateVideoCost } from 'chatoyant/tokens';
+ *
+ * const cost = calculateVideoCost({
+ *   model: 'grok-imagine-video',
+ *   durationSeconds: 10,
+ * });
+ * // 0.50 (10 × $0.05)
+ * ```
+ */
+export function calculateVideoCost(params: {
+  /** Model ID for pricing lookup */
+  model: string;
+  /** Duration of generated video in seconds */
+  durationSeconds: number;
+}): number {
+  const pricing = getPricing(params.model);
+  if (!pricing?.perSecond) return 0;
+  return pricing.perSecond * params.durationSeconds;
+}
+
 // Re-export PRICING for convenience
 export { PRICING };

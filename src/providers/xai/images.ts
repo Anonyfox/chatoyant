@@ -1,15 +1,22 @@
 /**
- * xAI Image Generation API.
+ * xAI Image Generation and Editing API.
+ *
+ * Supports both legacy grok-2-image-1212 (OpenAI-compatible params)
+ * and the newer grok-imagine-image models (aspect_ratio, resolution).
  *
  * @module providers/xai/images
  */
 
 import { type RequestOptions, request } from './request.js';
 import type {
+  ImageAspectRatio,
   ImageData,
+  ImageEditRequest,
+  ImageEditSource,
   ImageGenerationRequest,
   ImageGenerationResponse,
   ImageQuality,
+  ImageResolution,
   ImageResponseFormat,
   ImageSize,
   ImageStyle,
@@ -23,16 +30,36 @@ export interface ImageGenerationOptions extends RequestOptions {
   model?: string;
   /** Number of images to generate (1-10) */
   n?: number;
-  /** Image size */
+  /** Legacy image size (for grok-2-image-1212) */
   size?: ImageSize;
-  /** Image quality */
+  /** Legacy image quality (for grok-2-image-1212) */
   quality?: ImageQuality;
-  /** Image style */
+  /** Legacy image style (for grok-2-image-1212) */
   style?: ImageStyle;
   /** Response format */
   responseFormat?: ImageResponseFormat;
+  /** Aspect ratio (for grok-imagine-image) */
+  aspectRatio?: ImageAspectRatio;
+  /** Resolution (for grok-imagine-image) */
+  resolution?: ImageResolution;
   /** End-user identifier */
   user?: string;
+}
+
+/**
+ * Options for image editing requests.
+ */
+export interface ImageEditOptions extends RequestOptions {
+  /** Model ID */
+  model?: string;
+  /** Number of images to generate (1-10) */
+  n?: number;
+  /** Response format */
+  responseFormat?: ImageResponseFormat;
+  /** Aspect ratio override (only for multi-image edits) */
+  aspectRatio?: ImageAspectRatio;
+  /** Resolution */
+  resolution?: ImageResolution;
 }
 
 /**
@@ -46,7 +73,7 @@ export interface ImageGenerationOptions extends RequestOptions {
  * ```typescript
  * const response = await generateImage(
  *   'A futuristic cityscape at sunset',
- *   { apiKey: 'xai-...', model: 'grok-2-image-1212' }
+ *   { apiKey: 'xai-...', model: 'grok-imagine-image' }
  * );
  * console.log(response.data[0].url);
  * ```
@@ -55,7 +82,18 @@ export async function generateImage(
   prompt: string,
   options: ImageGenerationOptions,
 ): Promise<ImageGenerationResponse> {
-  const { model, n, size, quality, style, responseFormat, user, ...reqOpts } = options;
+  const {
+    model,
+    n,
+    size,
+    quality,
+    style,
+    responseFormat,
+    aspectRatio,
+    resolution,
+    user,
+    ...reqOpts
+  } = options;
 
   const body: ImageGenerationRequest = {
     prompt,
@@ -67,6 +105,8 @@ export async function generateImage(
   if (quality !== undefined) body.quality = quality;
   if (style !== undefined) body.style = style;
   if (responseFormat !== undefined) body.response_format = responseFormat;
+  if (aspectRatio !== undefined) body.aspect_ratio = aspectRatio;
+  if (resolution !== undefined) body.resolution = resolution;
   if (user !== undefined) body.user = user;
 
   return request<ImageGenerationResponse>('/images/generations', body, reqOpts);
@@ -141,4 +181,162 @@ export async function generateImages(
   });
 
   return response.data;
+}
+
+/**
+ * Generate image with revised prompt (returns both).
+ *
+ * The model may revise the prompt for better results.
+ * Returns both the image URL and the revised prompt.
+ *
+ * @param prompt - Image description
+ * @param options - Request options
+ * @returns Image URL and revised prompt
+ */
+export async function generateImageWithPrompt(
+  prompt: string,
+  options: ImageGenerationOptions,
+): Promise<{ url: string; revisedPrompt: string }> {
+  const response = await generateImage(prompt, { ...options, n: 1, responseFormat: 'url' });
+  const data = response.data[0];
+  if (!data?.url) {
+    throw new Error('No URL in response');
+  }
+  return {
+    url: data.url,
+    revisedPrompt: data.revised_prompt ?? prompt,
+  };
+}
+
+/**
+ * Edit an existing image with natural language instructions.
+ *
+ * @param prompt - Edit instructions
+ * @param imageUrl - Source image URL or base64 data URI
+ * @param options - Request options
+ * @returns Image generation response
+ *
+ * @example
+ * ```typescript
+ * const response = await editImage(
+ *   'Render this as a pencil sketch with detailed shading',
+ *   'https://example.com/photo.png',
+ *   { apiKey: 'xai-...', model: 'grok-imagine-image' }
+ * );
+ * console.log(response.data[0].url);
+ * ```
+ */
+export async function editImage(
+  prompt: string,
+  imageUrl: string,
+  options: ImageEditOptions,
+): Promise<ImageGenerationResponse> {
+  const { model, n, responseFormat, aspectRatio, resolution, ...reqOpts } = options;
+
+  const body: ImageEditRequest = {
+    prompt,
+    image: { url: imageUrl, type: 'image_url' },
+  };
+
+  if (model !== undefined) body.model = model;
+  if (n !== undefined) body.n = n;
+  if (responseFormat !== undefined) body.response_format = responseFormat;
+  if (aspectRatio !== undefined) body.aspect_ratio = aspectRatio;
+  if (resolution !== undefined) body.resolution = resolution;
+
+  return request<ImageGenerationResponse>('/images/edits', body, reqOpts);
+}
+
+/**
+ * Edit an image and return just the URL.
+ *
+ * @param prompt - Edit instructions
+ * @param imageUrl - Source image URL or base64 data URI
+ * @param options - Request options
+ * @returns Edited image URL
+ */
+export async function editImageUrl(
+  prompt: string,
+  imageUrl: string,
+  options: ImageEditOptions,
+): Promise<string> {
+  const response = await editImage(prompt, imageUrl, {
+    ...options,
+    responseFormat: 'url',
+    n: 1,
+  });
+
+  const url = response.data[0]?.url;
+  if (!url) {
+    throw new Error('No URL in response');
+  }
+
+  return url;
+}
+
+/**
+ * Edit an image and return base64 data.
+ *
+ * @param prompt - Edit instructions
+ * @param imageUrl - Source image URL or base64 data URI
+ * @param options - Request options
+ * @returns Edited image as base64 string
+ */
+export async function editImageBase64(
+  prompt: string,
+  imageUrl: string,
+  options: ImageEditOptions,
+): Promise<string> {
+  const response = await editImage(prompt, imageUrl, {
+    ...options,
+    responseFormat: 'b64_json',
+    n: 1,
+  });
+
+  const b64 = response.data[0]?.b64_json;
+  if (!b64) {
+    throw new Error('No base64 data in response');
+  }
+
+  return b64;
+}
+
+/**
+ * Edit with multiple source images (up to 3).
+ *
+ * @param prompt - Edit instructions referencing the source images
+ * @param imageUrls - Array of source image URLs or base64 data URIs (up to 3)
+ * @param options - Request options
+ * @returns Image generation response
+ *
+ * @example
+ * ```typescript
+ * const response = await editMultipleImages(
+ *   'Add the cat from the first image to the second one',
+ *   ['https://example.com/cat.jpg', 'https://example.com/scene.jpg'],
+ *   { apiKey: 'xai-...', model: 'grok-imagine-image' }
+ * );
+ * ```
+ */
+export async function editMultipleImages(
+  prompt: string,
+  imageUrls: string[],
+  options: ImageEditOptions,
+): Promise<ImageGenerationResponse> {
+  const { model, n, responseFormat, aspectRatio, resolution, ...reqOpts } = options;
+
+  const images: ImageEditSource[] = imageUrls.map((url) => ({ url, type: 'image_url' }));
+
+  const body: ImageEditRequest = {
+    prompt,
+    images,
+  };
+
+  if (model !== undefined) body.model = model;
+  if (n !== undefined) body.n = n;
+  if (responseFormat !== undefined) body.response_format = responseFormat;
+  if (aspectRatio !== undefined) body.aspect_ratio = aspectRatio;
+  if (resolution !== undefined) body.resolution = resolution;
+
+  return request<ImageGenerationResponse>('/images/edits', body, reqOpts);
 }

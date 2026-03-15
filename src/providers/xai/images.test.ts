@@ -1,10 +1,20 @@
 /**
- * Tests for xAI image generation API.
+ * Tests for xAI image generation and editing API.
  */
 
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, it, mock } from 'node:test';
-import { generateImage, generateImageBase64, generateImages, generateImageUrl } from './images.js';
+import {
+  editImage,
+  editImageBase64,
+  editImageUrl,
+  editMultipleImages,
+  generateImage,
+  generateImageBase64,
+  generateImages,
+  generateImageUrl,
+  generateImageWithPrompt,
+} from './images.js';
 import type { ImageGenerationResponse } from './types.js';
 
 describe('image generation functions with mocked fetch', () => {
@@ -75,6 +85,25 @@ describe('image generation functions with mocked fetch', () => {
       assert.equal(body.quality, 'hd');
       assert.equal(body.style, 'vivid');
       assert.equal(body.n, 2);
+    });
+
+    it('should include new grok-imagine-image parameters', async () => {
+      mockFetch.mock.mockImplementation(async () => {
+        return new Response(JSON.stringify(mockImageResponse), { status: 200 });
+      });
+
+      await generateImage('A sunset', {
+        apiKey: 'xai-test',
+        model: 'grok-imagine-image',
+        aspectRatio: '16:9',
+        resolution: '2k',
+      });
+
+      const [, options] = mockFetch.mock.calls[0].arguments;
+      const body = JSON.parse(options?.body as string);
+      assert.equal(body.model, 'grok-imagine-image');
+      assert.equal(body.aspect_ratio, '16:9');
+      assert.equal(body.resolution, '2k');
     });
   });
 
@@ -195,6 +224,174 @@ describe('image generation functions with mocked fetch', () => {
       const [, options] = mockFetch.mock.calls[0].arguments;
       const body = JSON.parse(options?.body as string);
       assert.equal(body.n, 3);
+    });
+  });
+
+  describe('generateImageWithPrompt()', () => {
+    it('should return URL and revised prompt', async () => {
+      mockFetch.mock.mockImplementation(async () => {
+        return new Response(JSON.stringify(mockImageResponse), { status: 200 });
+      });
+
+      const result = await generateImageWithPrompt('A sunset', { apiKey: 'xai-test' });
+
+      assert.equal(result.url, 'https://example.com/image.png');
+      assert.equal(result.revisedPrompt, 'A beautiful sunset');
+    });
+
+    it('should fall back to original prompt if no revised_prompt', async () => {
+      const noRevisedResponse: ImageGenerationResponse = {
+        created: 1234567890,
+        data: [{ url: 'https://example.com/image.png' }],
+      };
+
+      mockFetch.mock.mockImplementation(async () => {
+        return new Response(JSON.stringify(noRevisedResponse), { status: 200 });
+      });
+
+      const result = await generateImageWithPrompt('A sunset', { apiKey: 'xai-test' });
+
+      assert.equal(result.revisedPrompt, 'A sunset');
+    });
+
+    it('should throw if no URL in response', async () => {
+      const noUrlResponse: ImageGenerationResponse = {
+        created: 1234567890,
+        data: [{ b64_json: 'data' }],
+      };
+
+      mockFetch.mock.mockImplementation(async () => {
+        return new Response(JSON.stringify(noUrlResponse), { status: 200 });
+      });
+
+      await assert.rejects(
+        async () => generateImageWithPrompt('A sunset', { apiKey: 'xai-test' }),
+        /No URL in response/,
+      );
+    });
+  });
+});
+
+describe('image editing functions with mocked fetch', () => {
+  let originalFetch: typeof globalThis.fetch;
+  let mockFetch: ReturnType<typeof mock.fn<typeof fetch>>;
+
+  beforeEach(() => {
+    originalFetch = globalThis.fetch;
+    mockFetch = mock.fn<typeof fetch>();
+    globalThis.fetch = mockFetch;
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  const mockEditResponse: ImageGenerationResponse = {
+    created: 1234567890,
+    data: [{ url: 'https://example.com/edited.png' }],
+  };
+
+  describe('editImage()', () => {
+    it('should POST to /images/edits with image source', async () => {
+      mockFetch.mock.mockImplementation(async () => {
+        return new Response(JSON.stringify(mockEditResponse), { status: 200 });
+      });
+
+      const result = await editImage('Make it a sketch', 'https://example.com/photo.jpg', {
+        apiKey: 'xai-test',
+        model: 'grok-imagine-image',
+      });
+
+      assert.equal(result.data[0].url, 'https://example.com/edited.png');
+
+      const [url, options] = mockFetch.mock.calls[0].arguments;
+      assert.ok((url as string).endsWith('/images/edits'));
+
+      const body = JSON.parse(options?.body as string);
+      assert.equal(body.prompt, 'Make it a sketch');
+      assert.equal(body.model, 'grok-imagine-image');
+      assert.deepEqual(body.image, {
+        url: 'https://example.com/photo.jpg',
+        type: 'image_url',
+      });
+    });
+
+    it('should include optional parameters', async () => {
+      mockFetch.mock.mockImplementation(async () => {
+        return new Response(JSON.stringify(mockEditResponse), { status: 200 });
+      });
+
+      await editImage('Edit this', 'https://example.com/photo.jpg', {
+        apiKey: 'xai-test',
+        resolution: '2k',
+        n: 2,
+      });
+
+      const [, options] = mockFetch.mock.calls[0].arguments;
+      const body = JSON.parse(options?.body as string);
+      assert.equal(body.resolution, '2k');
+      assert.equal(body.n, 2);
+    });
+  });
+
+  describe('editImageUrl()', () => {
+    it('should return just the URL', async () => {
+      mockFetch.mock.mockImplementation(async () => {
+        return new Response(JSON.stringify(mockEditResponse), { status: 200 });
+      });
+
+      const url = await editImageUrl('Make it a sketch', 'https://example.com/photo.jpg', {
+        apiKey: 'xai-test',
+      });
+
+      assert.equal(url, 'https://example.com/edited.png');
+    });
+  });
+
+  describe('editImageBase64()', () => {
+    it('should return base64 data', async () => {
+      const base64Response: ImageGenerationResponse = {
+        created: 1234567890,
+        data: [{ b64_json: 'editedbase64' }],
+      };
+
+      mockFetch.mock.mockImplementation(async () => {
+        return new Response(JSON.stringify(base64Response), { status: 200 });
+      });
+
+      const b64 = await editImageBase64('Make it a sketch', 'https://example.com/photo.jpg', {
+        apiKey: 'xai-test',
+      });
+
+      assert.equal(b64, 'editedbase64');
+    });
+  });
+
+  describe('editMultipleImages()', () => {
+    it('should POST with images array', async () => {
+      mockFetch.mock.mockImplementation(async () => {
+        return new Response(JSON.stringify(mockEditResponse), { status: 200 });
+      });
+
+      await editMultipleImages(
+        'Combine these images',
+        ['https://example.com/a.jpg', 'https://example.com/b.jpg'],
+        { apiKey: 'xai-test', model: 'grok-imagine-image' },
+      );
+
+      const [, options] = mockFetch.mock.calls[0].arguments;
+      const body = JSON.parse(options?.body as string);
+      assert.equal(body.prompt, 'Combine these images');
+      assert.equal(body.images.length, 2);
+      assert.deepEqual(body.images[0], {
+        url: 'https://example.com/a.jpg',
+        type: 'image_url',
+      });
+      assert.deepEqual(body.images[1], {
+        url: 'https://example.com/b.jpg',
+        type: 'image_url',
+      });
+      assert.equal(body.image, undefined);
     });
   });
 });

@@ -234,6 +234,67 @@ const result = await client.chat(
 );
 ```
 
+### Image Generation & Editing
+
+xAI provides `grok-imagine-image` for image generation and editing with natural language. Supports aspect ratios, resolution control, and multi-image editing.
+
+```typescript
+// Generate an image
+const url = await client.generateImageUrl("A futuristic cityscape at sunset", {
+  aspectRatio: "16:9",
+  resolution: "2k",
+});
+
+// Edit an existing image
+const edited = await client.editImageUrl(
+  "Render this as a pencil sketch with detailed shading",
+  "https://example.com/photo.png"
+);
+
+// Compose multiple images
+const composed = await client.editMultipleImages(
+  "Add the cat from the first image to the second one",
+  ["https://example.com/cat.jpg", "https://example.com/scene.jpg"]
+);
+```
+
+### Video Generation
+
+xAI's `grok-imagine-video` supports text-to-video, image-to-video, and video editing. The API is asynchronous — polling is handled automatically.
+
+```typescript
+// Text-to-video (waits for completion)
+const video = await client.generateVideo("A timelapse of a flower blooming", {
+  duration: 10,
+  aspectRatio: "16:9",
+  resolution: "720p",
+});
+console.log(video.url, `${video.duration}s`);
+
+// Animate a still image
+const animated = await client.generateVideoFromImage(
+  "Gentle waves and flowing clouds",
+  "https://example.com/landscape.jpg"
+);
+
+// Manual polling for long-running jobs
+const { requestId } = await client.startVideoGeneration("An epic scene...", {
+  duration: 15,
+});
+// ... poll later:
+const status = await client.getVideoStatus(requestId);
+if (status.status === "done") console.log(status.video?.url);
+```
+
+Cost calculation for media generation is available via `chatoyant/tokens`:
+
+```typescript
+import { calculateImageCost, calculateVideoCost } from "chatoyant/tokens";
+
+calculateImageCost({ model: "grok-imagine-image", count: 4 }); // $0.08
+calculateVideoCost({ model: "grok-imagine-video", durationSeconds: 10 }); // $0.50
+```
+
 ---
 
 ## Tokens

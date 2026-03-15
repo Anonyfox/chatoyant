@@ -71,12 +71,31 @@ export { isXAIError, XAIError } from './errors.js';
 
 // Images
 export {
+  editImage,
+  editImageBase64,
+  editImageUrl,
+  editMultipleImages,
   generateImage,
   generateImageBase64,
   generateImages,
   generateImageUrl,
+  generateImageWithPrompt,
+  type ImageEditOptions,
   type ImageGenerationOptions,
 } from './images.js';
+
+// Videos
+export {
+  editVideo,
+  generateVideo,
+  generateVideoFromImage,
+  generateVideoUrl,
+  getVideoStatus,
+  startVideoGeneration,
+  type VideoGenerationOptions,
+  type VideoGenerationResult,
+  type VideoPollingOptions,
+} from './videos.js';
 
 // Models
 export {
@@ -135,13 +154,17 @@ export type {
   FinishReason,
   FunctionDefinition,
   FunctionTool,
+  ImageAspectRatio,
   ImageData,
   ImageDetail,
+  ImageEditRequest,
+  ImageEditSource,
   ImageGenerationModel,
   ImageGenerationModelsResponse,
   ImageGenerationRequest,
   ImageGenerationResponse,
   ImageQuality,
+  ImageResolution,
   ImageResponseFormat,
   ImageSize,
   ImageStyle,
@@ -167,5 +190,12 @@ export type {
   ToolCallDelta,
   ToolChoice,
   Usage,
+  VideoAspectRatio,
+  VideoData,
+  VideoGenerationRequest,
+  VideoGenerationStartResponse,
+  VideoGenerationStatus,
+  VideoGenerationStatusResponse,
+  VideoResolution,
   WebSearchTool,
 } from './types.js';
