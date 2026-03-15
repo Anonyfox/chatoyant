@@ -282,7 +282,5 @@ async function pollVideoUntilDone(
     await sleep(intervalMs, signal);
   }
 
-  throw new Error(
-    `Video generation timed out after ${timeoutMs}ms (request_id: ${requestId})`,
-  );
+  throw new Error(`Video generation timed out after ${timeoutMs}ms (request_id: ${requestId})`);
 }

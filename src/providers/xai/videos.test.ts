@@ -4,6 +4,7 @@
 
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, it, mock } from 'node:test';
+import type { VideoGenerationStartResponse, VideoGenerationStatusResponse } from './types.js';
 import {
   editVideo,
   generateVideo,
@@ -12,7 +13,6 @@ import {
   getVideoStatus,
   startVideoGeneration,
 } from './videos.js';
-import type { VideoGenerationStartResponse, VideoGenerationStatusResponse } from './types.js';
 
 describe('video generation functions with mocked fetch', () => {
   let originalFetch: typeof globalThis.fetch;
@@ -176,8 +176,7 @@ describe('video generation functions with mocked fetch', () => {
       });
 
       await assert.rejects(
-        async () =>
-          generateVideo('A sunset', { apiKey: 'xai-test' }, { pollIntervalMs: 10 }),
+        async () => generateVideo('A sunset', { apiKey: 'xai-test' }, { pollIntervalMs: 10 }),
         /expired/,
       );
     });

@@ -83,20 +83,6 @@ export {
   type ImageEditOptions,
   type ImageGenerationOptions,
 } from './images.js';
-
-// Videos
-export {
-  editVideo,
-  generateVideo,
-  generateVideoFromImage,
-  generateVideoUrl,
-  getVideoStatus,
-  startVideoGeneration,
-  type VideoGenerationOptions,
-  type VideoGenerationResult,
-  type VideoPollingOptions,
-} from './videos.js';
-
 // Models
 export {
   getImageGenerationModel,
@@ -109,7 +95,6 @@ export {
   listModels,
   modelExists,
 } from './models.js';
-
 // Request utilities
 export {
   BASE_URL,
@@ -121,7 +106,6 @@ export {
   requestGet,
   requestRaw,
 } from './request.js';
-
 // Streaming utilities
 export {
   accumulatorToToolCalls,
@@ -131,7 +115,6 @@ export {
   type StreamDelta,
   updateAccumulator,
 } from './stream.js';
-
 // Types
 export type {
   APIErrorResponse,
@@ -199,3 +182,15 @@ export type {
   VideoResolution,
   WebSearchTool,
 } from './types.js';
+// Videos
+export {
+  editVideo,
+  generateVideo,
+  generateVideoFromImage,
+  generateVideoUrl,
+  getVideoStatus,
+  startVideoGeneration,
+  type VideoGenerationOptions,
+  type VideoGenerationResult,
+  type VideoPollingOptions,
+} from './videos.js';
