@@ -55,24 +55,24 @@ describe('Chat', () => {
       assert.equal(chat.model, 'gpt-4o-mini');
     });
 
-    it('should resolve "best" preset to gpt-5.2 for OpenAI', () => {
+    it('should resolve "best" preset to gpt-5.4 for OpenAI', () => {
       const chat = new Chat({ model: 'best' });
-      assert.equal(chat.model, 'gpt-5.2');
+      assert.equal(chat.model, 'gpt-5.4');
     });
 
-    it('should resolve "cheap" preset to gpt-5-nano for OpenAI', () => {
+    it('should resolve "cheap" preset to gpt-5.4-mini for OpenAI', () => {
       const chat = new Chat({ model: 'cheap' });
-      assert.equal(chat.model, 'gpt-5-nano');
+      assert.equal(chat.model, 'gpt-5.4-mini');
     });
 
-    it('should resolve "balanced" preset to gpt-5.1 for OpenAI', () => {
+    it('should resolve "balanced" preset to gpt-5.4-mini for OpenAI', () => {
       const chat = new Chat({ model: 'balanced' });
-      assert.equal(chat.model, 'gpt-5.1');
+      assert.equal(chat.model, 'gpt-5.4-mini');
     });
 
-    it('should resolve "reasoning" preset to gpt-5.2 for OpenAI', () => {
+    it('should resolve "reasoning" preset to gpt-5.4-pro for OpenAI', () => {
       const chat = new Chat({ model: 'reasoning' });
-      assert.equal(chat.model, 'gpt-5.2');
+      assert.equal(chat.model, 'gpt-5.4-pro');
     });
 
     it('should resolve preset with explicit provider', () => {

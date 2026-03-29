@@ -25,6 +25,12 @@ const PRICING_DATA: Record<string, ModelPricing> = {
   // https://platform.openai.com/docs/pricing
   // ==========================================================================
 
+  // GPT-5.4 family (flagship as of March 2026)
+  'gpt-5.4': { input: 2.5, output: 15.0, cached: 0.25 },
+  'gpt-5.4-mini': { input: 0.75, output: 4.5, cached: 0.075 },
+  'gpt-5.4-nano': { input: 0.2, output: 1.25, cached: 0.02 },
+  'gpt-5.4-pro': { input: 30.0, output: 180.0 },
+
   // GPT-5.2 family
   'gpt-5.2': { input: 1.75, output: 14.0, cached: 0.175 },
   'gpt-5.2-pro': { input: 21.0, output: 168.0 },
@@ -59,9 +65,9 @@ const PRICING_DATA: Record<string, ModelPricing> = {
   'gpt-4.1-nano': { input: 0.1, output: 0.4, cached: 0.025 },
 
   // GPT-4 Turbo
-  'gpt-4-turbo': { input: 10.0, output: 30.0 },
-  'gpt-4-turbo-2024-04-09': { input: 10.0, output: 30.0 },
-  'gpt-4-turbo-preview': { input: 10.0, output: 30.0 },
+  'gpt-4-turbo': { input: 5.0, output: 15.0 },
+  'gpt-4-turbo-2024-04-09': { input: 5.0, output: 15.0 },
+  'gpt-4-turbo-preview': { input: 5.0, output: 15.0 },
 
   // GPT-4
   'gpt-4': { input: 30.0, output: 60.0 },
@@ -90,6 +96,7 @@ const PRICING_DATA: Record<string, ModelPricing> = {
 
   // o4 family (reasoning)
   'o4-mini': { input: 1.1, output: 4.4, cached: 0.275 },
+  'o4-mini-deep-research': { input: 2.0, output: 8.0 },
 
   // Open-source models
   'gpt-oss-120b': { input: 0.039, output: 0.19 },
@@ -141,24 +148,29 @@ const PRICING_DATA: Record<string, ModelPricing> = {
   // https://docs.x.ai/docs/models
   // ==========================================================================
 
+  // Grok 4.20 series (current flagship as of March 2026)
+  'grok-4.20-0309-reasoning': { input: 2.0, output: 6.0, cached: 0.2 },
+  'grok-4.20-0309-non-reasoning': { input: 2.0, output: 6.0, cached: 0.2 },
+  'grok-4.20-multi-agent-0309': { input: 2.0, output: 6.0, cached: 0.2 },
+
   // Grok 4.1 fast series
   'grok-4-1-fast-reasoning': { input: 0.2, output: 0.5, cached: 0.05 },
   'grok-4-1-fast-non-reasoning': { input: 0.2, output: 0.5, cached: 0.05 },
 
-  // Grok 4 family
+  // Grok 4 family (legacy)
   'grok-4-fast-reasoning': { input: 0.2, output: 0.5, cached: 0.05 },
   'grok-4-fast-non-reasoning': { input: 0.2, output: 0.5, cached: 0.05 },
   'grok-4-0709': { input: 3.0, output: 15.0, cached: 0.75 },
   'grok-4': { input: 3.0, output: 15.0, cached: 0.75 },
 
-  // Grok Code
+  // Grok Code (legacy)
   'grok-code-fast-1': { input: 0.2, output: 1.5, cached: 0.02 },
 
-  // Grok 3
+  // Grok 3 (legacy)
   'grok-3': { input: 3.0, output: 15.0, cached: 0.75 },
   'grok-3-mini': { input: 0.3, output: 0.5, cached: 0.07 },
 
-  // Grok 2
+  // Grok 2 (legacy)
   'grok-2-vision-1212': { input: 2.0, output: 10.0 },
 
   // Image generation
@@ -187,12 +199,12 @@ const PRICING_FAMILIES: [RegExp, string][] = [
   [/^claude.*haiku/, 'claude-haiku-4-5'],
 
   // OpenAI — sub-variant patterns before the general GPT catch-all
-  [/^gpt-.*-nano/, 'gpt-5-nano'],
-  [/^gpt-.*-mini/, 'gpt-5-mini'],
-  [/^gpt-.*-pro/, 'gpt-5.2-pro'],
+  [/^gpt-.*-nano/, 'gpt-5.4-nano'],
+  [/^gpt-.*-mini/, 'gpt-5.4-mini'],
+  [/^gpt-.*-pro/, 'gpt-5.4-pro'],
   [/^gpt-.*-codex/, 'gpt-5.2-codex'],
   [/^gpt-\d+o/, 'gpt-4o'],
-  [/^gpt-/, 'gpt-5.2'],
+  [/^gpt-/, 'gpt-5.4'],
 
   // OpenAI o-series reasoning
   [/^o\d+-mini/, 'o4-mini'],
@@ -200,6 +212,7 @@ const PRICING_FAMILIES: [RegExp, string][] = [
   [/^o\d+/, 'o3'],
 
   // xAI
+  [/^grok-4\.20/, 'grok-4.20-0309-reasoning'],
   [/^grok-.*fast-reasoning/, 'grok-4-1-fast-reasoning'],
   [/^grok-.*fast-non-reasoning/, 'grok-4-1-fast-non-reasoning'],
   [/^grok-.*mini/, 'grok-3-mini'],
@@ -207,7 +220,7 @@ const PRICING_FAMILIES: [RegExp, string][] = [
   [/^grok-imagine-image-pro/, 'grok-imagine-image-pro'],
   [/^grok-imagine-image/, 'grok-imagine-image'],
   [/^grok-imagine-video/, 'grok-imagine-video'],
-  [/^grok-/, 'grok-4-0709'],
+  [/^grok-/, 'grok-4.20-0309-reasoning'],
 ];
 
 /**

@@ -22,6 +22,11 @@ import type { ProviderId } from './types.js';
  * - Specialized models (audio, image, codex, oss)
  */
 export const OPENAI_MODELS = [
+  // GPT-5.4 series (flagship as of March 2026)
+  'gpt-5.4',
+  'gpt-5.4-mini',
+  'gpt-5.4-nano',
+  'gpt-5.4-pro',
   // GPT-5.2 series
   'gpt-5.2',
   'gpt-5.2-pro',
@@ -61,11 +66,13 @@ export const OPENAI_MODELS = [
   'o1',
   'o1-preview',
   'o1-mini',
+  'o1-pro',
   'o3',
   'o3-mini',
   'o3-pro',
   'o3-deep-research',
   'o4-mini',
+  'o4-mini-deep-research',
   // Open-source models
   'gpt-oss-120b',
   'gpt-oss-20b',
@@ -128,21 +135,25 @@ export const ANTHROPIC_MODELS = [
  * - Specialized models (code)
  */
 export const XAI_MODELS = [
+  // Grok 4.20 series (current flagship as of March 2026)
+  'grok-4.20-0309-reasoning',
+  'grok-4.20-0309-non-reasoning',
+  'grok-4.20-multi-agent-0309',
   // Grok 4.1 fast series (2M context)
   'grok-4-1-fast-reasoning',
   'grok-4-1-fast-non-reasoning',
-  // Grok 4 series
+  // Grok 4 series (legacy)
   'grok-4-fast-reasoning',
   'grok-4-fast-non-reasoning',
   'grok-4-0709',
   'grok-4',
-  // Grok 3 series
+  // Grok 3 series (legacy)
   'grok-3',
   'grok-3-mini',
-  // Grok 2 series
+  // Grok 2 series (legacy)
   'grok-2-vision-1212',
   'grok-2-image-1212',
-  // Specialized
+  // Specialized (legacy)
   'grok-code-fast-1',
   // Image/Video generation
   'grok-imagine-image',

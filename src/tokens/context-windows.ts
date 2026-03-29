@@ -29,6 +29,12 @@ export const CONTEXT_WINDOWS = {
   // https://platform.openai.com/docs/models
   // ==========================================================================
 
+  // GPT-5.4 family (flagship as of March 2026)
+  'gpt-5.4': 1_050_000,
+  'gpt-5.4-mini': 400_000,
+  'gpt-5.4-nano': 400_000,
+  'gpt-5.4-pro': 1_050_000,
+
   // GPT-5.2 family (400K context)
   'gpt-5.2': 400_000,
   'gpt-5.2-pro': 400_000,
@@ -94,6 +100,7 @@ export const CONTEXT_WINDOWS = {
 
   // o4 family (reasoning)
   'o4-mini': 200_000,
+  'o4-mini-deep-research': 200_000,
 
   // Open-source models
   'gpt-oss-120b': 131_072,
@@ -104,9 +111,9 @@ export const CONTEXT_WINDOWS = {
   // https://docs.anthropic.com/en/docs/about-claude/models
   // ==========================================================================
 
-  // Claude 4.6 (200K default, 1M with beta header)
-  'claude-opus-4-6': 200_000,
-  'claude-sonnet-4-6': 200_000,
+  // Claude 4.6 (1M native context)
+  'claude-opus-4-6': 1_000_000,
+  'claude-sonnet-4-6': 1_000_000,
 
   // Claude 4.5
   'claude-opus-4-5-20251101': 200_000,
@@ -139,6 +146,11 @@ export const CONTEXT_WINDOWS = {
   // xAI (Grok)
   // https://docs.x.ai/docs/models
   // ==========================================================================
+
+  // Grok 4.20 series (2M context, current as of March 2026)
+  'grok-4.20-0309-reasoning': 2_000_000,
+  'grok-4.20-0309-non-reasoning': 2_000_000,
+  'grok-4.20-multi-agent-0309': 2_000_000,
 
   // Grok 4.1 fast series (2M context)
   'grok-4-1-fast-reasoning': 2_000_000,

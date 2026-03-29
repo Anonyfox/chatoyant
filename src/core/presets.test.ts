@@ -51,19 +51,19 @@ describe('Model Presets', () => {
     });
 
     it('should resolve best preset to provider models', () => {
-      assert.equal(resolveModelPreset('best', 'openai'), 'gpt-5.2');
+      assert.equal(resolveModelPreset('best', 'openai'), 'gpt-5.4');
       assert.equal(resolveModelPreset('best', 'anthropic'), 'claude-opus-4-6');
-      assert.equal(resolveModelPreset('best', 'xai'), 'grok-4-0709');
+      assert.equal(resolveModelPreset('best', 'xai'), 'grok-4.20-0309-reasoning');
     });
 
     it('should resolve cheap preset to provider models', () => {
-      assert.equal(resolveModelPreset('cheap', 'openai'), 'gpt-5-nano');
+      assert.equal(resolveModelPreset('cheap', 'openai'), 'gpt-5.4-mini');
       assert.equal(resolveModelPreset('cheap', 'anthropic'), 'claude-haiku-4-5');
-      assert.equal(resolveModelPreset('cheap', 'xai'), 'grok-3-mini');
+      assert.equal(resolveModelPreset('cheap', 'xai'), 'grok-4-1-fast-non-reasoning');
     });
 
     it('should default to openai when provider not specified', () => {
-      assert.equal(resolveModelPreset('balanced'), 'gpt-5.1');
+      assert.equal(resolveModelPreset('balanced'), 'gpt-5.4-mini');
     });
   });
 

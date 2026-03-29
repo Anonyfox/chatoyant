@@ -31,27 +31,27 @@ export const MODEL_PRESETS: Record<ModelPreset, Record<ProviderId, string>> = {
   },
   /** Lowest cost per token */
   cheap: {
-    openai: 'gpt-5-nano',
+    openai: 'gpt-5.4-mini',
     anthropic: 'claude-haiku-4-5',
-    xai: 'grok-3-mini',
+    xai: 'grok-4-1-fast-non-reasoning',
   },
   /** Highest quality output */
   best: {
-    openai: 'gpt-5.2',
+    openai: 'gpt-5.4',
     anthropic: 'claude-opus-4-6',
-    xai: 'grok-4-0709',
+    xai: 'grok-4.20-0309-reasoning',
   },
   /** Good balance of quality/speed/cost */
   balanced: {
-    openai: 'gpt-5.1',
+    openai: 'gpt-5.4-mini',
     anthropic: 'claude-sonnet-4-6',
-    xai: 'grok-3',
+    xai: 'grok-4-1-fast-reasoning',
   },
   /** Best reasoning capabilities */
   reasoning: {
-    openai: 'gpt-5.2',
+    openai: 'gpt-5.4-pro',
     anthropic: 'claude-opus-4-6',
-    xai: 'grok-4-1-fast-reasoning',
+    xai: 'grok-4.20-0309-reasoning',
   },
 };
 
@@ -178,6 +178,13 @@ export function supportsReasoning(model: string): boolean {
  * Swap xAI model to reasoning/non-reasoning variant based on preference.
  */
 export function adjustXAIModelForReasoning(model: string, preferReasoning: boolean): string {
+  // Handle grok-4.20 variants
+  if (model === 'grok-4.20-0309-reasoning' && !preferReasoning) {
+    return 'grok-4.20-0309-non-reasoning';
+  }
+  if (model === 'grok-4.20-0309-non-reasoning' && preferReasoning) {
+    return 'grok-4.20-0309-reasoning';
+  }
   // Handle grok-4-1-fast variants
   if (model === 'grok-4-1-fast-reasoning' && !preferReasoning) {
     return 'grok-4-1-fast-non-reasoning';
@@ -185,7 +192,7 @@ export function adjustXAIModelForReasoning(model: string, preferReasoning: boole
   if (model === 'grok-4-1-fast-non-reasoning' && preferReasoning) {
     return 'grok-4-1-fast-reasoning';
   }
-  // Handle generic grok-4-fast variants
+  // Handle generic grok-4-fast variants (legacy)
   if (model === 'grok-4-fast-reasoning' && !preferReasoning) {
     return 'grok-4-fast-non-reasoning';
   }
