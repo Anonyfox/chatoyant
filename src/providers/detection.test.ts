@@ -19,7 +19,14 @@ import { PROVIDERS } from './registry.js';
 describe('providers/detection', () => {
   // Store original env values
   const originalEnv: Record<string, string | undefined> = {};
-  const envKeys = ['API_KEY_OPENAI', 'API_KEY_ANTHROPIC', 'API_KEY_XAI'];
+  const envKeys = [
+    'OPENAI_API_KEY',
+    'ANTHROPIC_API_KEY',
+    'XAI_API_KEY',
+    'API_KEY_OPENAI',
+    'API_KEY_ANTHROPIC',
+    'API_KEY_XAI',
+  ];
 
   beforeEach(() => {
     // Save and clear env vars
@@ -49,17 +56,17 @@ describe('providers/detection', () => {
     });
 
     it('should create error with provider info', () => {
-      const error = new ProviderError('Test error', 'openai', 'API_KEY_OPENAI');
+      const error = new ProviderError('Test error', 'openai', 'OPENAI_API_KEY');
       assert.equal(error.providerId, 'openai');
-      assert.equal(error.envKey, 'API_KEY_OPENAI');
+      assert.equal(error.envKey, 'OPENAI_API_KEY');
     });
 
     it('should create missing API key error via factory', () => {
       const error = ProviderError.missingApiKey('openai');
       assert.ok(error.message.includes('OpenAI'));
-      assert.ok(error.message.includes('API_KEY_OPENAI'));
+      assert.ok(error.message.includes('OPENAI_API_KEY'));
       assert.equal(error.providerId, 'openai');
-      assert.equal(error.envKey, 'API_KEY_OPENAI');
+      assert.equal(error.envKey, 'OPENAI_API_KEY');
     });
 
     it('should create unknown provider error via factory', () => {
@@ -79,19 +86,19 @@ describe('providers/detection', () => {
     });
 
     it('should return false when env var is empty string', () => {
-      process.env.API_KEY_OPENAI = '';
+      process.env.OPENAI_API_KEY = '';
       assert.equal(isProviderActive('openai'), false);
     });
 
     it('should return true when env var is set', () => {
-      process.env.API_KEY_OPENAI = 'sk-test-key';
+      process.env.OPENAI_API_KEY = 'sk-test-key';
       assert.equal(isProviderActive('openai'), true);
     });
 
     it('should check correct env var for each provider', () => {
-      process.env.API_KEY_OPENAI = 'key1';
-      process.env.API_KEY_ANTHROPIC = 'key2';
-      process.env.API_KEY_XAI = 'key3';
+      process.env.OPENAI_API_KEY = 'key1';
+      process.env.ANTHROPIC_API_KEY = 'key2';
+      process.env.XAI_API_KEY = 'key3';
 
       assert.equal(isProviderActive('openai'), true);
       assert.equal(isProviderActive('anthropic'), true);
@@ -106,14 +113,14 @@ describe('providers/detection', () => {
     });
 
     it('should return single active provider', () => {
-      process.env.API_KEY_OPENAI = 'sk-test';
+      process.env.OPENAI_API_KEY = 'sk-test';
       const active = activeProviders();
       assert.deepEqual(active, ['openai']);
     });
 
     it('should return multiple active providers', () => {
-      process.env.API_KEY_OPENAI = 'sk-test';
-      process.env.API_KEY_ANTHROPIC = 'sk-ant';
+      process.env.OPENAI_API_KEY = 'sk-test';
+      process.env.ANTHROPIC_API_KEY = 'sk-ant';
       const active = activeProviders();
       assert.ok(active.includes('openai'));
       assert.ok(active.includes('anthropic'));
@@ -121,9 +128,9 @@ describe('providers/detection', () => {
     });
 
     it('should return all providers when all active', () => {
-      process.env.API_KEY_OPENAI = 'key1';
-      process.env.API_KEY_ANTHROPIC = 'key2';
-      process.env.API_KEY_XAI = 'key3';
+      process.env.OPENAI_API_KEY = 'key1';
+      process.env.ANTHROPIC_API_KEY = 'key2';
+      process.env.XAI_API_KEY = 'key3';
       const active = activeProviders();
       assert.equal(active.length, 3);
     });
@@ -315,7 +322,7 @@ describe('providers/detection', () => {
 
   describe('assertProviderActive', () => {
     it('should not throw when provider is active', () => {
-      process.env.API_KEY_OPENAI = 'sk-test';
+      process.env.OPENAI_API_KEY = 'sk-test';
       assert.doesNotThrow(() => assertProviderActive('openai'));
     });
 
@@ -339,7 +346,7 @@ describe('providers/detection', () => {
 
   describe('getApiKey', () => {
     it('should return API key when set', () => {
-      process.env.API_KEY_OPENAI = 'sk-test-key-123';
+      process.env.OPENAI_API_KEY = 'sk-test-key-123';
       assert.equal(getApiKey('openai'), 'sk-test-key-123');
     });
 
@@ -351,13 +358,51 @@ describe('providers/detection', () => {
     });
 
     it('should return correct key for each provider', () => {
-      process.env.API_KEY_OPENAI = 'openai-key';
-      process.env.API_KEY_ANTHROPIC = 'anthropic-key';
-      process.env.API_KEY_XAI = 'xai-key';
+      process.env.OPENAI_API_KEY = 'openai-key';
+      process.env.ANTHROPIC_API_KEY = 'anthropic-key';
+      process.env.XAI_API_KEY = 'xai-key';
 
       assert.equal(getApiKey('openai'), 'openai-key');
       assert.equal(getApiKey('anthropic'), 'anthropic-key');
       assert.equal(getApiKey('xai'), 'xai-key');
+    });
+  });
+
+  describe('legacy env var fallback', () => {
+    it('should recognize API_KEY_OPENAI as fallback for OPENAI_API_KEY', () => {
+      process.env.API_KEY_OPENAI = 'legacy-openai-key';
+      assert.equal(isProviderActive('openai'), true);
+      assert.equal(getApiKey('openai'), 'legacy-openai-key');
+    });
+
+    it('should recognize API_KEY_ANTHROPIC as fallback for ANTHROPIC_API_KEY', () => {
+      process.env.API_KEY_ANTHROPIC = 'legacy-anthropic-key';
+      assert.equal(isProviderActive('anthropic'), true);
+      assert.equal(getApiKey('anthropic'), 'legacy-anthropic-key');
+    });
+
+    it('should recognize API_KEY_XAI as fallback for XAI_API_KEY', () => {
+      process.env.API_KEY_XAI = 'legacy-xai-key';
+      assert.equal(isProviderActive('xai'), true);
+      assert.equal(getApiKey('xai'), 'legacy-xai-key');
+    });
+
+    it('should prefer OPENAI_API_KEY over API_KEY_OPENAI when both set', () => {
+      process.env.OPENAI_API_KEY = 'new-key';
+      process.env.API_KEY_OPENAI = 'legacy-key';
+      assert.equal(getApiKey('openai'), 'new-key');
+    });
+
+    it('should prefer ANTHROPIC_API_KEY over API_KEY_ANTHROPIC when both set', () => {
+      process.env.ANTHROPIC_API_KEY = 'new-key';
+      process.env.API_KEY_ANTHROPIC = 'legacy-key';
+      assert.equal(getApiKey('anthropic'), 'new-key');
+    });
+
+    it('should include legacy env var name in error message', () => {
+      const error = ProviderError.missingApiKey('anthropic');
+      assert.ok(error.message.includes('ANTHROPIC_API_KEY'));
+      assert.ok(error.message.includes('API_KEY_ANTHROPIC'));
     });
   });
 
@@ -383,7 +428,7 @@ describe('providers/detection', () => {
 
   describe('resolveProvider', () => {
     it('should detect and return active provider', () => {
-      process.env.API_KEY_OPENAI = 'sk-test';
+      process.env.OPENAI_API_KEY = 'sk-test';
       const provider = resolveProvider('gpt-4');
       assert.equal(provider, 'openai');
     });
@@ -412,9 +457,9 @@ describe('providers/detection', () => {
     });
 
     it('should work for all providers when active', () => {
-      process.env.API_KEY_OPENAI = 'key1';
-      process.env.API_KEY_ANTHROPIC = 'key2';
-      process.env.API_KEY_XAI = 'key3';
+      process.env.OPENAI_API_KEY = 'key1';
+      process.env.ANTHROPIC_API_KEY = 'key2';
+      process.env.XAI_API_KEY = 'key3';
 
       assert.equal(resolveProvider('gpt-4'), 'openai');
       assert.equal(resolveProvider('claude-3'), 'anthropic');
@@ -422,7 +467,7 @@ describe('providers/detection', () => {
     });
 
     it('should work for OpenAI o1/o3 models when active', () => {
-      process.env.API_KEY_OPENAI = 'key1';
+      process.env.OPENAI_API_KEY = 'key1';
 
       assert.equal(resolveProvider('o1-preview'), 'openai');
       assert.equal(resolveProvider('o3-mini'), 'openai');

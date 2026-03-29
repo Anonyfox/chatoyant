@@ -20,7 +20,8 @@ describe('providers/registry', () => {
         const openai = PROVIDERS.openai;
         assert.equal(openai.name, 'OpenAI');
         assert.deepEqual(openai.signatures, ['gpt', 'o1', 'o3', 'chatgpt']);
-        assert.equal(openai.envKey, 'API_KEY_OPENAI');
+        assert.equal(openai.envKey, 'OPENAI_API_KEY');
+        assert.equal(openai.envKeyLegacy, 'API_KEY_OPENAI');
         assert.equal(openai.baseUrl, 'https://api.openai.com/v1');
       });
 
@@ -38,7 +39,8 @@ describe('providers/registry', () => {
         const anthropic = PROVIDERS.anthropic;
         assert.equal(anthropic.name, 'Anthropic');
         assert.deepEqual(anthropic.signatures, ['claude']);
-        assert.equal(anthropic.envKey, 'API_KEY_ANTHROPIC');
+        assert.equal(anthropic.envKey, 'ANTHROPIC_API_KEY');
+        assert.equal(anthropic.envKeyLegacy, 'API_KEY_ANTHROPIC');
         assert.equal(anthropic.baseUrl, 'https://api.anthropic.com/v1');
       });
     });
@@ -48,7 +50,8 @@ describe('providers/registry', () => {
         const xai = PROVIDERS.xai;
         assert.equal(xai.name, 'xAI');
         assert.deepEqual(xai.signatures, ['grok']);
-        assert.equal(xai.envKey, 'API_KEY_XAI');
+        assert.equal(xai.envKey, 'XAI_API_KEY');
+        assert.equal(xai.envKeyLegacy, 'API_KEY_XAI');
         assert.equal(xai.baseUrl, 'https://api.x.ai/v1');
       });
     });

@@ -20,7 +20,7 @@ import type { ProviderRegistry } from './types.js';
  * import { PROVIDERS } from 'chatoyant';
  *
  * console.log(PROVIDERS.openai.name); // "OpenAI"
- * console.log(PROVIDERS.anthropic.envKey); // "API_KEY_ANTHROPIC"
+ * console.log(PROVIDERS.anthropic.envKey); // "ANTHROPIC_API_KEY"
  * ```
  */
 export const PROVIDERS: ProviderRegistry = {
@@ -28,21 +28,24 @@ export const PROVIDERS: ProviderRegistry = {
     name: 'OpenAI',
     // Covers: gpt-*, o1-*, o3-*, chatgpt-*
     signatures: ['gpt', 'o1', 'o3', 'chatgpt'],
-    envKey: 'API_KEY_OPENAI',
+    envKey: 'OPENAI_API_KEY',
+    envKeyLegacy: 'API_KEY_OPENAI',
     baseUrl: 'https://api.openai.com/v1',
   },
   anthropic: {
     name: 'Anthropic',
     // Covers: claude-*
     signatures: ['claude'],
-    envKey: 'API_KEY_ANTHROPIC',
+    envKey: 'ANTHROPIC_API_KEY',
+    envKeyLegacy: 'API_KEY_ANTHROPIC',
     baseUrl: 'https://api.anthropic.com/v1',
   },
   xai: {
     name: 'xAI',
     // Covers: grok-*
     signatures: ['grok'],
-    envKey: 'API_KEY_XAI',
+    envKey: 'XAI_API_KEY',
+    envKeyLegacy: 'API_KEY_XAI',
     baseUrl: 'https://api.x.ai/v1',
   },
 } as const;

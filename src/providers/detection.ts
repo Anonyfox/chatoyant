@@ -29,8 +29,11 @@ export class ProviderError extends Error {
    */
   static missingApiKey(providerId: ProviderId): ProviderError {
     const meta = PROVIDERS[providerId];
+    const envInfo = meta.envKeyLegacy
+      ? `${meta.envKey} (or legacy ${meta.envKeyLegacy})`
+      : meta.envKey;
     return new ProviderError(
-      `${meta.name} is not active (missing ${meta.envKey} environment variable)`,
+      `${meta.name} is not active (missing ${envInfo} environment variable)`,
       providerId,
       meta.envKey,
     );
@@ -61,10 +64,19 @@ export class ProviderError extends Error {
  * }
  * ```
  */
+function resolveEnvValue(providerId: ProviderId): string | undefined {
+  const meta = PROVIDERS[providerId];
+  const primary = process.env[meta.envKey];
+  if (typeof primary === 'string' && primary.length > 0) return primary;
+  if (meta.envKeyLegacy) {
+    const legacy = process.env[meta.envKeyLegacy];
+    if (typeof legacy === 'string' && legacy.length > 0) return legacy;
+  }
+  return undefined;
+}
+
 export function isProviderActive(providerId: ProviderId): boolean {
-  const envKey = PROVIDERS[providerId].envKey;
-  const value = process.env[envKey];
-  return typeof value === 'string' && value.length > 0;
+  return resolveEnvValue(providerId) !== undefined;
 }
 
 /**
@@ -148,7 +160,7 @@ export function assertProviderActive(providerId: ProviderId): void {
  */
 export function getApiKey(providerId: ProviderId): string {
   assertProviderActive(providerId);
-  return process.env[PROVIDERS[providerId].envKey]!;
+  return resolveEnvValue(providerId)!;
 }
 
 /**

@@ -34,7 +34,7 @@ import * as tokens from "chatoyant/tokens";
 
 ## Quick Start
 
-The unified API works across OpenAI, Anthropic, and xAI. Set your API key via environment variable (`API_KEY_OPENAI`, `API_KEY_ANTHROPIC`, or `API_KEY_XAI`). The provider is auto-detected from the model name, or defaults to OpenAI when using presets.
+The unified API works across OpenAI, Anthropic, and xAI. Set your API key via environment variable (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `XAI_API_KEY`). The provider is auto-detected from the model name, or defaults to OpenAI when using presets.
 
 ```typescript
 import { genText, genData, genStream, Schema } from "chatoyant";
@@ -143,13 +143,13 @@ For direct provider access with full control, use the low-level clients below.
 
 Full client for GPT models, embeddings, and image generation.
 
-> **API Key:** Set `API_KEY_OPENAI` in your environment.
+> **API Key:** Set `OPENAI_API_KEY` in your environment.
 
 ```typescript
 import { createOpenAIClient } from "chatoyant/providers/openai";
 
 const client = createOpenAIClient({
-  apiKey: process.env.API_KEY_OPENAI!,
+  apiKey: process.env.OPENAI_API_KEY!,
 });
 
 // Chat
@@ -181,13 +181,13 @@ const data = await client.chatStructured<{ name: string; age: number }>(
 
 Full client for Claude models with streaming and tool use.
 
-> **API Key:** Set `API_KEY_ANTHROPIC` in your environment.
+> **API Key:** Set `ANTHROPIC_API_KEY` in your environment.
 
 ```typescript
 import { createAnthropicClient } from "chatoyant/providers/anthropic";
 
 const client = createAnthropicClient({
-  apiKey: process.env.API_KEY_ANTHROPIC!,
+  apiKey: process.env.ANTHROPIC_API_KEY!,
 });
 
 // Chat
@@ -207,13 +207,13 @@ for await (const delta of client.streamContent([
 
 Full client for Grok models with native web search.
 
-> **API Key:** Set `API_KEY_XAI` in your environment.
+> **API Key:** Set `XAI_API_KEY` in your environment.
 
 ```typescript
 import { createXAIClient } from "chatoyant/providers/xai";
 
 const client = createXAIClient({
-  apiKey: process.env.API_KEY_XAI!,
+  apiKey: process.env.XAI_API_KEY!,
 });
 
 // Chat
