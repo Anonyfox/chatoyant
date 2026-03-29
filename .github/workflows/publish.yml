@@ -7,10 +7,9 @@
 # 4. Create a GitHub release
 #
 # How to use:
-# 1. Set up NPM_TOKEN in GitHub Secrets (see README)
-# 2. Bump version: npm version patch|minor|major
-# 3. Push with tags: git push && git push --tags
-# 4. Workflow runs automatically!
+# 1. Bump version: npm version patch|minor|major
+# 2. Push with tags: git push && git push --tags
+# 3. Workflow runs automatically via OIDC trusted publisher (no token needed)
 
 name: Publish to npm
 
@@ -59,8 +58,6 @@ jobs:
 
       - name: Publish to npm
         run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Create GitHub Release
         uses: actions/create-release@v1
