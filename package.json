@@ -76,6 +76,16 @@
         "types": "./dist/providers/xai.d.cts",
         "default": "./dist/providers/xai.cjs"
       }
+    },
+    "./providers/local": {
+      "import": {
+        "types": "./dist/providers/local.d.ts",
+        "default": "./dist/providers/local.js"
+      },
+      "require": {
+        "types": "./dist/providers/local.d.cts",
+        "default": "./dist/providers/local.cjs"
+      }
     }
   },
   "files": [

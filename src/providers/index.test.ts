@@ -38,7 +38,7 @@ describe('providers/index', () => {
     it('should export PROVIDER_IDS array', () => {
       assert.ok('PROVIDER_IDS' in providers);
       assert.ok(Array.isArray(providers.PROVIDER_IDS));
-      assert.equal(providers.PROVIDER_IDS.length, 3);
+      assert.equal(providers.PROVIDER_IDS.length, 4);
     });
   });
 
@@ -127,6 +127,11 @@ describe('providers/index', () => {
         'getModelsForProvider',
         'isKnownModel',
         'getAllKnownModels',
+        // Local provider
+        'LocalClient',
+        'createLocalClient',
+        'LocalError',
+        'isLocalError',
       ];
 
       for (const name of expectedExports) {

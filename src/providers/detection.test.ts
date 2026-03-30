@@ -26,6 +26,8 @@ describe('providers/detection', () => {
     'API_KEY_OPENAI',
     'API_KEY_ANTHROPIC',
     'API_KEY_XAI',
+    'LOCAL_BASE_URL',
+    'LOCAL_API_KEY',
   ];
 
   beforeEach(() => {
@@ -317,6 +319,90 @@ describe('providers/detection', () => {
       it('should return null for mistral models', () => {
         assert.equal(detectProviderByModel('mistral-large'), null);
       });
+
+      it('should return null for Qwen models (local fallback happens in resolveProvider)', () => {
+        assert.equal(detectProviderByModel('Qwen3.5-9B-MLX-4bit'), null);
+      });
+    });
+  });
+
+  describe('local provider', () => {
+    it('isProviderActive("local") should be false without LOCAL_BASE_URL', () => {
+      assert.equal(isProviderActive('local'), false);
+    });
+
+    it('isProviderActive("local") should be true when LOCAL_BASE_URL is set', () => {
+      process.env.LOCAL_BASE_URL = 'http://127.0.0.1:8765/v1';
+      assert.equal(isProviderActive('local'), true);
+    });
+
+    it('isProviderActive("local") should be false when LOCAL_BASE_URL is empty string', () => {
+      process.env.LOCAL_BASE_URL = '';
+      assert.equal(isProviderActive('local'), false);
+    });
+
+    it('getBaseUrl("local") should return LOCAL_BASE_URL', () => {
+      process.env.LOCAL_BASE_URL = 'http://127.0.0.1:8765/v1';
+      assert.equal(getBaseUrl('local'), 'http://127.0.0.1:8765/v1');
+    });
+
+    it('getBaseUrl("local") should return empty string when not set', () => {
+      assert.equal(getBaseUrl('local'), '');
+    });
+
+    it('getApiKey("local") should return LOCAL_API_KEY when set', () => {
+      process.env.LOCAL_BASE_URL = 'http://localhost:8765/v1';
+      process.env.LOCAL_API_KEY = 'Razer88fox';
+      assert.equal(getApiKey('local'), 'Razer88fox');
+    });
+
+    it('getApiKey("local") should default to "local" when LOCAL_API_KEY is not set', () => {
+      process.env.LOCAL_BASE_URL = 'http://localhost:8765/v1';
+      assert.equal(getApiKey('local'), 'local');
+    });
+
+    it('getApiKey("local") should throw when LOCAL_BASE_URL is not set', () => {
+      assert.throws(
+        () => getApiKey('local'),
+        (error) => error instanceof ProviderError,
+      );
+    });
+
+    it('ProviderError.missingApiKey("local") should mention LOCAL_BASE_URL', () => {
+      const error = ProviderError.missingApiKey('local');
+      assert.ok(error.message.includes('LOCAL_BASE_URL'));
+      assert.equal(error.providerId, 'local');
+    });
+  });
+
+  describe('resolveProvider with local fallback', () => {
+    it('should fall back to local for unknown model when LOCAL_BASE_URL is set', () => {
+      process.env.LOCAL_BASE_URL = 'http://127.0.0.1:8765/v1';
+      assert.equal(resolveProvider('Qwen3.5-9B-MLX-4bit'), 'local');
+    });
+
+    it('should fall back to local for any unrecognised model name', () => {
+      process.env.LOCAL_BASE_URL = 'http://localhost:11434/v1';
+      assert.equal(resolveProvider('llama3.2:3b'), 'local');
+      assert.equal(resolveProvider('mistral-nemo'), 'local');
+      assert.equal(resolveProvider('my-fine-tuned-model'), 'local');
+    });
+
+    it('should still detect known providers even when LOCAL_BASE_URL is set', () => {
+      process.env.OPENAI_API_KEY = 'sk-test';
+      process.env.LOCAL_BASE_URL = 'http://localhost:8765/v1';
+      assert.equal(resolveProvider('gpt-4o'), 'openai');
+    });
+
+    it('should throw for unknown model when LOCAL_BASE_URL is not set', () => {
+      assert.throws(
+        () => resolveProvider('Qwen3.5-9B-MLX-4bit'),
+        (error) => {
+          assert.ok(error instanceof ProviderError);
+          assert.ok(error.message.includes('Qwen3.5-9B-MLX-4bit'));
+          return true;
+        },
+      );
     });
   });
 

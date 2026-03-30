@@ -10,6 +10,11 @@
 import { PROVIDER_IDS, PROVIDERS } from './registry.js';
 import type { ProviderId } from './types.js';
 
+/** Environment variable that activates the local provider. */
+const LOCAL_BASE_URL_KEY = 'LOCAL_BASE_URL';
+/** Environment variable for the local provider API key (optional). */
+const LOCAL_API_KEY_KEY = 'LOCAL_API_KEY';
+
 /**
  * Error thrown when a provider operation fails.
  */
@@ -28,6 +33,13 @@ export class ProviderError extends Error {
    * Create error for missing API key.
    */
   static missingApiKey(providerId: ProviderId): ProviderError {
+    if (providerId === 'local') {
+      return new ProviderError(
+        'Local provider is not active (missing LOCAL_BASE_URL environment variable)',
+        'local',
+        LOCAL_BASE_URL_KEY,
+      );
+    }
     const meta = PROVIDERS[providerId];
     const envInfo = meta.envKeyLegacy
       ? `${meta.envKey} (or legacy ${meta.envKeyLegacy})`
@@ -65,6 +77,11 @@ export class ProviderError extends Error {
  * ```
  */
 function resolveEnvValue(providerId: ProviderId): string | undefined {
+  // Local provider: activated by LOCAL_BASE_URL, not an API key.
+  if (providerId === 'local') {
+    const baseUrl = process.env[LOCAL_BASE_URL_KEY];
+    return typeof baseUrl === 'string' && baseUrl.length > 0 ? baseUrl : undefined;
+  }
   const meta = PROVIDERS[providerId];
   const primary = process.env[meta.envKey];
   if (typeof primary === 'string' && primary.length > 0) return primary;
@@ -159,6 +176,12 @@ export function assertProviderActive(providerId: ProviderId): void {
  * ```
  */
 export function getApiKey(providerId: ProviderId): string {
+  if (providerId === 'local') {
+    assertProviderActive('local');
+    // API key is optional — default to 'local' for servers that don't validate it.
+    const key = process.env[LOCAL_API_KEY_KEY];
+    return typeof key === 'string' && key.length > 0 ? key : 'local';
+  }
   assertProviderActive(providerId);
   return resolveEnvValue(providerId)!;
 }
@@ -175,6 +198,9 @@ export function getApiKey(providerId: ProviderId): string {
  * ```
  */
 export function getBaseUrl(providerId: ProviderId): string {
+  if (providerId === 'local') {
+    return process.env[LOCAL_BASE_URL_KEY] ?? '';
+  }
   return PROVIDERS[providerId].baseUrl;
 }
 
@@ -194,9 +220,13 @@ export function getBaseUrl(providerId: ProviderId): string {
  */
 export function resolveProvider(model: string): ProviderId {
   const providerId = detectProviderByModel(model);
-  if (!providerId) {
-    throw ProviderError.unknownProvider(model);
+  if (providerId) {
+    assertProviderActive(providerId);
+    return providerId;
   }
-  assertProviderActive(providerId);
-  return providerId;
+  // Unknown model: fall back to local if LOCAL_BASE_URL is configured.
+  if (isProviderActive('local')) {
+    return 'local';
+  }
+  throw ProviderError.unknownProvider(model);
 }

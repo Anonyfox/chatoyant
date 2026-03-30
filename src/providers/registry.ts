@@ -48,6 +48,18 @@ export const PROVIDERS: ProviderRegistry = {
     envKeyLegacy: 'API_KEY_XAI',
     baseUrl: 'https://api.x.ai/v1',
   },
+  local: {
+    name: 'Local',
+    // No model name signatures — any unknown model falls through to local
+    // when LOCAL_BASE_URL is set. See detection.ts for the fallback logic.
+    signatures: [],
+    // LOCAL_API_KEY is optional; defaults to "local" for servers that
+    // don't validate it. LOCAL_BASE_URL is what actually activates the provider.
+    envKey: 'LOCAL_API_KEY',
+    // baseUrl is dynamic — read at runtime from LOCAL_BASE_URL env var
+    // or from localBaseUrl option passed to Chat / genText.
+    baseUrl: '',
+  },
 } as const;
 
 /**

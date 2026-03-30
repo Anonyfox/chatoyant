@@ -188,6 +188,8 @@ export const MODELS_BY_PROVIDER: Record<ProviderId, readonly string[]> = {
   openai: OPENAI_MODELS,
   anthropic: ANTHROPIC_MODELS,
   xai: XAI_MODELS,
+  // Local provider has no fixed model list — models are whatever the server exposes
+  local: [],
 } as const;
 
 /**

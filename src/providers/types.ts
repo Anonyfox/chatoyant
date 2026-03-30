@@ -7,7 +7,7 @@
 /**
  * Supported provider identifiers.
  */
-export type ProviderId = 'openai' | 'anthropic' | 'xai';
+export type ProviderId = 'openai' | 'anthropic' | 'xai' | 'local';
 
 /**
  * Provider metadata for configuration and detection.

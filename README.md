@@ -9,7 +9,7 @@
   <img src="https://raw.githubusercontent.com/Anonyfox/chatoyant/main/assets/chatoyant-logo.png" alt="Chatoyant Logo" width="400" />
 </div>
 
-Unified TypeScript SDK for LLM providers (OpenAI, Anthropic, xAI) with streaming, structured outputs, and zero dependencies.
+Unified TypeScript SDK for LLM providers (OpenAI, Anthropic, xAI, and any local OpenAI-compatible server) with streaming, structured outputs, and zero dependencies.
 
 > _chatoyant_ /ʃəˈtɔɪənt/ — having a changeable lustre, like a cat's eye in the dark
 
@@ -34,7 +34,7 @@ import * as tokens from "chatoyant/tokens";
 
 ## Quick Start
 
-The unified API works across OpenAI, Anthropic, and xAI. Set your API key via environment variable (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `XAI_API_KEY`). The provider is auto-detected from the model name, or defaults to OpenAI when using presets.
+The unified API works across OpenAI, Anthropic, xAI, and local models. Set your API key via environment variable (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `XAI_API_KEY`). The provider is auto-detected from the model name, or defaults to OpenAI when using presets. For local models, set `LOCAL_BASE_URL` instead — see [Local Models](#local-models) below.
 
 ```typescript
 import { genText, genData, genStream, Schema } from "chatoyant";
@@ -86,27 +86,26 @@ await genText("Hello", { model: "fast", provider: "anthropic" });
 Use `Chat` for multi-turn conversations with tools:
 
 ```typescript
-import { Chat, Tool, Schema } from "chatoyant";
+import { Chat, createTool, Schema } from "chatoyant";
 
 // Define a tool
 class WeatherParams extends Schema {
   city = Schema.String({ description: "City name" });
 }
 
-class WeatherTool extends Tool {
-  name = "get_weather";
-  description = "Get current weather for a city";
-  parameters = new WeatherParams();
-
-  async execute({ city }) {
+const weatherTool = createTool({
+  name: "get_weather",
+  description: "Get current weather for a city",
+  parameters: WeatherParams,
+  execute: async ({ args }) => {
     return { temperature: 22, conditions: "sunny" }; // Your API call here
-  }
-}
+  },
+});
 
 // Create chat with tool
 const chat = new Chat({ model: "gpt-4o" });
 chat.system("You are a helpful assistant with weather access.");
-chat.addTool(new WeatherTool());
+chat.addTool(weatherTool);
 
 // Multi-turn conversation — tools are called automatically
 const reply = await chat.user("What's the weather in Tokyo?").generate();
@@ -293,6 +292,103 @@ import { calculateImageCost, calculateVideoCost } from "chatoyant/tokens";
 
 calculateImageCost({ model: "grok-imagine-image", count: 4 }); // $0.08
 calculateVideoCost({ model: "grok-imagine-video", durationSeconds: 10 }); // $0.50
+```
+
+---
+
+## Local Models
+
+Chatoyant supports any server that speaks the OpenAI-compatible chat API — [Ollama](https://ollama.com), [LM Studio](https://lmstudio.ai), [llama.cpp](https://github.com/ggerganov/llama.cpp), [vLLM](https://github.com/vllm-project/vllm), [LocalAI](https://localai.io), and [oMLX](https://omlx.ai) (great for running models natively on Apple Silicon via MLX).
+
+> **Tested:** `Qwen3.5-4B-MLX-4bit` via oMLX — text generation, streaming, and multi-step tool calling all work out of the box.
+
+**Zero config if you set the env var:**
+
+```bash
+export LOCAL_BASE_URL=http://127.0.0.1:11434/v1   # Ollama default
+export LOCAL_API_KEY=your-key                       # optional, defaults to "local"
+```
+
+Any model name that chatoyant doesn't recognise as OpenAI / Anthropic / xAI is automatically routed to the local server:
+
+```typescript
+import { genText, genStream, Chat, createTool, Schema } from "chatoyant";
+
+// Text generation — model name auto-routes to LOCAL_BASE_URL
+const text = await genText("Write a haiku about local LLMs.", {
+  model: "Qwen3.5-4B-MLX-4bit",
+});
+
+// Streaming
+for await (const chunk of genStream("Count from 1 to 5.", {
+  model: "llama3.2:3b",
+})) {
+  process.stdout.write(chunk);
+}
+```
+
+**Inline config** (no env vars needed):
+
+```typescript
+const chat = new Chat({
+  model: "Qwen3.5-4B-MLX-4bit",
+  localBaseUrl: "http://127.0.0.1:8765/v1",
+  localApiKey: "my-key",        // optional
+  localTimeout: 120_000,        // optional, ms — useful for large models
+});
+```
+
+**Explicit `provider: 'local'`** (useful when you want to force local even for ambiguous model names):
+
+```typescript
+await genText("Hello", { model: "my-fine-tune", provider: "local" });
+```
+
+**Multi-step tool calling** works identically to cloud providers:
+
+```typescript
+class CalcParams extends Schema {
+  operation = Schema.Enum(["add", "subtract", "multiply", "divide"]);
+  a = Schema.Number();
+  b = Schema.Number();
+}
+
+const calc = createTool({
+  name: "calculate",
+  description: "Perform one arithmetic operation.",
+  parameters: CalcParams,
+  execute: async ({ args }) => {
+    const { operation, a, b } = args;
+    return operation === "add" ? a + b
+         : operation === "subtract" ? a - b
+         : operation === "multiply" ? a * b
+         : a / b;
+  },
+});
+
+const chat = new Chat({ model: "Qwen3.5-4B-MLX-4bit" });
+chat.system("Use the calculate tool for every arithmetic step.");
+chat.addTool(calc);
+
+const answer = await chat
+  .user("What is (6 * 7) - (20 / 4)?")
+  .generate({ maxIterations: 8 });
+// → "The result is 37."
+```
+
+**Direct client** for lower-level access:
+
+```typescript
+import { createLocalClient } from "chatoyant/providers/local";
+
+const client = createLocalClient({
+  baseUrl: "http://127.0.0.1:11434/v1",
+  apiKey: "local",          // optional
+  timeout: 120_000,         // optional
+});
+
+const models = await client.listModelIds();
+const text   = await client.chatSimple([{ role: "user", content: "Hello!" }]);
 ```
 
 ---

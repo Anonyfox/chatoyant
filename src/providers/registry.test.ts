@@ -8,11 +8,12 @@ import { PROVIDER_IDS, PROVIDERS } from './registry.js';
 
 describe('providers/registry', () => {
   describe('PROVIDERS', () => {
-    it('should contain all three providers', () => {
+    it('should contain all four providers', () => {
       assert.ok('openai' in PROVIDERS);
       assert.ok('anthropic' in PROVIDERS);
       assert.ok('xai' in PROVIDERS);
-      assert.equal(Object.keys(PROVIDERS).length, 3);
+      assert.ok('local' in PROVIDERS);
+      assert.equal(Object.keys(PROVIDERS).length, 4);
     });
 
     describe('openai', () => {
@@ -56,10 +57,20 @@ describe('providers/registry', () => {
       });
     });
 
+    describe('local', () => {
+      it('should have correct metadata', () => {
+        const local = PROVIDERS.local;
+        assert.equal(local.name, 'Local');
+        assert.deepEqual(local.signatures, []);
+        assert.equal(local.envKey, 'LOCAL_API_KEY');
+        assert.equal(local.baseUrl, '');
+      });
+    });
+
     it('should be readonly', () => {
       // TypeScript prevents modification at compile time
       // Runtime check that the object structure is correct
-      assert.deepEqual(Object.keys(PROVIDERS).sort(), ['anthropic', 'openai', 'xai']);
+      assert.deepEqual(Object.keys(PROVIDERS).sort(), ['anthropic', 'local', 'openai', 'xai']);
     });
 
     it('should have no overlapping signatures between providers', () => {
@@ -72,13 +83,18 @@ describe('providers/registry', () => {
       );
     });
 
-    it('should have at least one signature per provider', () => {
-      for (const provider of Object.values(PROVIDERS)) {
+    it('should have at least one signature per non-local provider', () => {
+      for (const [id, provider] of Object.entries(PROVIDERS)) {
+        if (id === 'local') continue; // local has no fixed model signatures by design
         assert.ok(
           provider.signatures.length >= 1,
           `${provider.name} should have at least one signature`,
         );
       }
+    });
+
+    it('local provider should have no signatures (relies on fallback detection)', () => {
+      assert.equal(PROVIDERS.local.signatures.length, 0);
     });
 
     it('should have unique env keys for each provider', () => {
@@ -87,20 +103,26 @@ describe('providers/registry', () => {
       assert.equal(envKeys.length, uniqueEnvKeys.size);
     });
 
-    it('should have valid base URLs', () => {
-      for (const provider of Object.values(PROVIDERS)) {
+    it('should have valid base URLs for cloud providers', () => {
+      for (const [id, provider] of Object.entries(PROVIDERS)) {
+        if (id === 'local') continue; // local has dynamic base URL
         assert.ok(provider.baseUrl.startsWith('https://'));
         assert.ok(provider.baseUrl.includes('/v1'));
       }
+    });
+
+    it('local provider should have empty base URL (dynamic at runtime)', () => {
+      assert.equal(PROVIDERS.local.baseUrl, '');
     });
   });
 
   describe('PROVIDER_IDS', () => {
     it('should contain all provider IDs', () => {
-      assert.equal(PROVIDER_IDS.length, 3);
+      assert.equal(PROVIDER_IDS.length, 4);
       assert.ok(PROVIDER_IDS.includes('openai'));
       assert.ok(PROVIDER_IDS.includes('anthropic'));
       assert.ok(PROVIDER_IDS.includes('xai'));
+      assert.ok(PROVIDER_IDS.includes('local'));
     });
 
     it('should match PROVIDERS keys', () => {
@@ -114,7 +136,7 @@ describe('providers/registry', () => {
       for (const id of PROVIDER_IDS) {
         collected.push(id);
       }
-      assert.equal(collected.length, 3);
+      assert.equal(collected.length, 4);
     });
   });
 });

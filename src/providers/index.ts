@@ -44,8 +44,10 @@ export {
   ProviderError,
   resolveProvider,
 } from './detection.js';
+export type { LocalClientConfig } from './local/client.js';
+// Local provider
+export { createLocalClient, isLocalError, LocalClient, LocalError } from './local/index.js';
 export type { AnthropicModel, KnownModel, OpenAIModel, XAIModel } from './models.js';
-
 // Models
 export {
   ANTHROPIC_MODELS,

@@ -31,6 +31,29 @@ export interface CommonOptions {
    * @default 3
    */
   retries?: number;
+
+  /**
+   * Base URL for the local provider.
+   * Overrides the LOCAL_BASE_URL environment variable.
+   * Required when using provider: 'local' without LOCAL_BASE_URL set.
+   *
+   * @example 'http://127.0.0.1:11434/v1'  // Ollama
+   * @example 'http://127.0.0.1:8765/v1'   // mlx-lm / omlx
+   */
+  localBaseUrl?: string;
+
+  /**
+   * API key for the local provider.
+   * Overrides the LOCAL_API_KEY environment variable.
+   * Defaults to "local" for servers that don't validate keys.
+   */
+  localApiKey?: string;
+
+  /**
+   * Request timeout in ms for the local provider.
+   * Defaults to 60 000 ms. Increase for slow or large local models.
+   */
+  localTimeout?: number;
 }
 
 /**
@@ -206,6 +229,36 @@ export interface ChatConfig {
    * Default generation options applied to all calls.
    */
   defaults?: GenerateOptions;
+
+  /**
+   * Base URL for the local provider.
+   * Sets the endpoint for all calls in this Chat instance when the
+   * local provider is used (either explicitly via `provider: 'local'` or
+   * via automatic fallback for unrecognised model names).
+   * Overrides the LOCAL_BASE_URL environment variable.
+   *
+   * @example
+   * ```typescript
+   * new Chat({
+   *   model: 'Qwen3.5-9B-MLX-4bit',
+   *   localBaseUrl: 'http://127.0.0.1:8765/v1',
+   * })
+   * ```
+   */
+  localBaseUrl?: string;
+
+  /**
+   * API key for the local provider.
+   * Overrides the LOCAL_API_KEY environment variable.
+   * Defaults to "local" for servers that don't validate keys.
+   */
+  localApiKey?: string;
+
+  /**
+   * Request timeout in ms for the local provider.
+   * Defaults to 60 000 ms. Increase for slow or large local models.
+   */
+  localTimeout?: number;
 }
 
 /**

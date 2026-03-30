@@ -9,6 +9,7 @@ export default defineConfig({
     'providers/openai': 'src/providers/openai/index.ts',
     'providers/anthropic': 'src/providers/anthropic/index.ts',
     'providers/xai': 'src/providers/xai/index.ts',
+    'providers/local': 'src/providers/local/index.ts',
   },
   format: ['esm', 'cjs'],
   dts: true,

@@ -28,30 +28,35 @@ export const MODEL_PRESETS: Record<ModelPreset, Record<ProviderId, string>> = {
     openai: 'gpt-4o-mini',
     anthropic: 'claude-haiku-4-5',
     xai: 'grok-4-1-fast-non-reasoning',
+    local: '', // presets not supported for local — specify model explicitly
   },
   /** Lowest cost per token */
   cheap: {
     openai: 'gpt-5.4-mini',
     anthropic: 'claude-haiku-4-5',
     xai: 'grok-4-1-fast-non-reasoning',
+    local: '',
   },
   /** Highest quality output */
   best: {
     openai: 'gpt-5.4',
     anthropic: 'claude-opus-4-6',
     xai: 'grok-4.20-0309-reasoning',
+    local: '',
   },
   /** Good balance of quality/speed/cost */
   balanced: {
     openai: 'gpt-5.4-mini',
     anthropic: 'claude-sonnet-4-6',
     xai: 'grok-4-1-fast-reasoning',
+    local: '',
   },
   /** Best reasoning capabilities */
   reasoning: {
     openai: 'gpt-5.4-pro',
     anthropic: 'claude-opus-4-6',
     xai: 'grok-4.20-0309-reasoning',
+    local: '',
   },
 };
 
@@ -107,6 +112,10 @@ export interface ReasoningConfig {
     /** For xAI, reasoning is controlled by model selection, not parameters */
     preferReasoningModel: boolean;
   };
+  /** Local models: reasoning effort is passed through as-is (if supported). */
+  local: {
+    reasoningEffort: 'none' | 'minimal' | 'low' | 'medium' | 'high';
+  };
 }
 
 /**
@@ -117,6 +126,7 @@ export const REASONING_PRESETS: Record<ReasoningLevel, ReasoningConfig> = {
     openai: { reasoningEffort: 'none' },
     anthropic: {}, // No thinking block
     xai: { preferReasoningModel: false },
+    local: { reasoningEffort: 'none' },
   },
   low: {
     openai: { reasoningEffort: 'low' },
@@ -124,6 +134,7 @@ export const REASONING_PRESETS: Record<ReasoningLevel, ReasoningConfig> = {
       thinking: { type: 'enabled', budget_tokens: 2048 },
     },
     xai: { preferReasoningModel: false },
+    local: { reasoningEffort: 'low' },
   },
   medium: {
     openai: { reasoningEffort: 'medium' },
@@ -131,6 +142,7 @@ export const REASONING_PRESETS: Record<ReasoningLevel, ReasoningConfig> = {
       thinking: { type: 'enabled', budget_tokens: 8192 },
     },
     xai: { preferReasoningModel: true },
+    local: { reasoningEffort: 'medium' },
   },
   high: {
     openai: { reasoningEffort: 'high' },
@@ -138,6 +150,7 @@ export const REASONING_PRESETS: Record<ReasoningLevel, ReasoningConfig> = {
       thinking: { type: 'enabled', budget_tokens: 32768 },
     },
     xai: { preferReasoningModel: true },
+    local: { reasoningEffort: 'high' },
   },
 };
 

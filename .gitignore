@@ -40,3 +40,6 @@ coverage/
 # Documentation (generated, do not commit)
 docs/
 
+# Playground scripts (local experiments, not for commit)
+src/playground/
+

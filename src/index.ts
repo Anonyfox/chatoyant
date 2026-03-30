@@ -113,11 +113,15 @@ export {
   createAnthropicClient,
 } from './providers/anthropic/index.js';
 export {
+  createLocalClient,
+  LocalClient,
+  type LocalClientConfig,
+} from './providers/local/index.js';
+export {
   createOpenAIClient,
   OpenAIClient,
   type OpenAIClientConfig,
 } from './providers/openai/index.js';
-
 export {
   createXAIClient,
   XAIClient,

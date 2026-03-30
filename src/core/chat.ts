@@ -9,7 +9,13 @@
  */
 
 import { type AnthropicClient, createAnthropicClient } from '../providers/anthropic/index.js';
-import { detectProviderByModel, getApiKey, isProviderActive } from '../providers/detection.js';
+import {
+  detectProviderByModel,
+  getApiKey,
+  getBaseUrl,
+  isProviderActive,
+} from '../providers/detection.js';
+import { createLocalClient, type LocalClient } from '../providers/local/client.js';
 import {
   createOpenAIClient,
   makeOpenAIStrict,
@@ -187,7 +193,15 @@ export class Chat {
     openai?: OpenAIClient;
     anthropic?: AnthropicClient;
     xai?: XAIClient;
+    local?: LocalClient;
   } = {};
+
+  /** Local provider base URL (from config or env fallback at client-creation time) */
+  private _localBaseUrl?: string;
+  /** Local provider API key (from config or env fallback at client-creation time) */
+  private _localApiKey?: string;
+  /** Local provider request timeout in ms */
+  private _localTimeout?: number;
 
   /** Result metadata from the last generate/stream call */
   private _lastResult: GenerateResult | null = null;
@@ -222,6 +236,9 @@ export class Chat {
     }
 
     this._defaults = config?.defaults ?? {};
+    this._localBaseUrl = config?.localBaseUrl ?? config?.defaults?.localBaseUrl;
+    this._localApiKey = config?.localApiKey ?? config?.defaults?.localApiKey;
+    this._localTimeout = config?.localTimeout ?? config?.defaults?.localTimeout;
   }
 
   // ===========================================================================
@@ -405,10 +422,11 @@ export class Chat {
 
     const startTime = Date.now();
 
-    if (provider === 'openai') {
-      // Build reasoning options for OpenAI
+    if (provider === 'openai' || provider === 'local') {
+      // Build reasoning options for OpenAI (skipped for local — local models
+      // don't use the reasoning_effort parameter)
       const reasoningOpts: Record<string, unknown> = {};
-      if (opts.reasoning && supportsReasoning(modelToUse)) {
+      if (provider === 'openai' && opts.reasoning && supportsReasoning(modelToUse)) {
         const openaiConfig = getReasoningConfig(opts.reasoning, 'openai');
         reasoningOpts.reasoning_effort = openaiConfig.reasoningEffort;
       }
@@ -592,9 +610,9 @@ export class Chat {
       opts.temperature ?? (opts.creativity ? resolveCreativity(opts.creativity) : undefined);
 
     try {
-      if (provider === 'openai') {
+      if (provider === 'openai' || provider === 'local') {
         const reasoningOpts: Record<string, unknown> = {};
-        if (opts.reasoning && supportsReasoning(modelToUse)) {
+        if (provider === 'openai' && opts.reasoning && supportsReasoning(modelToUse)) {
           const openaiConfig = getReasoningConfig(opts.reasoning, 'openai');
           reasoningOpts.reasoning_effort = openaiConfig.reasoningEffort;
         }
@@ -823,14 +841,14 @@ export class Chat {
     content: string;
     usage: TokenUsage;
   }> {
-    if (provider === 'openai') {
+    if (provider === 'openai' || provider === 'local') {
       const tools = toolDefs.map((t) => ({
         type: 'function' as const,
         function: { name: t.name, description: t.description, parameters: t.parameters },
       }));
 
       const reasoningOpts: Record<string, unknown> = {};
-      if (opts.reasoning && supportsReasoning(model)) {
+      if (provider === 'openai' && opts.reasoning && supportsReasoning(model)) {
         const openaiConfig = getReasoningConfig(opts.reasoning, 'openai');
         reasoningOpts.reasoning_effort = openaiConfig.reasoningEffort;
       }
@@ -1003,8 +1021,8 @@ export class Chat {
     // Use the shared makeOpenAIStrict helper from the OpenAI provider
     // to transform schemas for strict structured output mode
 
-    if (provider === 'openai') {
-      // OpenAI strict structured output has specific requirements
+    if (provider === 'openai' || provider === 'local') {
+      // OpenAI-compatible strict structured output
       const openaiSchema = makeOpenAIStrict(jsonSchema as Record<string, unknown>);
       const result = await (client as OpenAIClient).chatStructured(
         messages as any,
@@ -1247,6 +1265,7 @@ export class Chat {
       usage.totalTokens = usage.inputTokens + usage.outputTokens;
       usage.cachedTokens = (u.cache_read_input_tokens as number) ?? 0;
     } else {
+      // openai, xai, local — all use the OpenAI usage format
       usage.inputTokens = (u.prompt_tokens as number) ?? 0;
       usage.outputTokens = (u.completion_tokens as number) ?? 0;
       usage.totalTokens = (u.total_tokens as number) ?? 0;
@@ -1303,6 +1322,15 @@ export class Chat {
    */
   private _resolveProvider(override?: ProviderId): ProviderId {
     if (override) {
+      if (override === 'local') {
+        const hasBaseUrl = !!(this._localBaseUrl || getBaseUrl('local'));
+        if (!hasBaseUrl) {
+          throw new Error(
+            'Provider "local" requires localBaseUrl in ChatConfig or LOCAL_BASE_URL env var',
+          );
+        }
+        return 'local';
+      }
       if (!isProviderActive(override)) {
         throw new Error(`Provider ${override} is not configured (missing API key)`);
       }
@@ -1310,21 +1338,28 @@ export class Chat {
     }
 
     const detected = detectProviderByModel(this._model);
-    if (!detected) {
-      throw new Error(`Could not detect provider for model: ${this._model}`);
+    if (detected) {
+      if (!isProviderActive(detected)) {
+        throw new Error(`Provider ${detected} is not configured (missing API key)`);
+      }
+      return detected;
     }
 
-    if (!isProviderActive(detected)) {
-      throw new Error(`Provider ${detected} is not configured (missing API key)`);
+    // Unknown model name: fall back to local if a base URL is configured.
+    const hasLocalBaseUrl = !!(this._localBaseUrl || getBaseUrl('local'));
+    if (hasLocalBaseUrl) {
+      return 'local';
     }
 
-    return detected;
+    throw new Error(`Could not detect provider for model: ${this._model}`);
   }
 
   /**
    * Get or create cached client for provider.
    */
-  private _getClient(provider: ProviderId): OpenAIClient | AnthropicClient | XAIClient {
+  private _getClient(
+    provider: ProviderId,
+  ): OpenAIClient | AnthropicClient | XAIClient | LocalClient {
     if (provider === 'openai') {
       if (!this._clients.openai) {
         this._clients.openai = createOpenAIClient({ apiKey: getApiKey('openai') });
@@ -1344,6 +1379,15 @@ export class Chat {
         this._clients.xai = createXAIClient({ apiKey: getApiKey('xai') });
       }
       return this._clients.xai;
+    }
+
+    if (provider === 'local') {
+      if (!this._clients.local) {
+        const baseUrl = this._localBaseUrl ?? getBaseUrl('local');
+        const apiKey = this._localApiKey ?? getApiKey('local');
+        this._clients.local = createLocalClient({ baseUrl, apiKey, timeout: this._localTimeout });
+      }
+      return this._clients.local;
     }
 
     throw new Error(`Unknown provider: ${provider}`);
@@ -1463,7 +1507,7 @@ export class Chat {
     | { type: 'tool_calls'; calls: ToolCall[]; usage: TokenUsage }
     | { type: 'content'; content: string; usage: TokenUsage }
   > {
-    if (provider === 'openai') {
+    if (provider === 'openai' || provider === 'local') {
       const tools = toolDefs.map((t) => ({
         type: 'function' as const,
         function: {
