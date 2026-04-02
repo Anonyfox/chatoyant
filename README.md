@@ -9,7 +9,7 @@
   <img src="https://raw.githubusercontent.com/Anonyfox/chatoyant/main/assets/chatoyant-logo.png" alt="Chatoyant Logo" width="400" />
 </div>
 
-Unified TypeScript SDK for LLM providers (OpenAI, Anthropic, xAI, and any local OpenAI-compatible server) with streaming, structured outputs, and zero dependencies.
+Unified TypeScript SDK for LLM providers (OpenAI, Anthropic, xAI, OpenRouter, and any local OpenAI-compatible server) with streaming, structured outputs, and zero dependencies.
 
 > _chatoyant_ /ʃəˈtɔɪənt/ — having a changeable lustre, like a cat's eye in the dark
 
@@ -34,7 +34,15 @@ import * as tokens from "chatoyant/tokens";
 
 ## Quick Start
 
-The unified API works across OpenAI, Anthropic, xAI, and local models. Set your API key via environment variable (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `XAI_API_KEY`). The provider is auto-detected from the model name, or defaults to OpenAI when using presets. For local models, set `LOCAL_BASE_URL` instead — see [Local Models](#local-models) below.
+The unified API works across OpenAI, Anthropic, xAI, OpenRouter, and local models. Provider is auto-detected from the model name — no config needed beyond setting the right API key. Defaults to OpenAI when using presets.
+
+| Provider | Env var | Detection |
+|---|---|---|
+| OpenAI | `OPENAI_API_KEY` | `gpt-*`, `o1-*`, `o3-*`, `chatgpt-*` |
+| Anthropic | `ANTHROPIC_API_KEY` | `claude-*` |
+| xAI | `XAI_API_KEY` | `grok-*` |
+| OpenRouter | `OPENROUTER_API_KEY` | `org/model` (any slash notation) |
+| Local | `LOCAL_BASE_URL` | any other name → fallback |
 
 ```typescript
 import { genText, genData, genStream, Schema } from "chatoyant";
@@ -296,6 +304,47 @@ calculateVideoCost({ model: "grok-imagine-video", durationSeconds: 10 }); // $0.
 
 ---
 
+## OpenRouter
+
+Access hundreds of models (OpenAI, Anthropic, Meta, Mistral, Google, and more) through a single API key. OpenRouter uses `org/model` slash notation — chatoyant auto-detects this and routes to OpenRouter automatically.
+
+> **API Key:** Set `OPENROUTER_API_KEY` in your environment.
+
+```typescript
+import { genText, Chat } from "chatoyant";
+
+// Auto-detected: slash notation → OpenRouter
+const text = await genText("Hello!", { model: "anthropic/claude-opus-4" });
+const text2 = await genText("Hello!", { model: "meta-llama/llama-3.1-8b-instruct" });
+const text3 = await genText("Hello!", { model: "google/gemini-pro" });
+
+// Force any model through OpenRouter explicitly
+const chat = new Chat({
+  model: "gpt-4o",
+  defaults: { provider: "openrouter" },
+});
+```
+
+**Detection rules:**
+- `anthropic/claude-opus-4` → OpenRouter *(not the native Anthropic API)*
+- `openai/gpt-4o` → OpenRouter *(not the native OpenAI API)*
+- `claude-opus-4` *(no slash)* → Anthropic native
+
+**Direct client:**
+
+```typescript
+import { createOpenRouterClient } from "chatoyant/providers/openrouter";
+
+const client = createOpenRouterClient({
+  apiKey: process.env.OPENROUTER_API_KEY!,
+  defaultModel: "anthropic/claude-opus-4",
+});
+
+const text = await client.chatSimple([{ role: "user", content: "Hello!" }]);
+```
+
+---
+
 ## Local Models
 
 Chatoyant supports any server that speaks the OpenAI-compatible chat API — [Ollama](https://ollama.com), [LM Studio](https://lmstudio.ai), [llama.cpp](https://github.com/ggerganov/llama.cpp), [vLLM](https://github.com/vllm-project/vllm), [LocalAI](https://localai.io), and [oMLX](https://omlx.ai) (great for running models natively on Apple Silicon via MLX).
@@ -309,7 +358,7 @@ export LOCAL_BASE_URL=http://127.0.0.1:11434/v1   # Ollama default
 export LOCAL_API_KEY=your-key                       # optional, defaults to "local"
 ```
 
-Any model name that chatoyant doesn't recognise as OpenAI / Anthropic / xAI is automatically routed to the local server:
+Any model name that doesn't match a known provider signature (and doesn't contain `/`) is automatically routed to the local server:
 
 ```typescript
 import { genText, genStream, Chat, createTool, Schema } from "chatoyant";

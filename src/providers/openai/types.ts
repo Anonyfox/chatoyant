@@ -334,6 +334,7 @@ export interface ToolCallDelta {
 export interface ChunkDelta {
   role?: 'assistant';
   content?: string;
+  reasoning_content?: string;
   tool_calls?: ToolCallDelta[];
   refusal?: string;
 }

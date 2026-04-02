@@ -26,8 +26,8 @@ describe('Options', () => {
       assert.equal(DEFAULT_RETRIES, 3);
     });
 
-    it('DEFAULT_MAX_TOOL_ITERATIONS should be 5', () => {
-      assert.equal(DEFAULT_MAX_TOOL_ITERATIONS, 5);
+    it('DEFAULT_MAX_TOOL_ITERATIONS should be 50', () => {
+      assert.equal(DEFAULT_MAX_TOOL_ITERATIONS, 50);
     });
 
     it('DEFAULT_TOOL_TIMEOUT should be 10 seconds', () => {

@@ -13,6 +13,7 @@ import {
   detectProviderByModel,
   getApiKey,
   getBaseUrl,
+  getOpenRouterApiKey,
   isProviderActive,
 } from '../providers/detection.js';
 import { createLocalClient, type LocalClient } from '../providers/local/client.js';
@@ -21,6 +22,7 @@ import {
   makeOpenAIStrict,
   type OpenAIClient,
 } from '../providers/openai/index.js';
+import { createOpenRouterClient, type OpenRouterClient } from '../providers/openrouter/client.js';
 import type { ProviderId } from '../providers/types.js';
 import { createXAIClient, type XAIClient } from '../providers/xai/index.js';
 import { Schema, type SchemaInstance } from '../schema/index.js';
@@ -118,6 +120,8 @@ export interface ChatJSON {
 export interface GenerateResult {
   /** Generated content */
   content: string;
+  /** Reasoning/thinking content (may be empty for non-reasoning models) */
+  reasoningContent: string;
   /** Detailed token usage breakdown */
   usage: TokenUsage;
   /** Timing information */
@@ -140,6 +144,8 @@ export interface GenerateResult {
 export interface StreamDelta {
   /** Content chunk */
   content: string;
+  /** Reasoning/thinking chunk (empty for non-reasoning models) */
+  reasoningContent: string;
   /** Whether this is the final chunk */
   done: boolean;
 }
@@ -194,6 +200,7 @@ export class Chat {
     anthropic?: AnthropicClient;
     xai?: XAIClient;
     local?: LocalClient;
+    openrouter?: OpenRouterClient;
   } = {};
 
   /** Local provider base URL (from config or env fallback at client-creation time) */
@@ -422,13 +429,19 @@ export class Chat {
 
     const startTime = Date.now();
 
-    if (provider === 'openai' || provider === 'local') {
+    if (provider === 'openai' || provider === 'local' || provider === 'openrouter') {
       // Build reasoning options for OpenAI (skipped for local — local models
       // don't use the reasoning_effort parameter)
       const reasoningOpts: Record<string, unknown> = {};
       if (provider === 'openai' && opts.reasoning && supportsReasoning(modelToUse)) {
         const openaiConfig = getReasoningConfig(opts.reasoning, 'openai');
         reasoningOpts.reasoning_effort = openaiConfig.reasoningEffort;
+      }
+
+      // Local provider: pass thinking_budget for models that support it (e.g. Qwen3.5 via oMLX)
+      const localOpts: Record<string, unknown> = {};
+      if (provider === 'local' && opts.thinkingBudget) {
+        localOpts.thinking_budget = opts.thinkingBudget;
       }
 
       const response = await (client as OpenAIClient).chat(messages as any, {
@@ -442,6 +455,7 @@ export class Chat {
           frequency_penalty: opts.frequencyPenalty,
           presence_penalty: opts.presencePenalty,
           ...reasoningOpts,
+          ...localOpts,
           ...opts.extra,
         },
       });
@@ -556,6 +570,7 @@ export class Chat {
 
     const result: GenerateResult = {
       content,
+      reasoningContent: '',
       usage,
       timing,
       cost,
@@ -604,17 +619,23 @@ export class Chat {
 
     const messages = this._formatMessages(provider);
     let accumulated = '';
+    let accumulatedReasoning = '';
     let lastUsage: Record<string, unknown> | null = null;
 
     const temperature =
       opts.temperature ?? (opts.creativity ? resolveCreativity(opts.creativity) : undefined);
 
     try {
-      if (provider === 'openai' || provider === 'local') {
+      if (provider === 'openai' || provider === 'local' || provider === 'openrouter') {
         const reasoningOpts: Record<string, unknown> = {};
         if (provider === 'openai' && opts.reasoning && supportsReasoning(modelToUse)) {
           const openaiConfig = getReasoningConfig(opts.reasoning, 'openai');
           reasoningOpts.reasoning_effort = openaiConfig.reasoningEffort;
+        }
+
+        const localOpts: Record<string, unknown> = {};
+        if (provider === 'local' && opts.thinkingBudget) {
+          localOpts.thinking_budget = opts.thinkingBudget;
         }
 
         const stream = (client as OpenAIClient).streamContent(messages as any, {
@@ -626,12 +647,14 @@ export class Chat {
             top_p: opts.topP,
             stop: opts.stop,
             ...reasoningOpts,
+            ...localOpts,
             ...opts.extra,
           },
         });
 
         for await (const delta of stream) {
           accumulated += delta.content;
+          accumulatedReasoning += delta.reasoningContent ?? '';
           if (delta.usage) lastUsage = delta.usage as unknown as Record<string, unknown>;
           opts.onDelta?.(delta.content);
           yield delta.content;
@@ -694,7 +717,15 @@ export class Chat {
 
       this._messages.push(Message.assistant(accumulated));
       const usage = this._extractUsage(lastUsage, provider);
-      this._buildAndStoreResult(accumulated, usage, startTime, provider, modelToUse, 1);
+      this._buildAndStoreResult(
+        accumulated,
+        usage,
+        startTime,
+        provider,
+        modelToUse,
+        1,
+        accumulatedReasoning,
+      );
       opts.onComplete?.(accumulated);
     } catch (error) {
       opts.onError?.(error instanceof Error ? error : new Error(String(error)));
@@ -737,6 +768,7 @@ export class Chat {
     const toolDefs = this._buildToolDefinitions(provider);
     let localMessages = this._formatMessages(provider);
     let iteration = 0;
+    let totalReasoningContent = '';
 
     try {
       while (iteration < maxIterations) {
@@ -771,6 +803,7 @@ export class Chat {
 
         const result = await resultPromise;
         this._addUsage(totalUsage, result.usage);
+        totalReasoningContent += result.reasoningContent ?? '';
 
         if (!result.hasToolCalls) {
           this._messages.push(Message.assistant(result.content));
@@ -781,6 +814,7 @@ export class Chat {
             provider,
             modelToUse,
             iteration,
+            totalReasoningContent,
           );
           opts.onComplete?.(result.content);
           return;
@@ -811,6 +845,7 @@ export class Chat {
         provider,
         modelToUse,
         iteration + 1,
+        totalReasoningContent,
       );
 
       opts.onDelta?.(final.content);
@@ -839,9 +874,10 @@ export class Chat {
     hasToolCalls: boolean;
     toolCalls: ToolCall[];
     content: string;
+    reasoningContent: string;
     usage: TokenUsage;
   }> {
-    if (provider === 'openai' || provider === 'local') {
+    if (provider === 'openai' || provider === 'local' || provider === 'openrouter') {
       const tools = toolDefs.map((t) => ({
         type: 'function' as const,
         function: { name: t.name, description: t.description, parameters: t.parameters },
@@ -851,6 +887,11 @@ export class Chat {
       if (provider === 'openai' && opts.reasoning && supportsReasoning(model)) {
         const openaiConfig = getReasoningConfig(opts.reasoning, 'openai');
         reasoningOpts.reasoning_effort = openaiConfig.reasoningEffort;
+      }
+
+      const localOpts: Record<string, unknown> = {};
+      if (provider === 'local' && opts.thinkingBudget) {
+        localOpts.thinking_budget = opts.thinkingBudget;
       }
 
       const result = await (client as OpenAIClient).streamAccumulate(
@@ -865,6 +906,7 @@ export class Chat {
             top_p: opts.topP,
             stop: opts.stop,
             ...reasoningOpts,
+            ...localOpts,
             ...opts.extra,
           },
         },
@@ -882,6 +924,7 @@ export class Chat {
         hasToolCalls: toolCalls.length > 0,
         toolCalls,
         content: result.content,
+        reasoningContent: result.reasoningContent ?? '',
         usage,
       };
     }
@@ -935,6 +978,7 @@ export class Chat {
         hasToolCalls: toolCalls.length > 0,
         toolCalls,
         content: result.content,
+        reasoningContent: '',
         usage,
       };
     }
@@ -973,6 +1017,7 @@ export class Chat {
         hasToolCalls: toolCalls.length > 0,
         toolCalls,
         content: result.content,
+        reasoningContent: '',
         usage,
       };
     }
@@ -1021,7 +1066,7 @@ export class Chat {
     // Use the shared makeOpenAIStrict helper from the OpenAI provider
     // to transform schemas for strict structured output mode
 
-    if (provider === 'openai' || provider === 'local') {
+    if (provider === 'openai' || provider === 'local' || provider === 'openrouter') {
       // OpenAI-compatible strict structured output
       const openaiSchema = makeOpenAIStrict(jsonSchema as Record<string, unknown>);
       const result = await (client as OpenAIClient).chatStructured(
@@ -1290,6 +1335,7 @@ export class Chat {
     provider: ProviderId,
     model: string,
     iterations: number,
+    reasoningContent?: string,
   ): GenerateResult {
     const timing: TimingInfo = { latencyMs: Date.now() - startTime };
     const cost = createEmptyCost();
@@ -1305,6 +1351,7 @@ export class Chat {
     }
     const result: GenerateResult = {
       content,
+      reasoningContent: reasoningContent ?? '',
       usage,
       timing,
       cost,
@@ -1332,7 +1379,7 @@ export class Chat {
         return 'local';
       }
       if (!isProviderActive(override)) {
-        throw new Error(`Provider ${override} is not configured (missing API key)`);
+        throw new Error(`Provider "${override}" is not configured (missing API key)`);
       }
       return override;
     }
@@ -1340,12 +1387,13 @@ export class Chat {
     const detected = detectProviderByModel(this._model);
     if (detected) {
       if (!isProviderActive(detected)) {
-        throw new Error(`Provider ${detected} is not configured (missing API key)`);
+        throw new Error(`Provider "${detected}" is not configured (missing API key)`);
       }
       return detected;
     }
 
-    // Unknown model name: fall back to local if a base URL is configured.
+    // Unknown model name (no slash, no known signature):
+    // fall back to local if a base URL is configured.
     const hasLocalBaseUrl = !!(this._localBaseUrl || getBaseUrl('local'));
     if (hasLocalBaseUrl) {
       return 'local';
@@ -1359,7 +1407,7 @@ export class Chat {
    */
   private _getClient(
     provider: ProviderId,
-  ): OpenAIClient | AnthropicClient | XAIClient | LocalClient {
+  ): OpenAIClient | AnthropicClient | XAIClient | LocalClient | OpenRouterClient {
     if (provider === 'openai') {
       if (!this._clients.openai) {
         this._clients.openai = createOpenAIClient({ apiKey: getApiKey('openai') });
@@ -1388,6 +1436,13 @@ export class Chat {
         this._clients.local = createLocalClient({ baseUrl, apiKey, timeout: this._localTimeout });
       }
       return this._clients.local;
+    }
+
+    if (provider === 'openrouter') {
+      if (!this._clients.openrouter) {
+        this._clients.openrouter = createOpenRouterClient({ apiKey: getOpenRouterApiKey() });
+      }
+      return this._clients.openrouter;
     }
 
     throw new Error(`Unknown provider: ${provider}`);
@@ -1507,7 +1562,7 @@ export class Chat {
     | { type: 'tool_calls'; calls: ToolCall[]; usage: TokenUsage }
     | { type: 'content'; content: string; usage: TokenUsage }
   > {
-    if (provider === 'openai' || provider === 'local') {
+    if (provider === 'openai' || provider === 'local' || provider === 'openrouter') {
       const tools = toolDefs.map((t) => ({
         type: 'function' as const,
         function: {
@@ -1517,9 +1572,15 @@ export class Chat {
         },
       }));
 
+      const localOpts: Record<string, unknown> = {};
+      if (provider === 'local' && opts.thinkingBudget) {
+        localOpts.thinking_budget = opts.thinkingBudget;
+      }
+
       const result = await (client as OpenAIClient).chatWithTools(messages as any, tools as any, {
         model: this._model,
         timeout: opts.timeout ?? DEFAULT_TIMEOUT,
+        requestOptions: localOpts,
       });
       const usage = this._extractUsage(result.usage, provider);
 

@@ -60,6 +60,15 @@ export const PROVIDERS: ProviderRegistry = {
     // or from localBaseUrl option passed to Chat / genText.
     baseUrl: '',
   },
+  openrouter: {
+    name: 'OpenRouter',
+    // No signatures — detected via org/model slash notation in detection.ts.
+    // e.g. "anthropic/claude-opus-4", "meta-llama/llama-3.1-8b"
+    signatures: [],
+    envKey: 'OPENROUTER_API_KEY',
+    envKeyLegacy: 'API_KEY_OPENROUTER',
+    baseUrl: 'https://openrouter.ai/api/v1',
+  },
 } as const;
 
 /**

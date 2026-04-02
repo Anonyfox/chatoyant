@@ -8,12 +8,13 @@ import { PROVIDER_IDS, PROVIDERS } from './registry.js';
 
 describe('providers/registry', () => {
   describe('PROVIDERS', () => {
-    it('should contain all four providers', () => {
+    it('should contain all five providers', () => {
       assert.ok('openai' in PROVIDERS);
       assert.ok('anthropic' in PROVIDERS);
       assert.ok('xai' in PROVIDERS);
       assert.ok('local' in PROVIDERS);
-      assert.equal(Object.keys(PROVIDERS).length, 4);
+      assert.ok('openrouter' in PROVIDERS);
+      assert.equal(Object.keys(PROVIDERS).length, 5);
     });
 
     describe('openai', () => {
@@ -70,7 +71,13 @@ describe('providers/registry', () => {
     it('should be readonly', () => {
       // TypeScript prevents modification at compile time
       // Runtime check that the object structure is correct
-      assert.deepEqual(Object.keys(PROVIDERS).sort(), ['anthropic', 'local', 'openai', 'xai']);
+      assert.deepEqual(Object.keys(PROVIDERS).sort(), [
+        'anthropic',
+        'local',
+        'openai',
+        'openrouter',
+        'xai',
+      ]);
     });
 
     it('should have no overlapping signatures between providers', () => {
@@ -83,9 +90,10 @@ describe('providers/registry', () => {
       );
     });
 
-    it('should have at least one signature per non-local provider', () => {
+    it('should have at least one signature per native cloud provider', () => {
       for (const [id, provider] of Object.entries(PROVIDERS)) {
-        if (id === 'local') continue; // local has no fixed model signatures by design
+        // local and openrouter have no fixed signatures by design (different detection)
+        if (id === 'local' || id === 'openrouter') continue;
         assert.ok(
           provider.signatures.length >= 1,
           `${provider.name} should have at least one signature`,
@@ -95,6 +103,10 @@ describe('providers/registry', () => {
 
     it('local provider should have no signatures (relies on fallback detection)', () => {
       assert.equal(PROVIDERS.local.signatures.length, 0);
+    });
+
+    it('openrouter provider should have no signatures (detected via slash notation)', () => {
+      assert.equal(PROVIDERS.openrouter.signatures.length, 0);
     });
 
     it('should have unique env keys for each provider', () => {
@@ -118,11 +130,12 @@ describe('providers/registry', () => {
 
   describe('PROVIDER_IDS', () => {
     it('should contain all provider IDs', () => {
-      assert.equal(PROVIDER_IDS.length, 4);
+      assert.equal(PROVIDER_IDS.length, 5);
       assert.ok(PROVIDER_IDS.includes('openai'));
       assert.ok(PROVIDER_IDS.includes('anthropic'));
       assert.ok(PROVIDER_IDS.includes('xai'));
       assert.ok(PROVIDER_IDS.includes('local'));
+      assert.ok(PROVIDER_IDS.includes('openrouter'));
     });
 
     it('should match PROVIDERS keys', () => {
@@ -136,7 +149,7 @@ describe('providers/registry', () => {
       for (const id of PROVIDER_IDS) {
         collected.push(id);
       }
-      assert.equal(collected.length, 4);
+      assert.equal(collected.length, 5);
     });
   });
 });

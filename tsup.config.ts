@@ -10,6 +10,7 @@ export default defineConfig({
     'providers/anthropic': 'src/providers/anthropic/index.ts',
     'providers/xai': 'src/providers/xai/index.ts',
     'providers/local': 'src/providers/local/index.ts',
+    'providers/openrouter': 'src/providers/openrouter/index.ts',
   },
   format: ['esm', 'cjs'],
   dts: true,

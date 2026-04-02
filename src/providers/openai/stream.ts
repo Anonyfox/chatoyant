@@ -101,6 +101,8 @@ export async function* parseSSEStream<T>(response: Response): AsyncGenerator<T, 
 export interface StreamAccumulator {
   /** Accumulated content text */
   content: string;
+  /** Accumulated reasoning/thinking content */
+  reasoningContent: string;
   /** Accumulated tool calls */
   toolCalls: Map<number, { id: string; name: string; arguments: string }>;
   /** Finish reason (set when stream ends) */
@@ -119,6 +121,7 @@ export interface StreamAccumulator {
 export function createAccumulator(): StreamAccumulator {
   return {
     content: '',
+    reasoningContent: '',
     toolCalls: new Map(),
     finishReason: null,
     usage: null,
@@ -143,7 +146,12 @@ export function updateAccumulator(acc: StreamAccumulator, chunk: ChatCompletionC
       acc.finishReason = choice.finish_reason;
     }
 
-    // Accumulate content
+    // Accumulate reasoning/thinking content separately
+    if (choice.delta.reasoning_content) {
+      acc.reasoningContent += choice.delta.reasoning_content;
+    }
+
+    // Accumulate content (only non-reasoning text)
     if (choice.delta.content) {
       acc.content += choice.delta.content;
     }

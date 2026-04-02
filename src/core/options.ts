@@ -142,6 +142,16 @@ export interface GenerateOptions extends CommonOptions {
   cache?: boolean;
 
   /**
+   * Thinking budget in tokens for local models that support it (e.g. Qwen3.5 via oMLX).
+   * When set, the model will produce reasoning/thinking content before the final answer.
+   * Thinking content is streamed separately via `reasoningContent` and does not mix
+   * with the visible response.
+   *
+   * Only applies to local provider. Ignored for cloud providers.
+   */
+  thinkingBudget?: number;
+
+  /**
    * Arbitrary additional options passed to the provider.
    * Use for bleeding-edge features not yet in the typed interface.
    */
@@ -300,7 +310,7 @@ export const DEFAULT_RETRIES = 3;
 /**
  * Default max tool iterations.
  */
-export const DEFAULT_MAX_TOOL_ITERATIONS = 5;
+export const DEFAULT_MAX_TOOL_ITERATIONS = 50;
 
 /**
  * Default tool timeout.

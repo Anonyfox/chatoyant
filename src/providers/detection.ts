@@ -114,25 +114,38 @@ export function activeProviders(): ProviderId[] {
 /**
  * Detect provider from a model name using signature matching.
  *
- * Supports multiple signatures per provider to handle model naming variations:
- * - OpenAI: gpt-*, o1-*, o3-*, chatgpt-*
- * - Anthropic: claude-*
- * - xAI: grok-*
+ * Detection priority (first match wins):
+ * 1. **OpenRouter**: model contains `/` — OpenRouter uses org/model notation
+ *    (e.g. "anthropic/claude-opus-4", "meta-llama/llama-3.1-8b"). This check
+ *    runs BEFORE signature matching so that e.g. "anthropic/claude-opus-4"
+ *    routes to OpenRouter, not the native Anthropic API.
+ * 2. **Native providers**: model name matches a known signature
+ *    - OpenAI: gpt-*, o1-*, o3-*, chatgpt-*
+ *    - Anthropic: claude-*
+ *    - xAI: grok-*
+ * 3. **No match**: returns null — caller falls back to local if LOCAL_BASE_URL is set.
  *
- * @param model - Model identifier (e.g., "gpt-4", "o1-preview", "claude-3-opus", "grok-2")
+ * @param model - Model identifier
  * @returns Provider ID if detected, null otherwise
  *
  * @example
  * ```typescript
- * detectProviderByModel('gpt-4-turbo');     // 'openai'
- * detectProviderByModel('o1-preview');      // 'openai'
- * detectProviderByModel('o3-mini');         // 'openai'
- * detectProviderByModel('claude-3-opus');   // 'anthropic'
- * detectProviderByModel('grok-2');          // 'xai'
- * detectProviderByModel('unknown-model');   // null
+ * detectProviderByModel('gpt-4-turbo');              // 'openai'
+ * detectProviderByModel('claude-3-opus');            // 'anthropic'
+ * detectProviderByModel('grok-2');                   // 'xai'
+ * detectProviderByModel('anthropic/claude-opus-4');  // 'openrouter' (slash notation)
+ * detectProviderByModel('openai/gpt-4o');            // 'openrouter' (slash notation)
+ * detectProviderByModel('meta-llama/llama-3.1-8b'); // 'openrouter' (slash notation)
+ * detectProviderByModel('Qwen3-4B-MLX');             // null (unknown → local fallback)
  * ```
  */
 export function detectProviderByModel(model: string): ProviderId | null {
+  // OpenRouter uses org/model slash notation. Check BEFORE signature matching
+  // so "anthropic/claude-opus-4" → openrouter, not anthropic.
+  if (model.includes('/')) {
+    return 'openrouter';
+  }
+
   const lower = model.toLowerCase();
   for (const id of PROVIDER_IDS) {
     for (const signature of PROVIDERS[id].signatures) {
@@ -205,6 +218,17 @@ export function getBaseUrl(providerId: ProviderId): string {
 }
 
 /**
+ * Get the API key for OpenRouter from environment.
+ * Exported for use in client creation.
+ */
+export function getOpenRouterApiKey(): string {
+  const key =
+    process.env[PROVIDERS.openrouter.envKey] ?? process.env[PROVIDERS.openrouter.envKeyLegacy!];
+  if (!key) throw ProviderError.missingApiKey('openrouter');
+  return key;
+}
+
+/**
  * Auto-detect provider from model and assert it's active.
  * Convenience function combining detection and assertion.
  *
@@ -224,7 +248,8 @@ export function resolveProvider(model: string): ProviderId {
     assertProviderActive(providerId);
     return providerId;
   }
-  // Unknown model: fall back to local if LOCAL_BASE_URL is configured.
+  // Unknown model name (no slash, no known signature):
+  // fall back to local if LOCAL_BASE_URL is configured.
   if (isProviderActive('local')) {
     return 'local';
   }

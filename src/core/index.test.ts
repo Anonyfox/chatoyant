@@ -96,7 +96,7 @@ describe('Core module exports', () => {
     it('should export DEFAULT_MAX_TOOL_ITERATIONS', async () => {
       const { DEFAULT_MAX_TOOL_ITERATIONS } = await import('./index.js');
       assert.equal(typeof DEFAULT_MAX_TOOL_ITERATIONS, 'number');
-      assert.equal(DEFAULT_MAX_TOOL_ITERATIONS, 5);
+      assert.equal(DEFAULT_MAX_TOOL_ITERATIONS, 50);
     });
 
     it('should export DEFAULT_TOOL_TIMEOUT', async () => {

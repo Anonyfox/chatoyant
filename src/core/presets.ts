@@ -28,7 +28,8 @@ export const MODEL_PRESETS: Record<ModelPreset, Record<ProviderId, string>> = {
     openai: 'gpt-4o-mini',
     anthropic: 'claude-haiku-4-5',
     xai: 'grok-4-1-fast-non-reasoning',
-    local: '', // presets not supported for local — specify model explicitly
+    local: '', // presets not supported for local/openrouter — specify model explicitly
+    openrouter: '',
   },
   /** Lowest cost per token */
   cheap: {
@@ -36,6 +37,7 @@ export const MODEL_PRESETS: Record<ModelPreset, Record<ProviderId, string>> = {
     anthropic: 'claude-haiku-4-5',
     xai: 'grok-4-1-fast-non-reasoning',
     local: '',
+    openrouter: '',
   },
   /** Highest quality output */
   best: {
@@ -43,6 +45,7 @@ export const MODEL_PRESETS: Record<ModelPreset, Record<ProviderId, string>> = {
     anthropic: 'claude-opus-4-6',
     xai: 'grok-4.20-0309-reasoning',
     local: '',
+    openrouter: '',
   },
   /** Good balance of quality/speed/cost */
   balanced: {
@@ -50,6 +53,7 @@ export const MODEL_PRESETS: Record<ModelPreset, Record<ProviderId, string>> = {
     anthropic: 'claude-sonnet-4-6',
     xai: 'grok-4-1-fast-reasoning',
     local: '',
+    openrouter: '',
   },
   /** Best reasoning capabilities */
   reasoning: {
@@ -57,6 +61,7 @@ export const MODEL_PRESETS: Record<ModelPreset, Record<ProviderId, string>> = {
     anthropic: 'claude-opus-4-6',
     xai: 'grok-4.20-0309-reasoning',
     local: '',
+    openrouter: '',
   },
 };
 
@@ -116,6 +121,10 @@ export interface ReasoningConfig {
   local: {
     reasoningEffort: 'none' | 'minimal' | 'low' | 'medium' | 'high';
   };
+  /** OpenRouter: reasoning depends on the underlying model — passed through as-is. */
+  openrouter: {
+    reasoningEffort: 'none' | 'minimal' | 'low' | 'medium' | 'high';
+  };
 }
 
 /**
@@ -127,6 +136,7 @@ export const REASONING_PRESETS: Record<ReasoningLevel, ReasoningConfig> = {
     anthropic: {}, // No thinking block
     xai: { preferReasoningModel: false },
     local: { reasoningEffort: 'none' },
+    openrouter: { reasoningEffort: 'none' },
   },
   low: {
     openai: { reasoningEffort: 'low' },
@@ -135,6 +145,7 @@ export const REASONING_PRESETS: Record<ReasoningLevel, ReasoningConfig> = {
     },
     xai: { preferReasoningModel: false },
     local: { reasoningEffort: 'low' },
+    openrouter: { reasoningEffort: 'low' },
   },
   medium: {
     openai: { reasoningEffort: 'medium' },
@@ -143,6 +154,7 @@ export const REASONING_PRESETS: Record<ReasoningLevel, ReasoningConfig> = {
     },
     xai: { preferReasoningModel: true },
     local: { reasoningEffort: 'medium' },
+    openrouter: { reasoningEffort: 'medium' },
   },
   high: {
     openai: { reasoningEffort: 'high' },
@@ -151,6 +163,7 @@ export const REASONING_PRESETS: Record<ReasoningLevel, ReasoningConfig> = {
     },
     xai: { preferReasoningModel: true },
     local: { reasoningEffort: 'high' },
+    openrouter: { reasoningEffort: 'high' },
   },
 };
 
