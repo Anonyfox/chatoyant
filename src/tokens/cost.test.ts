@@ -25,6 +25,7 @@ describe('tokens/cost', () => {
       assert.equal(cost.input, 0);
       assert.equal(cost.output, 0);
       assert.equal(cost.cached, 0);
+      assert.equal(cost.cacheWrite, 0);
       assert.equal(cost.total, 0);
     });
 
@@ -37,7 +38,7 @@ describe('tokens/cost', () => {
       assert.ok(cost.input > 0);
       assert.ok(cost.output > 0);
       assert.ok(cost.total > 0);
-      assert.equal(cost.total, cost.input + cost.output + cost.cached);
+      assert.equal(cost.total, cost.input + cost.output + cost.cached + cost.cacheWrite);
     });
 
     it('should handle zero tokens', () => {
@@ -48,6 +49,7 @@ describe('tokens/cost', () => {
       });
       assert.equal(cost.input, 0);
       assert.equal(cost.output, 0);
+      assert.equal(cost.cacheWrite, 0);
       assert.equal(cost.total, 0);
     });
 
@@ -82,6 +84,7 @@ describe('tokens/cost', () => {
       assert.ok(withCache.total < withoutCache.total);
       // Cached cost should be separate
       assert.ok(withCache.cached >= 0);
+      assert.equal(withCache.cacheWrite, 0);
     });
 
     it('should not go negative with more cached than input tokens', () => {
@@ -117,7 +120,20 @@ describe('tokens/cost', () => {
       });
       assert.equal(cost.input, 5.0); // 500k * 10
       assert.equal(cost.cached, 1.0); // 500k * 2
+      assert.equal(cost.cacheWrite, 0);
       assert.equal(cost.total, 6.0);
+    });
+
+    it('should handle custom cache write pricing', () => {
+      const cost = calculateCostCustom({
+        inputTokens: 1_000_000,
+        outputTokens: 0,
+        cacheWriteTokens: 250_000,
+        pricing: { input: 10.0, output: 20.0, cacheWrite5m: 12.5 },
+      });
+      assert.equal(cost.input, 7.5);
+      assert.equal(cost.cacheWrite, 3.125);
+      assert.equal(cost.total, 10.625);
     });
   });
 
@@ -171,6 +187,7 @@ describe('tokens/cost', () => {
       assert.ok(perToken!.input > 0);
       assert.ok(perToken!.input < 0.001); // Should be much less than a penny
       assert.ok(perToken!.output > 0);
+      assert.ok(perToken!.cacheWrite >= 0);
     });
 
     it('should be 1 millionth of the pricing table value', () => {
@@ -261,6 +278,16 @@ describe('tokens/cost', () => {
       ];
       const cost = calculateBatchCost(batch, 'gpt-4o');
       assert.ok(cost.cached >= 0);
+      assert.equal(cost.cacheWrite, 0);
+    });
+
+    it('should handle cache write tokens in batch', () => {
+      const batch = [
+        { inputTokens: 1000, outputTokens: 0, cacheWriteTokens: 100 },
+        { inputTokens: 2000, outputTokens: 0, cacheWriteTokens: 200 },
+      ];
+      const cost = calculateBatchCost(batch, 'claude-sonnet-4-6');
+      assert.ok(cost.cacheWrite > 0);
     });
   });
 });

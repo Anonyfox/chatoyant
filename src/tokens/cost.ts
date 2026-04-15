@@ -22,7 +22,7 @@ import type { CostResult, ModelPricing } from './types.js';
  *   inputTokens: 1000,
  *   outputTokens: 500,
  * });
- * // { input: 0.0025, output: 0.005, cached: 0, total: 0.0075 }
+ * // { input: 0.0025, output: 0.005, cached: 0, cacheWrite: 0, total: 0.0075 }
  * ```
  */
 export function calculateCost(params: {
@@ -34,25 +34,31 @@ export function calculateCost(params: {
   outputTokens: number;
   /** Number of cached input tokens (subtracted from inputTokens for billing) */
   cachedTokens?: number;
+  /** Number of cache write input tokens billed at cache-write rates */
+  cacheWriteTokens?: number;
 }): CostResult {
-  const { model, inputTokens, outputTokens, cachedTokens = 0 } = params;
+  const { model, inputTokens, outputTokens, cachedTokens = 0, cacheWriteTokens = 0 } = params;
 
   const pricing = getPricing(model);
   if (!pricing) {
-    return { input: 0, output: 0, cached: 0, total: 0 };
+    return { input: 0, output: 0, cached: 0, cacheWrite: 0, total: 0 };
   }
 
   // Calculate costs (pricing is per 1M tokens)
-  const billableInputTokens = Math.max(0, inputTokens - cachedTokens);
+  const billableInputTokens = Math.max(0, inputTokens - cachedTokens - cacheWriteTokens);
   const inputCost = (billableInputTokens / 1_000_000) * pricing.input;
   const outputCost = (outputTokens / 1_000_000) * pricing.output;
   const cachedCost = pricing.cached ? (cachedTokens / 1_000_000) * pricing.cached : 0;
+  const cacheWriteCost = pricing.cacheWrite5m
+    ? (cacheWriteTokens / 1_000_000) * pricing.cacheWrite5m
+    : 0;
 
   return {
     input: inputCost,
     output: outputCost,
     cached: cachedCost,
-    total: inputCost + outputCost + cachedCost,
+    cacheWrite: cacheWriteCost,
+    total: inputCost + outputCost + cachedCost + cacheWriteCost,
   };
 }
 
@@ -80,21 +86,27 @@ export function calculateCostCustom(params: {
   outputTokens: number;
   /** Number of cached input tokens */
   cachedTokens?: number;
+  /** Number of cache write input tokens */
+  cacheWriteTokens?: number;
   /** Custom pricing per 1M tokens */
   pricing: ModelPricing;
 }): CostResult {
-  const { inputTokens, outputTokens, cachedTokens = 0, pricing } = params;
+  const { inputTokens, outputTokens, cachedTokens = 0, cacheWriteTokens = 0, pricing } = params;
 
-  const billableInputTokens = Math.max(0, inputTokens - cachedTokens);
+  const billableInputTokens = Math.max(0, inputTokens - cachedTokens - cacheWriteTokens);
   const inputCost = (billableInputTokens / 1_000_000) * pricing.input;
   const outputCost = (outputTokens / 1_000_000) * pricing.output;
   const cachedCost = pricing.cached ? (cachedTokens / 1_000_000) * pricing.cached : 0;
+  const cacheWriteCost = pricing.cacheWrite5m
+    ? (cacheWriteTokens / 1_000_000) * pricing.cacheWrite5m
+    : 0;
 
   return {
     input: inputCost,
     output: outputCost,
     cached: cachedCost,
-    total: inputCost + outputCost + cachedCost,
+    cacheWrite: cacheWriteCost,
+    total: inputCost + outputCost + cachedCost + cacheWriteCost,
   };
 }
 
@@ -151,7 +163,7 @@ export function estimateCost(params: {
  */
 export function getCostPerToken(
   model: string,
-): { input: number; output: number; cached: number } | undefined {
+): { input: number; output: number; cached: number; cacheWrite: number } | undefined {
   const pricing = getPricing(model);
   if (!pricing) return undefined;
 
@@ -159,6 +171,7 @@ export function getCostPerToken(
     input: pricing.input / 1_000_000,
     output: pricing.output / 1_000_000,
     cached: (pricing.cached ?? 0) / 1_000_000,
+    cacheWrite: (pricing.cacheWrite5m ?? 0) / 1_000_000,
   };
 }
 
@@ -174,17 +187,20 @@ export function calculateBatchCost(
     inputTokens: number;
     outputTokens: number;
     cachedTokens?: number;
+    cacheWriteTokens?: number;
   }>,
   model: string,
 ): CostResult {
   let inputTokens = 0;
   let outputTokens = 0;
   let cachedTokens = 0;
+  let cacheWriteTokens = 0;
 
   for (const req of requests) {
     inputTokens += req.inputTokens;
     outputTokens += req.outputTokens;
     cachedTokens += req.cachedTokens ?? 0;
+    cacheWriteTokens += req.cacheWriteTokens ?? 0;
   }
 
   return calculateCost({
@@ -192,6 +208,7 @@ export function calculateBatchCost(
     inputTokens,
     outputTokens,
     cachedTokens,
+    cacheWriteTokens,
   });
 }
 

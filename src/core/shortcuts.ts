@@ -11,6 +11,8 @@ import type { SchemaInstance } from '../schema/index.js';
 import { Chat } from './chat.js';
 import type { GenerateOptions, StreamOptions } from './options.js';
 
+const INTERNAL_ONESHOT_METADATA = { __chatoyant_internal_oneshot: true } as const;
+
 /**
  * Options for one-shot text generation.
  */
@@ -73,7 +75,7 @@ export async function genText(prompt: string, options?: GenTextOptions): Promise
     chat.system(options.system);
   }
 
-  chat.user(prompt);
+  chat.user(prompt, INTERNAL_ONESHOT_METADATA);
 
   return chat.generate(options);
 }
@@ -113,7 +115,7 @@ export async function genData<T extends SchemaInstance>(
     chat.system(options.system);
   }
 
-  chat.user(prompt);
+  chat.user(prompt, INTERNAL_ONESHOT_METADATA);
 
   return chat.generateData(schema, options);
 }
@@ -151,7 +153,7 @@ export async function* genStream(
     chat.system(options.system);
   }
 
-  chat.user(prompt);
+  chat.user(prompt, INTERNAL_ONESHOT_METADATA);
 
   yield* chat.stream(options);
 }
@@ -182,7 +184,7 @@ export async function genStreamAccumulate(
     chat.system(options.system);
   }
 
-  chat.user(prompt);
+  chat.user(prompt, INTERNAL_ONESHOT_METADATA);
 
   return chat.streamAccumulate(options);
 }

@@ -113,35 +113,149 @@ const PRICING_DATA: Record<string, ModelPricing> = {
   // ==========================================================================
 
   // Claude 4.6
-  'claude-opus-4-6': { input: 5.0, output: 25.0, cached: 0.5 },
-  'claude-sonnet-4-6': { input: 3.0, output: 15.0, cached: 0.3 },
+  'claude-opus-4-6': {
+    input: 5.0,
+    output: 25.0,
+    cached: 0.5,
+    cacheWrite5m: 6.25,
+    cacheWrite1h: 10.0,
+  },
+  'claude-sonnet-4-6': {
+    input: 3.0,
+    output: 15.0,
+    cached: 0.3,
+    cacheWrite5m: 3.75,
+    cacheWrite1h: 6.0,
+  },
 
   // Claude 4.5
-  'claude-opus-4-5-20251101': { input: 5.0, output: 25.0, cached: 0.5 },
-  'claude-opus-4-5': { input: 5.0, output: 25.0, cached: 0.5 },
-  'claude-sonnet-4-5-20250929': { input: 3.0, output: 15.0, cached: 0.3 },
-  'claude-sonnet-4-5': { input: 3.0, output: 15.0, cached: 0.3 },
-  'claude-haiku-4-5-20251001': { input: 1.0, output: 5.0, cached: 0.1 },
-  'claude-haiku-4-5': { input: 1.0, output: 5.0, cached: 0.1 },
+  'claude-opus-4-5-20251101': {
+    input: 5.0,
+    output: 25.0,
+    cached: 0.5,
+    cacheWrite5m: 6.25,
+    cacheWrite1h: 10.0,
+  },
+  'claude-opus-4-5': {
+    input: 5.0,
+    output: 25.0,
+    cached: 0.5,
+    cacheWrite5m: 6.25,
+    cacheWrite1h: 10.0,
+  },
+  'claude-sonnet-4-5-20250929': {
+    input: 3.0,
+    output: 15.0,
+    cached: 0.3,
+    cacheWrite5m: 3.75,
+    cacheWrite1h: 6.0,
+  },
+  'claude-sonnet-4-5': {
+    input: 3.0,
+    output: 15.0,
+    cached: 0.3,
+    cacheWrite5m: 3.75,
+    cacheWrite1h: 6.0,
+  },
+  'claude-haiku-4-5-20251001': {
+    input: 1.0,
+    output: 5.0,
+    cached: 0.1,
+    cacheWrite5m: 1.25,
+    cacheWrite1h: 2.0,
+  },
+  'claude-haiku-4-5': {
+    input: 1.0,
+    output: 5.0,
+    cached: 0.1,
+    cacheWrite5m: 1.25,
+    cacheWrite1h: 2.0,
+  },
 
   // Claude 4.1
-  'claude-opus-4-1-20250805': { input: 15.0, output: 75.0, cached: 1.5 },
-  'claude-opus-4-1': { input: 15.0, output: 75.0, cached: 1.5 },
+  'claude-opus-4-1-20250805': {
+    input: 15.0,
+    output: 75.0,
+    cached: 1.5,
+    cacheWrite5m: 18.75,
+    cacheWrite1h: 30.0,
+  },
+  'claude-opus-4-1': {
+    input: 15.0,
+    output: 75.0,
+    cached: 1.5,
+    cacheWrite5m: 18.75,
+    cacheWrite1h: 30.0,
+  },
 
   // Claude 4
-  'claude-sonnet-4-20250514': { input: 3.0, output: 15.0, cached: 0.3 },
-  'claude-sonnet-4-0': { input: 3.0, output: 15.0, cached: 0.3 },
-  'claude-opus-4-20250514': { input: 15.0, output: 75.0, cached: 1.5 },
-  'claude-opus-4-0': { input: 15.0, output: 75.0, cached: 1.5 },
+  'claude-sonnet-4-20250514': {
+    input: 3.0,
+    output: 15.0,
+    cached: 0.3,
+    cacheWrite5m: 3.75,
+    cacheWrite1h: 6.0,
+  },
+  'claude-sonnet-4-0': {
+    input: 3.0,
+    output: 15.0,
+    cached: 0.3,
+    cacheWrite5m: 3.75,
+    cacheWrite1h: 6.0,
+  },
+  'claude-opus-4-20250514': {
+    input: 15.0,
+    output: 75.0,
+    cached: 1.5,
+    cacheWrite5m: 18.75,
+    cacheWrite1h: 30.0,
+  },
+  'claude-opus-4-0': {
+    input: 15.0,
+    output: 75.0,
+    cached: 1.5,
+    cacheWrite5m: 18.75,
+    cacheWrite1h: 30.0,
+  },
 
   // Claude 3.5
-  'claude-3-5-sonnet-20241022': { input: 3.0, output: 15.0, cached: 0.3 },
-  'claude-3-5-sonnet-20240620': { input: 3.0, output: 15.0, cached: 0.3 },
-  'claude-3-5-haiku-20241022': { input: 0.8, output: 4.0, cached: 0.08 },
+  'claude-3-5-sonnet-20241022': {
+    input: 3.0,
+    output: 15.0,
+    cached: 0.3,
+    cacheWrite5m: 3.75,
+    cacheWrite1h: 6.0,
+  },
+  'claude-3-5-sonnet-20240620': {
+    input: 3.0,
+    output: 15.0,
+    cached: 0.3,
+    cacheWrite5m: 3.75,
+    cacheWrite1h: 6.0,
+  },
+  'claude-3-5-haiku-20241022': {
+    input: 0.8,
+    output: 4.0,
+    cached: 0.08,
+    cacheWrite5m: 1.0,
+    cacheWrite1h: 1.6,
+  },
 
   // Claude 3
-  'claude-3-opus-20240229': { input: 15.0, output: 75.0, cached: 1.5 },
-  'claude-3-haiku-20240307': { input: 0.25, output: 1.25, cached: 0.03 },
+  'claude-3-opus-20240229': {
+    input: 15.0,
+    output: 75.0,
+    cached: 1.5,
+    cacheWrite5m: 18.75,
+    cacheWrite1h: 30.0,
+  },
+  'claude-3-haiku-20240307': {
+    input: 0.25,
+    output: 1.25,
+    cached: 0.03,
+    cacheWrite5m: 0.3,
+    cacheWrite1h: 0.5,
+  },
 
   // ==========================================================================
   // xAI (Grok)

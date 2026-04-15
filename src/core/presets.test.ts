@@ -224,6 +224,7 @@ describe('Response Metadata Helpers', () => {
       assert.equal(usage.outputTokens, 0);
       assert.equal(usage.reasoningTokens, 0);
       assert.equal(usage.cachedTokens, 0);
+      assert.equal(usage.cacheWriteTokens, 0);
       assert.equal(usage.totalTokens, 0);
     });
   });

@@ -281,6 +281,8 @@ export interface TokenUsage {
   reasoningTokens: number;
   /** Cached input tokens (if available) */
   cachedTokens: number;
+  /** Cache write input tokens (if available) */
+  cacheWriteTokens: number;
   /** Total tokens (input + output) */
   totalTokens: number;
 }
@@ -330,6 +332,7 @@ export function createEmptyUsage(): TokenUsage {
     outputTokens: 0,
     reasoningTokens: 0,
     cachedTokens: 0,
+    cacheWriteTokens: 0,
     totalTokens: 0,
   };
 }

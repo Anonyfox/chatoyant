@@ -55,6 +55,8 @@ import {
 } from './presets.js';
 import type { Tool, ToolCall, ToolContext, ToolResult } from './tool.js';
 
+const INTERNAL_ONESHOT_METADATA_KEY = '__chatoyant_internal_oneshot';
+
 /**
  * Minimal async push/pull channel bridging a callback-based producer
  * (like streamAccumulate's onDelta) with a pull-based async iterator
@@ -500,6 +502,7 @@ export class Chat {
         system: this._getSystemPrompt(),
         timeout: opts.timeout ?? DEFAULT_TIMEOUT,
         requestOptions: {
+          cache_control: this._getAnthropicCacheControl(),
           top_p: opts.topP,
           ...thinkingOpts,
           ...opts.extra,
@@ -513,8 +516,12 @@ export class Chat {
         usage.totalTokens = usage.inputTokens + usage.outputTokens;
         // Anthropic doesn't separate reasoning tokens in the same way
         // Extract cached tokens if available
-        const usageAny = response.usage as { cache_read_input_tokens?: number };
+        const usageAny = response.usage as {
+          cache_read_input_tokens?: number;
+          cache_creation_input_tokens?: number;
+        };
         usage.cachedTokens = usageAny.cache_read_input_tokens ?? 0;
+        usage.cacheWriteTokens = usageAny.cache_creation_input_tokens ?? 0;
         cached = usage.cachedTokens > 0;
       }
     } else if (provider === 'xai') {
@@ -559,6 +566,8 @@ export class Chat {
         model: modelToUse,
         inputTokens: usage.inputTokens,
         outputTokens: usage.outputTokens,
+        cachedTokens: usage.cachedTokens,
+        cacheWriteTokens: usage.cacheWriteTokens,
       });
       cost.estimatedUsd = costResult.total;
     } catch {
@@ -680,6 +689,7 @@ export class Chat {
           system: this._getSystemPrompt(),
           timeout: opts.timeout ?? DEFAULT_TIMEOUT,
           requestOptions: {
+            cache_control: this._getAnthropicCacheControl(),
             top_p: opts.topP,
             ...thinkingOpts,
             ...opts.extra,
@@ -959,6 +969,7 @@ export class Chat {
           timeout: opts.timeout ?? DEFAULT_TIMEOUT,
           requestOptions: {
             tools: tools as any,
+            cache_control: this._getAnthropicCacheControl(),
             top_p: opts.topP,
             ...thinkingOpts,
             ...opts.extra,
@@ -1120,7 +1131,10 @@ export class Chat {
           temperature: opts.temperature,
           system: this._getSystemPrompt(),
           timeout: opts.timeout ?? DEFAULT_TIMEOUT,
-          ...opts.extra,
+          requestOptions: {
+            cache_control: this._getAnthropicCacheControl(),
+            ...opts.extra,
+          },
         },
       );
       content = JSON.stringify(result);
@@ -1293,6 +1307,7 @@ export class Chat {
     total.outputTokens += add.outputTokens;
     total.reasoningTokens += add.reasoningTokens;
     total.cachedTokens += add.cachedTokens;
+    total.cacheWriteTokens += add.cacheWriteTokens;
     total.totalTokens += add.totalTokens;
   }
 
@@ -1309,6 +1324,7 @@ export class Chat {
       usage.outputTokens = (u.output_tokens as number) ?? 0;
       usage.totalTokens = usage.inputTokens + usage.outputTokens;
       usage.cachedTokens = (u.cache_read_input_tokens as number) ?? 0;
+      usage.cacheWriteTokens = (u.cache_creation_input_tokens as number) ?? 0;
     } else {
       // openai, xai, local — all use the OpenAI usage format
       usage.inputTokens = (u.prompt_tokens as number) ?? 0;
@@ -1344,6 +1360,8 @@ export class Chat {
         model,
         inputTokens: usage.inputTokens,
         outputTokens: usage.outputTokens,
+        cachedTokens: usage.cachedTokens,
+        cacheWriteTokens: usage.cacheWriteTokens,
       });
       cost.estimatedUsd = costResult.total;
     } catch {
@@ -1454,6 +1472,17 @@ export class Chat {
   private _getSystemPrompt(): string | undefined {
     const parts = this._messages.filter((m) => m.isSystem()).map((m) => m.content);
     return parts.length > 0 ? parts.join('\n\n') : undefined;
+  }
+
+  /**
+   * Anthropic automatic caching is enabled for persistent Chat flows by default,
+   * but disabled for internal one-shot shortcut calls.
+   */
+  private _getAnthropicCacheControl(): { type: 'ephemeral' } | undefined {
+    const isOneShotShortcut = this._messages.some(
+      (m) => m.metadata?.[INTERNAL_ONESHOT_METADATA_KEY] === true,
+    );
+    return isOneShotShortcut ? undefined : { type: 'ephemeral' };
   }
 
   /**
@@ -1643,6 +1672,10 @@ export class Chat {
           maxTokens: opts.maxTokens ?? 4096,
           system: this._getSystemPrompt(),
           timeout: opts.timeout ?? DEFAULT_TIMEOUT,
+          requestOptions: {
+            cache_control: this._getAnthropicCacheControl(),
+            ...opts.extra,
+          },
         },
       );
       const usage = this._extractUsage(result.usage, provider);
@@ -1847,6 +1880,10 @@ export class Chat {
         maxTokens: opts.maxTokens ?? 4096,
         system: this._getSystemPrompt(),
         timeout: opts.timeout ?? DEFAULT_TIMEOUT,
+        requestOptions: {
+          cache_control: this._getAnthropicCacheControl(),
+          ...opts.extra,
+        },
       });
       return {
         content: (client as AnthropicClient).extractText(response.content),

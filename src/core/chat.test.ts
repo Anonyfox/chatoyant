@@ -8,7 +8,7 @@
  */
 
 import { strict as assert } from 'node:assert';
-import { describe, it } from 'node:test';
+import { afterEach, beforeEach, describe, it, mock } from 'node:test';
 import { Schema } from '../schema/index.js';
 import { Chat, type ChatJSON, createAsyncChannel } from './chat.js';
 import { Message } from './message.js';
@@ -20,6 +20,176 @@ class SearchParams extends Schema {
 }
 
 describe('Chat', () => {
+  describe('Anthropic automatic caching', () => {
+    let originalFetch: typeof globalThis.fetch;
+    let originalApiKey: string | undefined;
+    let mockFetch: ReturnType<typeof mock.fn<typeof fetch>>;
+
+    beforeEach(() => {
+      originalFetch = globalThis.fetch;
+      originalApiKey = process.env.ANTHROPIC_API_KEY;
+      process.env.ANTHROPIC_API_KEY = 'sk-test';
+      mockFetch = mock.fn<typeof fetch>();
+      globalThis.fetch = mockFetch;
+    });
+
+    afterEach(() => {
+      globalThis.fetch = originalFetch;
+      if (originalApiKey === undefined) {
+        delete process.env.ANTHROPIC_API_KEY;
+      } else {
+        process.env.ANTHROPIC_API_KEY = originalApiKey;
+      }
+    });
+
+    function createAnthropicResponse(body: Record<string, unknown>): Response {
+      return new Response(JSON.stringify(body), { status: 200 });
+    }
+
+    function createAnthropicStreamResponse(): Response {
+      const encoder = new TextEncoder();
+      const stream = new ReadableStream({
+        start(controller) {
+          const events = [
+            {
+              event: 'message_start',
+              data: {
+                message: {
+                  id: 'msg_123',
+                  type: 'message',
+                  role: 'assistant',
+                  content: [],
+                  model: 'claude-sonnet-4-20250514',
+                  stop_reason: null,
+                  stop_sequence: null,
+                  usage: { input_tokens: 10, output_tokens: 0 },
+                },
+              },
+            },
+            {
+              event: 'content_block_start',
+              data: { index: 0, content_block: { type: 'text', text: '' } },
+            },
+            {
+              event: 'content_block_delta',
+              data: { index: 0, delta: { type: 'text_delta', text: 'Hello!' } },
+            },
+            { event: 'content_block_stop', data: { index: 0 } },
+            {
+              event: 'message_delta',
+              data: {
+                delta: { stop_reason: 'end_turn', stop_sequence: null },
+                usage: { output_tokens: 5 },
+              },
+            },
+            { event: 'message_stop', data: {} },
+          ];
+
+          for (const { event, data } of events) {
+            controller.enqueue(encoder.encode(`event: ${event}\n`));
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+          }
+          controller.close();
+        },
+      });
+
+      return new Response(stream, {
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream' },
+      });
+    }
+
+    it('should enable automatic caching for direct Chat.generate() Anthropic requests', async () => {
+      mockFetch.mock.mockImplementation(async () =>
+        createAnthropicResponse({
+          id: 'msg_123',
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'text', text: 'Hello!' }],
+          model: 'claude-sonnet-4-20250514',
+          stop_reason: 'end_turn',
+          stop_sequence: null,
+          usage: { input_tokens: 10, output_tokens: 5 },
+        }),
+      );
+
+      const chat = new Chat({ model: 'claude-sonnet-4-20250514' });
+      chat.user('Hello');
+      await chat.generate();
+
+      const [, options] = mockFetch.mock.calls[0].arguments;
+      const body = JSON.parse(options?.body as string);
+      assert.deepEqual(body.cache_control, { type: 'ephemeral' });
+    });
+
+    it('should enable automatic caching for direct Chat.stream() Anthropic requests', async () => {
+      mockFetch.mock.mockImplementation(async () => createAnthropicStreamResponse());
+
+      const chat = new Chat({ model: 'claude-sonnet-4-20250514' });
+      chat.user('Hello');
+
+      for await (const _chunk of chat.stream()) {
+        // drain
+      }
+
+      const [, options] = mockFetch.mock.calls[0].arguments;
+      const body = JSON.parse(options?.body as string);
+      assert.deepEqual(body.cache_control, { type: 'ephemeral' });
+    });
+
+    it('should enable automatic caching for Anthropic tool loops on every round-trip', async () => {
+      let callCount = 0;
+      mockFetch.mock.mockImplementation(async () => {
+        callCount += 1;
+        if (callCount === 1) {
+          return createAnthropicResponse({
+            id: 'msg_tool',
+            type: 'message',
+            role: 'assistant',
+            content: [
+              { type: 'tool_use', id: 'call_1', name: 'search', input: { query: 'weather' } },
+            ],
+            model: 'claude-sonnet-4-20250514',
+            stop_reason: 'tool_use',
+            stop_sequence: null,
+            usage: { input_tokens: 10, output_tokens: 5 },
+          });
+        }
+
+        return createAnthropicResponse({
+          id: 'msg_final',
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'text', text: 'Sunny.' }],
+          model: 'claude-sonnet-4-20250514',
+          stop_reason: 'end_turn',
+          stop_sequence: null,
+          usage: { input_tokens: 12, output_tokens: 6 },
+        });
+      });
+
+      const chat = new Chat({ model: 'claude-sonnet-4-20250514' });
+      chat.user('What is the weather?');
+      chat.addTool(
+        new Tool({
+          name: 'search',
+          description: 'Searches for weather',
+          parameters: SearchParams,
+          execute: async () => ({ summary: 'Sunny' }),
+        }),
+      );
+
+      await chat.generate();
+
+      assert.equal(mockFetch.mock.calls.length, 2);
+      for (const call of mockFetch.mock.calls) {
+        const [, options] = call.arguments;
+        const body = JSON.parse(options?.body as string);
+        assert.deepEqual(body.cache_control, { type: 'ephemeral' });
+      }
+    });
+  });
+
   describe('constructor', () => {
     it('should create chat with default model', () => {
       const chat = new Chat();
@@ -920,6 +1090,7 @@ describe('Chat', () => {
           outputTokens: 5,
           reasoningTokens: 0,
           cachedTokens: 0,
+          cacheWriteTokens: 0,
           totalTokens: 15,
         },
         timing: { latencyMs: 100 },
@@ -968,6 +1139,22 @@ describe('Chat', () => {
       assert.equal(usage.outputTokens, 80);
       assert.equal(usage.totalTokens, 280);
       assert.equal(usage.cachedTokens, 50);
+      assert.equal(usage.cacheWriteTokens, 0);
+    });
+
+    it('_extractUsage should track Anthropic cache writes', () => {
+      const chat = new Chat();
+      const extract = (u: unknown, p: string) => (chat as any)._extractUsage(u, p);
+      const usage = extract(
+        {
+          input_tokens: 200,
+          output_tokens: 80,
+          cache_read_input_tokens: 50,
+          cache_creation_input_tokens: 25,
+        },
+        'anthropic',
+      );
+      assert.equal(usage.cacheWriteTokens, 25);
     });
 
     it('_extractUsage should normalize xAI usage', () => {
@@ -987,6 +1174,7 @@ describe('Chat', () => {
       assert.equal(usage.totalTokens, 400);
       assert.equal(usage.reasoningTokens, 30);
       assert.equal(usage.cachedTokens, 0);
+      assert.equal(usage.cacheWriteTokens, 0);
     });
 
     it('_extractUsage should handle null/undefined usage gracefully', () => {
@@ -1010,6 +1198,7 @@ describe('Chat', () => {
         outputTokens: 50,
         reasoningTokens: 10,
         cachedTokens: 5,
+        cacheWriteTokens: 2,
         totalTokens: 150,
       };
       add(total, {
@@ -1017,12 +1206,14 @@ describe('Chat', () => {
         outputTokens: 80,
         reasoningTokens: 20,
         cachedTokens: 10,
+        cacheWriteTokens: 3,
         totalTokens: 280,
       });
       assert.equal(total.inputTokens, 300);
       assert.equal(total.outputTokens, 130);
       assert.equal(total.reasoningTokens, 30);
       assert.equal(total.cachedTokens, 15);
+      assert.equal(total.cacheWriteTokens, 5);
       assert.equal(total.totalTokens, 430);
     });
 
@@ -1041,6 +1232,7 @@ describe('Chat', () => {
         outputTokens: 50,
         reasoningTokens: 0,
         cachedTokens: 0,
+        cacheWriteTokens: 0,
         totalTokens: 150,
       };
       const startTime = Date.now() - 500;
@@ -1065,6 +1257,7 @@ describe('Chat', () => {
         outputTokens: 50,
         reasoningTokens: 0,
         cachedTokens: 30,
+        cacheWriteTokens: 0,
         totalTokens: 150,
       };
       const result = build('Hi', usage, Date.now(), 'openai', 'gpt-4o', 1);
@@ -1079,6 +1272,7 @@ describe('Chat', () => {
         outputTokens: 0,
         reasoningTokens: 0,
         cachedTokens: 0,
+        cacheWriteTokens: 0,
         totalTokens: 0,
       };
       const r1 = build('a', usage, Date.now(), 'openai', 'gpt-4o', 1);
@@ -1096,6 +1290,7 @@ describe('Chat', () => {
         outputTokens: 0,
         reasoningTokens: 0,
         cachedTokens: 0,
+        cacheWriteTokens: 0,
         totalTokens: 0,
       };
       build('first', usage, Date.now(), 'openai', 'gpt-4o', 1);

@@ -199,6 +199,44 @@ describe('messages functions with mocked fetch', () => {
       assert.deepEqual(body.metadata, { user_id: 'user-123' });
     });
 
+    it('should include top-level cache_control when provided in requestOptions', async () => {
+      mockFetch.mock.mockImplementation(async () => {
+        return new Response(JSON.stringify(mockResponse), { status: 200 });
+      });
+
+      await createMessage(messages, {
+        apiKey: 'sk-test',
+        model: 'claude-sonnet-4-20250514',
+        maxTokens: 1024,
+        requestOptions: {
+          cache_control: { type: 'ephemeral' },
+        },
+      });
+
+      const [, options] = mockFetch.mock.calls[0].arguments;
+      const body = JSON.parse(options?.body as string);
+      assert.deepEqual(body.cache_control, { type: 'ephemeral' });
+    });
+
+    it('should preserve cache_control ttl when provided in requestOptions', async () => {
+      mockFetch.mock.mockImplementation(async () => {
+        return new Response(JSON.stringify(mockResponse), { status: 200 });
+      });
+
+      await createMessage(messages, {
+        apiKey: 'sk-test',
+        model: 'claude-sonnet-4-20250514',
+        maxTokens: 1024,
+        requestOptions: {
+          cache_control: { type: 'ephemeral', ttl: '1h' },
+        },
+      });
+
+      const [, options] = mockFetch.mock.calls[0].arguments;
+      const body = JSON.parse(options?.body as string);
+      assert.deepEqual(body.cache_control, { type: 'ephemeral', ttl: '1h' });
+    });
+
     it('should throw when max_tokens <= budget_tokens with thinking', async () => {
       await assert.rejects(
         async () => {

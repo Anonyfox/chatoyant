@@ -136,12 +136,6 @@ export interface GenerateOptions extends CommonOptions {
   webSearch?: boolean;
 
   /**
-   * Enable prompt caching (Anthropic only).
-   * Marks the system prompt for caching.
-   */
-  cache?: boolean;
-
-  /**
    * Thinking budget in tokens for local models that support it (e.g. Qwen3.5 via oMLX).
    * When set, the model will produce reasoning/thinking content before the final answer.
    * Thinking content is streamed separately via `reasoningContent` and does not mix

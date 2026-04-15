@@ -119,10 +119,22 @@ describe('Anthropic types', () => {
         max_tokens: 1024,
         system: 'You are helpful.',
         temperature: 0.7,
+        cache_control: { type: 'ephemeral' },
         tools: [],
         stream: true,
       };
       assert.equal(req.temperature, 0.7);
+      assert.equal(req.cache_control?.type, 'ephemeral');
+    });
+
+    it('should allow 1-hour cache TTL', () => {
+      const req: MessagesRequest = {
+        model: 'claude-sonnet-4-20250514',
+        messages: [],
+        max_tokens: 1024,
+        cache_control: { type: 'ephemeral', ttl: '1h' },
+      };
+      assert.equal(req.cache_control?.ttl, '1h');
     });
   });
 

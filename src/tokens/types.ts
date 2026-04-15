@@ -22,6 +22,10 @@ export interface ModelPricing {
   output: number;
   /** Cost per 1M cached input tokens in USD (if supported) */
   cached?: number;
+  /** Cost per 1M cache write tokens with 5-minute TTL in USD (if supported) */
+  cacheWrite5m?: number;
+  /** Cost per 1M cache write tokens with 1-hour TTL in USD (if supported) */
+  cacheWrite1h?: number;
   /** Cost per generated image in USD (for image generation models) */
   perImage?: number;
   /** Cost per second of generated video in USD (for video generation models) */
@@ -39,7 +43,9 @@ export interface CostResult {
   output: number;
   /** Cost for cached tokens (0 if not applicable) */
   cached: number;
-  /** Total cost (input + output + cached) */
+  /** Cost for cache write tokens (0 if not applicable) */
+  cacheWrite: number;
+  /** Total cost (input + output + cached + cacheWrite) */
   total: number;
 }
 

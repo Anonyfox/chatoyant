@@ -27,6 +27,7 @@ export type StopReason = 'end_turn' | 'max_tokens' | 'stop_sequence' | 'tool_use
  */
 export interface CacheControl {
   type: 'ephemeral';
+  ttl?: '1h';
 }
 
 /**
@@ -305,6 +306,8 @@ export interface MessagesRequest {
   tool_choice?: ToolChoice;
   /** Request metadata */
   metadata?: RequestMetadata;
+  /** Automatic prompt caching */
+  cache_control?: CacheControl;
   /** Extended thinking (Claude 4+) */
   thinking?: ThinkingConfig;
 }

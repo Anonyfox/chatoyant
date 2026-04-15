@@ -36,6 +36,17 @@ describe('tokens/types', () => {
       assert.equal(pricing.cached, 0.5);
     });
 
+    it('should allow optional cache write prices', () => {
+      const pricing: ModelPricing = {
+        input: 1.0,
+        output: 2.0,
+        cacheWrite5m: 1.25,
+        cacheWrite1h: 2.0,
+      };
+      assert.equal(pricing.cacheWrite5m, 1.25);
+      assert.equal(pricing.cacheWrite1h, 2.0);
+    });
+
     it('should allow per-image pricing for image generation models', () => {
       const pricing: ModelPricing = { input: 0, output: 0, perImage: 0.02 };
       assert.equal(pricing.perImage, 0.02);
@@ -49,10 +60,17 @@ describe('tokens/types', () => {
 
   describe('CostResult interface', () => {
     it('should have all required fields', () => {
-      const result: CostResult = { input: 0.01, output: 0.02, cached: 0, total: 0.03 };
+      const result: CostResult = {
+        input: 0.01,
+        output: 0.02,
+        cached: 0,
+        cacheWrite: 0,
+        total: 0.03,
+      };
       assert.equal(typeof result.input, 'number');
       assert.equal(typeof result.output, 'number');
       assert.equal(typeof result.cached, 'number');
+      assert.equal(typeof result.cacheWrite, 'number');
       assert.equal(typeof result.total, 'number');
     });
   });

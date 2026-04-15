@@ -143,7 +143,6 @@ describe('Options', () => {
       const opts: GenerateOptions = {
         reasoning: 'medium',
         webSearch: true,
-        cache: true,
         extra: { custom: 'value' },
       };
       assert.ok(opts);

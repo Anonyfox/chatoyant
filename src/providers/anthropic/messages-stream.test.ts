@@ -127,6 +127,27 @@ describe('messages streaming functions with mocked fetch', () => {
       const body = JSON.parse(options?.body as string);
       assert.equal(body.stream, true);
     });
+
+    it('should include top-level cache_control when provided in requestOptions', async () => {
+      mockFetch.mock.mockImplementation(async () =>
+        createSSEResponse(createBasicStreamEvents('Hi')),
+      );
+
+      for await (const _event of messageStream(messages, {
+        apiKey: 'sk-test',
+        model: 'claude-3',
+        maxTokens: 1024,
+        requestOptions: {
+          cache_control: { type: 'ephemeral' },
+        },
+      })) {
+        // drain
+      }
+
+      const [, options] = mockFetch.mock.calls[0].arguments;
+      const body = JSON.parse(options?.body as string);
+      assert.deepEqual(body.cache_control, { type: 'ephemeral' });
+    });
   });
 
   describe('messageStreamContent()', () => {
