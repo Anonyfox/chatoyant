@@ -1,6 +1,6 @@
 {
   "name": "chatoyant",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "Unified TypeScript SDK for LLM providers (OpenAI, Anthropic, xAI, OpenRouter, local) with streaming, structured outputs, and zero dependencies.",
   "type": "module",
   "main": "./dist/index.cjs",
