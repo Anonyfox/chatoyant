@@ -37,14 +37,16 @@ export interface ModelPricing {
  * All values are in USD.
  */
 export interface CostResult {
-  /** Cost for input tokens */
+  /** Cost for input tokens based on pricing table */
   input: number;
-  /** Cost for output tokens */
+  /** Cost for output tokens based on pricing table */
   output: number;
   /** Cost for cached tokens (0 if not applicable) */
   cached: number;
   /** Cost for cache write tokens (0 if not applicable) */
   cacheWrite: number;
+  /** Actual cost returned by provider (takes precedence over token-based calculation) */
+  actualUsd?: number;
   /** Total cost (input + output + cached + cacheWrite) */
   total: number;
 }

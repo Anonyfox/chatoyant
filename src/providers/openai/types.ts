@@ -248,6 +248,10 @@ export interface ChatCompletionRequest {
 
 /**
  * Token usage statistics.
+ *
+ * OpenAI does not return cost in the usage object — cost tracking is done
+ * via the OpenAI dashboard only. OpenRouter (OpenAI-compatible) adds cost
+ * fields to this object.
  */
 export interface Usage {
   prompt_tokens: number;
@@ -256,12 +260,27 @@ export interface Usage {
   prompt_tokens_details?: {
     cached_tokens?: number;
     audio_tokens?: number;
+    /** OpenRouter: tokens written to cache */
+    cache_write_tokens?: number;
   };
   completion_tokens_details?: {
     reasoning_tokens?: number;
     audio_tokens?: number;
     accepted_prediction_tokens?: number;
     rejected_prediction_tokens?: number;
+  };
+  /**
+   * OpenRouter only: total cost charged in credits (1 credit = $0.000001 USD).
+   * Not present in native OpenAI responses.
+   */
+  cost?: number;
+  /**
+   * OpenRouter only: cost breakdown details.
+   * Not present in native OpenAI responses.
+   */
+  cost_details?: {
+    /** Actual cost charged by the upstream AI provider (BYOK only) */
+    upstream_inference_cost?: number;
   };
 }
 

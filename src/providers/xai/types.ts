@@ -242,6 +242,10 @@ export interface ChatRequest {
  */
 export interface PromptTokensDetails {
   cached_tokens?: number;
+  /** Text prompt tokens (cached + non-cached text) */
+  text_tokens?: number;
+  audio_tokens?: number;
+  image_tokens?: number;
 }
 
 /**
@@ -253,6 +257,7 @@ export interface CompletionTokensDetails {
 
 /**
  * Token usage statistics.
+ * xAI returns cost_in_usd_ticks: 10_000_000_000 ticks = $1 USD.
  */
 export interface Usage {
   prompt_tokens: number;
@@ -260,6 +265,14 @@ export interface Usage {
   total_tokens: number;
   prompt_tokens_details?: PromptTokensDetails;
   completion_tokens_details?: CompletionTokensDetails;
+  /**
+   * Accurate cost of this request in USD ticks.
+   * 10,000,000,000 ticks = $1 USD (1 tick = 0.0000000001 USD).
+   * Convert to USD: cost_in_usd_ticks / 10_000_000_000
+   */
+  cost_in_usd_ticks?: number;
+  /** Number of live search sources used (for web search requests) */
+  num_sources_used?: number;
 }
 
 /**

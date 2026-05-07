@@ -1,6 +1,9 @@
 /**
  * Cost calculation for LLM API usage.
  *
+ * Provides functions to calculate the cost of API usage either based on token counts
+ * using pricing tables, or by using actual costs returned by providers when available.
+ *
  * @module tokens/cost
  */
 
@@ -9,6 +12,10 @@ import type { CostResult, ModelPricing } from './types.js';
 
 /**
  * Calculate cost for token usage.
+ *
+ * If the provider provides actual cost values (via the cost_usd field in responses),
+ * those will be used directly. Otherwise, the function calculates cost based on token counts
+ * and the pricing table.
  *
  * @param params - Token counts and model
  * @returns Cost breakdown in USD
@@ -36,8 +43,29 @@ export function calculateCost(params: {
   cachedTokens?: number;
   /** Number of cache write input tokens billed at cache-write rates */
   cacheWriteTokens?: number;
+  /** Actual cost returned by provider in USD (takes precedence over token-based calculation) */
+  actualCostUsd?: number;
 }): CostResult {
-  const { model, inputTokens, outputTokens, cachedTokens = 0, cacheWriteTokens = 0 } = params;
+  const {
+    model,
+    inputTokens,
+    outputTokens,
+    cachedTokens = 0,
+    cacheWriteTokens = 0,
+    actualCostUsd = 0,
+  } = params;
+
+  // Provider returned actual cost — use it directly
+  if (actualCostUsd > 0) {
+    return {
+      input: 0,
+      output: 0,
+      cached: 0,
+      cacheWrite: 0,
+      actualUsd: actualCostUsd,
+      total: actualCostUsd,
+    };
+  }
 
   const pricing = getPricing(model);
   if (!pricing) {
@@ -58,6 +86,7 @@ export function calculateCost(params: {
     output: outputCost,
     cached: cachedCost,
     cacheWrite: cacheWriteCost,
+    actualUsd: 0,
     total: inputCost + outputCost + cachedCost + cacheWriteCost,
   };
 }
@@ -66,6 +95,10 @@ export function calculateCost(params: {
  * Calculate cost with custom pricing.
  *
  * Use this when you have custom pricing (e.g., Azure, self-hosted).
+ *
+ * If the provider provides actual cost values (via the cost_usd field in responses),
+ * those will be used directly. Otherwise, the function calculates cost based on token counts
+ * and the provided pricing.
  *
  * @param params - Token counts and custom pricing
  * @returns Cost breakdown in USD
@@ -88,10 +121,31 @@ export function calculateCostCustom(params: {
   cachedTokens?: number;
   /** Number of cache write input tokens */
   cacheWriteTokens?: number;
+  /** Actual cost in USD (takes precedence over token-based calculation) */
+  actualCostUsd?: number;
   /** Custom pricing per 1M tokens */
   pricing: ModelPricing;
 }): CostResult {
-  const { inputTokens, outputTokens, cachedTokens = 0, cacheWriteTokens = 0, pricing } = params;
+  const {
+    inputTokens,
+    outputTokens,
+    cachedTokens = 0,
+    cacheWriteTokens = 0,
+    actualCostUsd = 0,
+    pricing,
+  } = params;
+
+  // Provider returned actual cost
+  if (actualCostUsd > 0) {
+    return {
+      input: 0,
+      output: 0,
+      cached: 0,
+      cacheWrite: 0,
+      actualUsd: actualCostUsd,
+      total: actualCostUsd,
+    };
+  }
 
   const billableInputTokens = Math.max(0, inputTokens - cachedTokens - cacheWriteTokens);
   const inputCost = (billableInputTokens / 1_000_000) * pricing.input;
@@ -106,6 +160,7 @@ export function calculateCostCustom(params: {
     output: outputCost,
     cached: cachedCost,
     cacheWrite: cacheWriteCost,
+    actualUsd: 0,
     total: inputCost + outputCost + cachedCost + cacheWriteCost,
   };
 }
@@ -114,6 +169,8 @@ export function calculateCostCustom(params: {
  * Estimate cost before making an API call.
  *
  * Combines token estimation with cost calculation.
+ * Does NOT use actual costs since the API call hasn't been made yet.
+ * Always uses the pricing table for estimation.
  *
  * @param params - Model and content to estimate
  * @returns Estimated cost breakdown
@@ -148,11 +205,25 @@ export function estimateCost(params: {
     estimatedInput = Math.ceil(inputText.length / 4);
   }
 
-  return calculateCost({
-    model,
-    inputTokens: estimatedInput,
-    outputTokens: expectedOutputTokens,
-  });
+  const pricing = getPricing(model);
+  if (!pricing) {
+    return { input: 0, output: 0, cached: 0, cacheWrite: 0, total: 0 };
+  }
+
+  const billableInputTokens = estimatedInput;
+  const inputCost = (billableInputTokens / 1_000_000) * pricing.input;
+  const outputCost = (expectedOutputTokens / 1_000_000) * pricing.output;
+  const cachedCost = 0; // No caching in estimates
+  const cacheWriteCost = pricing.cacheWrite5m ? 0 : 0;
+
+  return {
+    input: inputCost,
+    output: outputCost,
+    cached: cachedCost,
+    cacheWrite: cacheWriteCost,
+    actualUsd: 0,
+    total: inputCost + outputCost,
+  };
 }
 
 /**
@@ -177,6 +248,8 @@ export function getCostPerToken(
 
 /**
  * Calculate cost for a batch of requests.
+ *
+ * Combines token counts from multiple requests.
  *
  * @param requests - Array of { inputTokens, outputTokens, cachedTokens? }
  * @param model - Model ID for pricing
@@ -270,3 +343,4 @@ export function calculateVideoCost(params: {
 
 // Re-export PRICING for convenience
 export { PRICING };
+export type { CostResult };

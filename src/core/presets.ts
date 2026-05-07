@@ -285,6 +285,8 @@ export interface TokenUsage {
   cacheWriteTokens: number;
   /** Total tokens (input + output) */
   totalTokens: number;
+  /** Actual cost in USD returned by provider, if available */
+  costUsd: number;
 }
 
 /**
@@ -299,10 +301,13 @@ export interface TimingInfo {
 
 /**
  * Cost information for the request.
+ * Can contain estimated cost (from pricing table) or actual cost (from provider).
  */
 export interface CostInfo {
-  /** Estimated cost in USD */
+  /** Estimated cost in USD based on pricing table */
   estimatedUsd: number;
+  /** Actual cost in USD returned by provider (takes precedence over estimated) */
+  actualUsd?: number;
 }
 
 /**
@@ -334,6 +339,7 @@ export function createEmptyUsage(): TokenUsage {
     cachedTokens: 0,
     cacheWriteTokens: 0,
     totalTokens: 0,
+    costUsd: 0,
   };
 }
 

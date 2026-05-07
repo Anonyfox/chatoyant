@@ -129,16 +129,18 @@ export interface GenerateResult {
   /** Timing information */
   timing: TimingInfo;
   /** Cost information */
-  cost: CostInfo;
-  /** Provider used */
-  provider: ProviderId;
-  /** Model used */
-  model: string;
-  /** Whether response used cached tokens */
-  cached: boolean;
-  /** Number of API round-trips (>1 when tools are used) */
-  iterations: number;
-}
+      cost: CostInfo;
+      /** Provider used */
+      provider: ProviderId;
+      /** Model used */
+      model: string;
+      /** Whether response used cached tokens */
+      cached: boolean;
+      /** Number of API round-trips (>1 when tools are used) */
+      iterations: number;
+      /** Optional actual cost in USD returned by the provider */
+      costActualUsd?: number;
+    }
 
 /**
  * Streaming delta.
@@ -467,16 +469,18 @@ export class Chat {
         usage.inputTokens = response.usage.prompt_tokens;
         usage.outputTokens = response.usage.completion_tokens;
         usage.totalTokens = response.usage.total_tokens;
-        // Extract reasoning tokens if available
-        const details = response.usage.completion_tokens_details as
+        const completionDetails = response.usage.completion_tokens_details as
           | { reasoning_tokens?: number }
           | undefined;
-        usage.reasoningTokens = details?.reasoning_tokens ?? 0;
-        // Extract cached tokens if available
+        usage.reasoningTokens = completionDetails?.reasoning_tokens ?? 0;
         const promptDetails = response.usage.prompt_tokens_details as
-          | { cached_tokens?: number }
+          | { cached_tokens?: number; cache_write_tokens?: number }
           | undefined;
         usage.cachedTokens = promptDetails?.cached_tokens ?? 0;
+        usage.cacheWriteTokens = promptDetails?.cache_write_tokens ?? 0;
+        // OpenAI does not return cost; OpenRouter adds cost field (credits)
+        const credits = (response.usage as any).cost as number | undefined;
+        usage.costUsd = credits && credits > 0 ? credits * 0.000001 : 0;
         cached = usage.cachedTokens > 0;
       }
     } else if (provider === 'anthropic') {
@@ -514,14 +518,10 @@ export class Chat {
         usage.inputTokens = response.usage.input_tokens;
         usage.outputTokens = response.usage.output_tokens;
         usage.totalTokens = usage.inputTokens + usage.outputTokens;
-        // Anthropic doesn't separate reasoning tokens in the same way
-        // Extract cached tokens if available
-        const usageAny = response.usage as {
-          cache_read_input_tokens?: number;
-          cache_creation_input_tokens?: number;
-        };
-        usage.cachedTokens = usageAny.cache_read_input_tokens ?? 0;
-        usage.cacheWriteTokens = usageAny.cache_creation_input_tokens ?? 0;
+        usage.cachedTokens = response.usage.cache_read_input_tokens ?? 0;
+        usage.cacheWriteTokens = response.usage.cache_creation_input_tokens ?? 0;
+        // Anthropic does not return cost in the usage object
+        usage.costUsd = 0;
         cached = usage.cachedTokens > 0;
       }
     } else if (provider === 'xai') {
@@ -547,11 +547,18 @@ export class Chat {
         usage.inputTokens = response.usage.prompt_tokens;
         usage.outputTokens = response.usage.completion_tokens;
         usage.totalTokens = response.usage.total_tokens;
-        // Extract reasoning tokens if available
-        const details = response.usage.completion_tokens_details as
+        const completionDetails = response.usage.completion_tokens_details as
           | { reasoning_tokens?: number }
           | undefined;
-        usage.reasoningTokens = details?.reasoning_tokens ?? 0;
+        usage.reasoningTokens = completionDetails?.reasoning_tokens ?? 0;
+        const promptDetails = response.usage.prompt_tokens_details as
+          | { cached_tokens?: number }
+          | undefined;
+        usage.cachedTokens = promptDetails?.cached_tokens ?? 0;
+        // xAI returns cost_in_usd_ticks: 10,000,000,000 ticks = $1 USD
+        const ticks = response.usage.cost_in_usd_ticks ?? 0;
+        usage.costUsd = ticks > 0 ? ticks / 10_000_000_000 : 0;
+        cached = usage.cachedTokens > 0;
       }
     } else {
       throw new Error(`Unsupported provider: ${provider}`);
@@ -1309,10 +1316,18 @@ export class Chat {
     total.cachedTokens += add.cachedTokens;
     total.cacheWriteTokens += add.cacheWriteTokens;
     total.totalTokens += add.totalTokens;
+    total.costUsd += add.costUsd;
   }
 
   /**
    * Extract provider-specific usage into a normalized TokenUsage.
+   *
+   * Provider cost fields (verified against official API docs):
+   * - OpenAI:     No cost field in usage object.
+   * - Anthropic:  No cost field in usage object.
+   * - xAI:        cost_in_usd_ticks (10,000,000,000 ticks = $1 USD)
+   * - OpenRouter: cost (credits, 1 credit = $0.000001 USD)
+   *               cost_details.upstream_inference_cost (credits, BYOK only)
    */
   private _extractUsage(providerUsage: unknown, provider: ProviderId): TokenUsage {
     const usage = createEmptyUsage();
@@ -1325,17 +1340,44 @@ export class Chat {
       usage.totalTokens = usage.inputTokens + usage.outputTokens;
       usage.cachedTokens = (u.cache_read_input_tokens as number) ?? 0;
       usage.cacheWriteTokens = (u.cache_creation_input_tokens as number) ?? 0;
-    } else {
-      // openai, xai, local — all use the OpenAI usage format
+      // Anthropic does not return cost in the usage object
+      usage.costUsd = 0;
+    } else if (provider === 'xai') {
       usage.inputTokens = (u.prompt_tokens as number) ?? 0;
       usage.outputTokens = (u.completion_tokens as number) ?? 0;
       usage.totalTokens = (u.total_tokens as number) ?? 0;
       const details = u.completion_tokens_details as { reasoning_tokens?: number } | undefined;
       usage.reasoningTokens = details?.reasoning_tokens ?? 0;
-      if (provider === 'openai') {
-        const promptDetails = u.prompt_tokens_details as { cached_tokens?: number } | undefined;
-        usage.cachedTokens = promptDetails?.cached_tokens ?? 0;
-      }
+      const promptDetails = u.prompt_tokens_details as { cached_tokens?: number } | undefined;
+      usage.cachedTokens = promptDetails?.cached_tokens ?? 0;
+      // xAI returns cost_in_usd_ticks: 10_000_000_000 ticks = $1 USD
+      const ticks = (u.cost_in_usd_ticks as number) ?? 0;
+      usage.costUsd = ticks > 0 ? ticks / 10_000_000_000 : 0;
+    } else if (provider === 'openrouter') {
+      usage.inputTokens = (u.prompt_tokens as number) ?? 0;
+      usage.outputTokens = (u.completion_tokens as number) ?? 0;
+      usage.totalTokens = (u.total_tokens as number) ?? 0;
+      const details = u.completion_tokens_details as { reasoning_tokens?: number } | undefined;
+      usage.reasoningTokens = details?.reasoning_tokens ?? 0;
+      const promptDetails = u.prompt_tokens_details as {
+        cached_tokens?: number;
+        cache_write_tokens?: number;
+      } | undefined;
+      usage.cachedTokens = promptDetails?.cached_tokens ?? 0;
+      usage.cacheWriteTokens = promptDetails?.cache_write_tokens ?? 0;
+      // OpenRouter returns cost in credits (1 credit = $0.000001 USD)
+      const credits = (u.cost as number) ?? 0;
+      usage.costUsd = credits > 0 ? credits * 0.000001 : 0;
+    } else {
+      // openai, local — standard OpenAI usage format, no cost field
+      usage.inputTokens = (u.prompt_tokens as number) ?? 0;
+      usage.outputTokens = (u.completion_tokens as number) ?? 0;
+      usage.totalTokens = (u.total_tokens as number) ?? 0;
+      const details = u.completion_tokens_details as { reasoning_tokens?: number } | undefined;
+      usage.reasoningTokens = details?.reasoning_tokens ?? 0;
+      const promptDetails = u.prompt_tokens_details as { cached_tokens?: number } | undefined;
+      usage.cachedTokens = promptDetails?.cached_tokens ?? 0;
+      usage.costUsd = 0;
     }
 
     return usage;
@@ -1362,8 +1404,14 @@ export class Chat {
         outputTokens: usage.outputTokens,
         cachedTokens: usage.cachedTokens,
         cacheWriteTokens: usage.cacheWriteTokens,
+        actualCostUsd: usage.costUsd,
       });
-      cost.estimatedUsd = costResult.total;
+      cost.estimatedUsd = costResult.actualUsd && costResult.actualUsd > 0
+        ? costResult.actualUsd
+        : costResult.total;
+      cost.actualUsd = costResult.actualUsd && costResult.actualUsd > 0
+        ? costResult.actualUsd
+        : undefined;
     } catch {
       // Cost calculation may fail for unknown models
     }
@@ -1375,8 +1423,9 @@ export class Chat {
       cost,
       provider,
       model,
-      cached: usage.cachedTokens > 0,
+      cached: usage.cachedTokens > 0 || usage.costUsd > 0,
       iterations,
+      costActualUsd: usage.costUsd,
     };
     this._lastResult = result;
     return result;

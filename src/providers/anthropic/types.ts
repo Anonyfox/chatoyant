@@ -318,6 +318,7 @@ export interface MessagesRequest {
 
 /**
  * Token usage statistics.
+ * Anthropic does not return cost in the usage object.
  */
 export interface Usage {
   input_tokens: number;
