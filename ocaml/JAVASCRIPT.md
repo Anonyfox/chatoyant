@@ -134,8 +134,9 @@ const text = await genText("Hello", { model: "gpt-4o" });
 
 - `package.json`
 - `README.md`
+- `OCAML.md`
+- `JAVASCRIPT.md`
 - `LICENSE`
-- `docs/*.md`
 - `dist/index.js`
 - `dist/index.cjs`
 - `dist/index.d.ts`

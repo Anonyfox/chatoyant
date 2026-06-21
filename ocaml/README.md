@@ -1,9 +1,9 @@
 # Chatoyant
 
 OCaml-first LLM SDK with an Eio native runtime and a Melange-generated npm
-package. This directory is the publishable OCaml implementation and npm package
-root; the production TypeScript implementation at the repository root remains
-available as comparison material until the final repository swap.
+package. Chatoyant provides typed provider clients, structured outputs, tool
+calling, streaming, token/cost accounting, and a root-only JavaScript API
+generated from the OCaml implementation.
 
 ## Highlights
 
@@ -71,7 +71,7 @@ let () =
   ignore (Chatoyant.gen_text ai "Divide 83 by 3.")
 ```
 
-For the full native guide, see [docs/OCAML.md](docs/OCAML.md).
+For the full native guide, see [OCAML.md](OCAML.md).
 
 ## JavaScript Quick Start
 
@@ -101,8 +101,7 @@ import { Chat, OpenAI, Tokens, JsonSchema, genData } from "chatoyant";
 ```
 
 Former subpath imports from the TypeScript package intentionally move to this
-root surface. See [docs/JAVASCRIPT.md](docs/JAVASCRIPT.md) and
-[docs/MIGRATION_JS.md](docs/MIGRATION_JS.md).
+root surface. See [JAVASCRIPT.md](JAVASCRIPT.md).
 
 ## Build And Test
 
@@ -110,13 +109,11 @@ Run from this directory:
 
 ```bash
 npm test
-npm run pack:dry-run
+npm run release:check
 ```
 
-`npm test` builds and tests the native OCaml package first, emits Melange ESM,
-bundles the npm package with esbuild, runs Node's native tests against
-`dist/index.js`, checks `dist/index.d.ts` with `tsc`, and runs the pinned
-official JSON Schema suite through the bundled package.
-
-For architecture and parity status, start with [NORTHSTAR.md](NORTHSTAR.md),
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), and [docs/PARITY.md](docs/PARITY.md).
+`npm run release:check` builds and tests the native OCaml package first, emits
+Melange ESM, bundles the npm package with esbuild, runs Node's native tests
+against `dist/index.js`, checks `dist/index.d.ts` with `tsc`, runs the pinned
+official JSON Schema suite through the bundled package, lints opam metadata,
+checks local documentation links, and verifies the npm tarball contents.

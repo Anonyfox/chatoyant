@@ -17,8 +17,9 @@
   },
   "files": [
     "dist",
-    "docs",
     "README.md",
+    "OCAML.md",
+    "JAVASCRIPT.md",
     "LICENSE"
   ],
   "scripts": {
