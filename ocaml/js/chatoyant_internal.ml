@@ -1271,6 +1271,8 @@ async function providerGenerateImage(provider, prompt, options = {}) {
       prompt,
       n: options.n || options.count,
       size: options.size,
+      aspect_ratio: options.aspectRatio || options.aspect_ratio,
+      resolution: options.resolution,
       response_format: options.responseFormat || options.response_format,
       ...options.requestOptions,
     },
@@ -1295,7 +1297,14 @@ async function providerGenerateImages(provider, prompt, count, options = {}) {
 async function providerStartVideoGeneration(provider, prompt, options = {}) {
   return providerRequest(provider, "/video/generations", {
     ...options,
-    json: { model: options.model || options.defaultVideoModel || "grok-imagine-video", prompt, ...options.requestOptions },
+    json: {
+      model: options.model || options.defaultVideoModel || "grok-imagine-video",
+      prompt,
+      duration: options.duration,
+      aspect_ratio: options.aspectRatio || options.aspect_ratio,
+      resolution: options.resolution,
+      ...options.requestOptions,
+    },
   });
 }
 
@@ -1739,6 +1748,40 @@ class Chat {
     return presets[provider]?.[model] || presets.openai[model] || model;
   }
 
+  _resolvedModel(options = {}, provider = this._detectProvider(options)) {
+    return options.model ? this._resolvePreset(options.model, provider) : this._model;
+  }
+
+  _temperature(options = {}) {
+    if (options.temperature !== undefined) return options.temperature;
+    const creativity = options.creativity;
+    if (creativity === "precise") return 0;
+    if (creativity === "balanced") return 0.7;
+    if (creativity === "creative") return 1;
+    if (creativity === "wild") return 1.5;
+    return undefined;
+  }
+
+  _reasoningEffort(value) {
+    if (value === undefined || value === null) return undefined;
+    if (value === "off") return "none";
+    return String(value);
+  }
+
+  _anthropicThinking(value, options = {}) {
+    const effort = this._reasoningEffort(value);
+    if (!effort || effort === "none") return undefined;
+    const budget = options.thinkingBudget ?? options.thinking_budget;
+    const defaultBudget = effort === "low" ? 2048 : effort === "medium" ? 8192 : 32768;
+    return { type: "enabled", budget_tokens: budget ?? defaultBudget };
+  }
+
+  _timeoutFor(provider, options = {}) {
+    if (options.timeout !== undefined) return options.timeout;
+    if (provider === "local") return options.localTimeout ?? this._localTimeout ?? DEFAULT_TIMEOUT;
+    return DEFAULT_TIMEOUT;
+  }
+
   _detectProvider(options = {}) {
     if (options.provider) return options.provider;
     if (this._defaults.provider) return this._defaults.provider;
@@ -1853,7 +1896,7 @@ class Chat {
   }
 
   async _generateWithToolLoop(options = {}) {
-    const maxIterations = options.maxToolIterations ?? DEFAULT_MAX_TOOL_ITERATIONS;
+    const maxIterations = options.maxToolIterations ?? options.maxIterations ?? DEFAULT_MAX_TOOL_ITERATIONS;
     let messages = this._messages.slice();
     let finalResult = null;
     let totalUsage = this._emptyUsage();
@@ -1906,7 +1949,7 @@ class Chat {
   }
 
   async _callOpenAICompatible(provider, messages, options = {}) {
-    const model = options.model || this._model;
+    const model = this._resolvedModel(options, provider);
     const apiKey = this._apiKey(provider, options);
     if (!apiKey && provider !== "local") throw new Error(`Missing API key for ${provider}`);
     const baseUrl = this._baseUrl(provider, options);
@@ -1919,10 +1962,19 @@ class Chat {
     const body = {
       model,
       messages: this._wireMessages(provider, messages),
-      temperature: options.temperature,
+      temperature: this._temperature(options),
       max_tokens: options.maxTokens ?? options.max_tokens,
+      top_p: options.topP ?? options.top_p,
+      stop: options.stop,
+      frequency_penalty: options.frequencyPenalty ?? options.frequency_penalty,
+      presence_penalty: options.presencePenalty ?? options.presence_penalty,
       stream: false,
     };
+    const reasoningEffort = this._reasoningEffort(options.reasoning);
+    if (reasoningEffort) body.reasoning_effort = reasoningEffort;
+    if (provider === "xai" && options.webSearch) {
+      body.search_parameters = options.searchParameters || options.search_parameters || {};
+    }
     const tools = this._toolDefinitions(provider);
     if (tools?.length) body.tools = tools;
     if (options.toolChoice) body.tool_choice = options.toolChoice;
@@ -1931,7 +1983,7 @@ class Chat {
       method: "POST",
       headers,
       body: JSON.stringify(body),
-    }, options.timeout ?? DEFAULT_TIMEOUT);
+    }, this._timeoutFor(provider, options));
     const choice = json.choices?.[0] || {};
     const message = choice.message || {};
     const usage = this._usageFromOpenAI(json.usage || {}, provider);
@@ -1958,7 +2010,7 @@ class Chat {
   }
 
   async *_streamOpenAICompatible(provider, messages, options = {}) {
-    const model = options.model || this._model;
+    const model = this._resolvedModel(options, provider);
     const apiKey = this._apiKey(provider, options);
     if (!apiKey && provider !== "local") throw new Error(`Missing API key for ${provider}`);
     const baseUrl = this._baseUrl(provider, options);
@@ -1967,10 +2019,19 @@ class Chat {
     const body = {
       model,
       messages: this._wireMessages(provider, messages),
-      temperature: options.temperature,
+      temperature: this._temperature(options),
       max_tokens: options.maxTokens ?? options.max_tokens,
+      top_p: options.topP ?? options.top_p,
+      stop: options.stop,
+      frequency_penalty: options.frequencyPenalty ?? options.frequency_penalty,
+      presence_penalty: options.presencePenalty ?? options.presence_penalty,
       stream: true,
     };
+    const reasoningEffort = this._reasoningEffort(options.reasoning);
+    if (reasoningEffort) body.reasoning_effort = reasoningEffort;
+    if (provider === "xai" && options.webSearch) {
+      body.search_parameters = options.searchParameters || options.search_parameters || {};
+    }
     if (options.extra && typeof options.extra === "object") Object.assign(body, options.extra);
     const response = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
@@ -1988,7 +2049,7 @@ class Chat {
   }
 
   async _callAnthropic(messages, options = {}) {
-    const model = options.model || this._model;
+    const model = this._resolvedModel(options, "anthropic");
     const apiKey = this._apiKey("anthropic", options);
     if (!apiKey) throw new Error("Missing API key for anthropic");
     const system = messages.filter((m) => m.role === "system").map((m) => m.content).join("\n\n") || undefined;
@@ -1996,9 +2057,13 @@ class Chat {
       model,
       messages: this._wireMessages("anthropic", messages),
       max_tokens: options.maxTokens ?? options.max_tokens ?? 4096,
-      temperature: options.temperature,
+      temperature: this._temperature(options),
+      top_p: options.topP ?? options.top_p,
+      stop_sequences: options.stop,
       system,
     };
+    const thinking = this._anthropicThinking(options.reasoning, options);
+    if (thinking) body.thinking = thinking;
     const tools = this._toolDefinitions("anthropic");
     if (tools?.length) body.tools = tools;
     if (options.extra && typeof options.extra === "object") Object.assign(body, options.extra);
@@ -2010,7 +2075,7 @@ class Chat {
         "anthropic-version": options.anthropicVersion || "2023-06-01",
       },
       body: JSON.stringify(body),
-    }, options.timeout ?? DEFAULT_TIMEOUT);
+    }, this._timeoutFor("anthropic", options));
     const blocks = json.content || [];
     const text = blocks.filter((block) => block.type === "text").map((block) => block.text || "").join("");
     const toolCalls = blocks.filter((block) => block.type === "tool_use").map((block) => ({
@@ -2037,7 +2102,7 @@ class Chat {
   }
 
   async *_streamAnthropic(messages, options = {}) {
-    const model = options.model || this._model;
+    const model = this._resolvedModel(options, "anthropic");
     const apiKey = this._apiKey("anthropic", options);
     if (!apiKey) throw new Error("Missing API key for anthropic");
     const system = messages.filter((m) => m.role === "system").map((m) => m.content).join("\n\n") || undefined;
@@ -2045,10 +2110,14 @@ class Chat {
       model,
       messages: this._wireMessages("anthropic", messages),
       max_tokens: options.maxTokens ?? options.max_tokens ?? 4096,
-      temperature: options.temperature,
+      temperature: this._temperature(options),
+      top_p: options.topP ?? options.top_p,
+      stop_sequences: options.stop,
       system,
       stream: true,
     };
+    const thinking = this._anthropicThinking(options.reasoning, options);
+    if (thinking) body.thinking = thinking;
     if (options.extra && typeof options.extra === "object") Object.assign(body, options.extra);
     const response = await fetch(`${this._baseUrl("anthropic", options)}/messages`, {
       method: "POST",
@@ -2200,7 +2269,7 @@ let gen_text : js_function =
   [%mel.raw
     {|
 async function genText(prompt, options = {}) {
-  const chat = new Chat({ model: options && options.model });
+  const chat = new Chat(options || {});
   if (options && options.system) {
     chat.system(options.system);
   }
@@ -2214,7 +2283,7 @@ let gen_stream : js_function =
   [%mel.raw
     {|
 async function* genStream(prompt, options = {}) {
-  const chat = new Chat({ model: options && options.model });
+  const chat = new Chat(options || {});
   if (options && options.system) {
     chat.system(options.system);
   }
@@ -2228,7 +2297,7 @@ let gen_stream_accumulate : js_function =
   [%mel.raw
     {|
 async function genStreamAccumulate(prompt, options = {}) {
-  const chat = new Chat({ model: options && options.model });
+  const chat = new Chat(options || {});
   if (options && options.system) {
     chat.system(options.system);
   }
@@ -2242,7 +2311,7 @@ let gen_data : js_function =
   [%mel.raw
     {|
 async function genData(prompt, schema, options = {}) {
-  const chat = new Chat({ model: options && options.model });
+  const chat = new Chat(options || {});
   if (options && options.system) {
     chat.system(options.system);
   }
@@ -2464,7 +2533,16 @@ function makeProviderClientClass(provider) {
     }
 
     async editImage(image, prompt, options = {}) {
-      return providerRequest(provider, "/images/edits", { ...this.getImageOptions(options), json: { image, prompt, ...options.requestOptions } });
+      return providerRequest(provider, "/images/edits", {
+        ...this.getImageOptions(options),
+        json: {
+          image,
+          prompt,
+          aspect_ratio: options.aspectRatio || options.aspect_ratio,
+          resolution: options.resolution,
+          ...options.requestOptions,
+        },
+      });
     }
 
     async editImageUrl(image, prompt, options = {}) {
@@ -2498,11 +2576,31 @@ function makeProviderClientClass(provider) {
     }
 
     async generateVideoFromImage(image, prompt, options = {}) {
-      return providerRequest(provider, "/video/generations", { ...this.getVideoOptions(options), json: { image, prompt, ...options.requestOptions } });
+      return providerRequest(provider, "/video/generations", {
+        ...this.getVideoOptions(options),
+        json: {
+          image,
+          prompt,
+          duration: options.duration,
+          aspect_ratio: options.aspectRatio || options.aspect_ratio,
+          resolution: options.resolution,
+          ...options.requestOptions,
+        },
+      });
     }
 
     async editVideo(video, prompt, options = {}) {
-      return providerRequest(provider, "/video/edits", { ...this.getVideoOptions(options), json: { video, prompt, ...options.requestOptions } });
+      return providerRequest(provider, "/video/edits", {
+        ...this.getVideoOptions(options),
+        json: {
+          video,
+          prompt,
+          duration: options.duration,
+          aspect_ratio: options.aspectRatio || options.aspect_ratio,
+          resolution: options.resolution,
+          ...options.requestOptions,
+        },
+      });
     }
   };
 }

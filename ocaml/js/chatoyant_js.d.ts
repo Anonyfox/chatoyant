@@ -320,13 +320,38 @@ export interface GenerationOptions {
   localTimeout?: number;
   anthropicVersion?: string;
   temperature?: number;
+  creativity?: "precise" | "balanced" | "creative" | "wild";
+  reasoning?: "off" | "none" | "low" | "medium" | "high" | (string & {});
   maxTokens?: number;
   max_tokens?: number;
+  topP?: number;
+  top_p?: number;
+  stop?: string | string[];
+  frequencyPenalty?: number;
+  frequency_penalty?: number;
+  presencePenalty?: number;
+  presence_penalty?: number;
   timeout?: number;
+  /**
+   * Alias for `maxToolIterations`, retained for compatibility with the
+   * original JavaScript package.
+   */
   maxIterations?: number;
   maxToolIterations?: number;
   toolTimeout?: number;
   toolChoice?: unknown;
+  webSearch?: boolean;
+  searchParameters?: Record<string, unknown>;
+  search_parameters?: Record<string, unknown>;
+  thinkingBudget?: number;
+  thinking_budget?: number;
+  aspectRatio?: string;
+  aspect_ratio?: string;
+  resolution?: string;
+  duration?: number;
+  responseFormat?: string;
+  response_format?: string;
+  requestOptions?: Record<string, unknown>;
   httpReferer?: string;
   title?: string;
   extra?: Record<string, unknown>;

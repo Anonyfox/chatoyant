@@ -81,6 +81,29 @@ assertType<GenerateResult | null>(chat.lastResult);
 const generationOptions: GenerateWithToolsOptions = { model: "gpt-4o", temperature: 0 };
 assertType<GenerateWithToolsOptions>(generationOptions);
 
+const richGenerationOptions: GenerateWithToolsOptions = {
+  model: "fast",
+  provider: "anthropic",
+  creativity: "balanced",
+  reasoning: "high",
+  maxTokens: 1000,
+  topP: 0.9,
+  stop: ["END"],
+  frequencyPenalty: 0.1,
+  presencePenalty: 0.1,
+  localBaseUrl: "http://127.0.0.1:11434/v1",
+  localApiKey: "local",
+  localTimeout: 120_000,
+  webSearch: true,
+  searchParameters: { mode: "on" },
+  thinkingBudget: 2048,
+  aspectRatio: "16:9",
+  resolution: "720p",
+  duration: 10,
+  requestOptions: { custom: true },
+};
+assertType<GenerateWithToolsOptions>(richGenerationOptions);
+
 const dataPromise = chat.generateData(SearchArgs, { __chatoyantTestFake: true });
 assertType<Promise<SearchArgsType>>(dataPromise);
 
@@ -156,9 +179,20 @@ assertType<Promise<string>>(providerClient.chatSimple([{ role: "user", content: 
 assertType<Promise<unknown>>(OpenAI.createClient({ model: "gpt-4o" }).chat([{ role: "user", content: "hi" }]));
 assertType<Promise<string[]>>(OpenAI.listModelIds({ apiKey: "test" }));
 assertType<Promise<Array<{ id: string; [key: string]: unknown }>>>(XAI.getLanguageModelList({ apiKey: "test" }));
+assertType<Promise<string>>(XAI.generateImageUrl("city", { apiKey: "test", aspectRatio: "16:9" }));
+assertType<Promise<string>>(XAI.editImageUrl("image.png", "sketch", { apiKey: "test", resolution: "2k" }));
+assertType<Promise<unknown>>(XAI.editMultipleImages(["a.png", "b.png"], "merge", { apiKey: "test" }));
+assertType<Promise<unknown>>(XAI.startVideoGeneration("scene", { apiKey: "test", duration: 10 }));
+assertType<Promise<unknown>>(XAI.getVideoStatus("video_1", { apiKey: "test" }));
+assertType<Promise<string>>(XAI.generateVideoUrl("scene", { apiKey: "test", duration: 5 }));
 assertType<Promise<unknown>>(Providers.create("openai", { model: "gpt-4o" }).chat([{ role: "user", content: "hi" }]));
 assertType<typeof Providers.XAI.Client>(Chatoyant.Providers.XAI.Client);
 assertType<typeof Providers.OpenRouter.create>(Chatoyant.OpenRouter.create);
 assertType<typeof Tokens>(Chatoyant.Tokens);
 assertType<typeof detectProviderByModel>(Chatoyant.detectProviderByModel);
 assertType<{ x: number } & { y: number }>(Chatoyant.mergeOptions({ x: 1 }, { y: 2 }));
+
+type CjsPackage = typeof import("../../dist/index.cjs");
+declare const cjsPackage: CjsPackage;
+assertType<new (...args: any[]) => unknown>(cjsPackage.Chat);
+assertType<(prompt: string, options?: GenerateWithToolsOptions) => Promise<string>>(cjsPackage.genText);
