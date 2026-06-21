@@ -1,0 +1,34 @@
+(lang dune 3.23)
+(using melange 1.0)
+
+(name chatoyant)
+(generate_opam_files true)
+(authors "Anonyfox <max@anonyfox.com>")
+(maintainers "Anonyfox <max@anonyfox.com>")
+(source (github Anonyfox/chatoyant))
+
+(package
+ (name chatoyant)
+ (synopsis "Typesafe OCaml and Melange LLM provider SDK")
+ (description
+  "OCaml-first implementation of Chatoyant, with native OCaml libraries and a bundled ESM npm package generated through Melange.")
+ (license MIT)
+ (homepage "https://github.com/Anonyfox/chatoyant")
+ (bug_reports "https://github.com/Anonyfox/chatoyant/issues")
+ (documentation "https://github.com/Anonyfox/chatoyant")
+ (depends
+  (ocaml (>= 5.1))
+  (dune (>= 3.23))
+  (melange (>= 6.0.0))
+  ca-certs
+  cohttp-eio
+  domain-name
+  eio
+  (eio_main :with-test)
+  http
+  mirage-crypto-rng
+  (ppxlib :build)
+  tls
+  tls-eio
+  uri
+  x509))

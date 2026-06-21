@@ -1,0 +1,36 @@
+{
+  "name": "chatoyant",
+  "version": "0.0.0-ocaml-port",
+  "description": "OCaml-first Chatoyant SDK with a Melange-generated ESM npm package.",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build:ocaml": "dune build @runtest @melange",
+    "build:npm": "node scripts/build-npm.mjs",
+    "build": "npm run build:ocaml && npm run build:npm",
+    "test:node": "node --test --test-reporter=dot $(find test/js -name '*.test.mjs' ! -name 'json-schema-official.test.mjs' -type f | sort)",
+    "test:types": "tsc --noEmit -p tsconfig.json",
+    "test:json-schema-suite": "node scripts/ensure-json-schema-test-suite.mjs && JSON_SCHEMA_TEST_SUITE_DIR=.cache/json-schema-test-suite node --test --test-reporter=dot test/js/json-schema-official.test.mjs",
+    "test": "npm run build && npm run test:node && npm run test:types && npm run test:json-schema-suite",
+    "typecheck": "npm run test:types",
+    "pack:dry-run": "npm run build && npm pack --dry-run"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.3",
+    "esbuild": "^0.28.1",
+    "typescript": "^5.9.3"
+  }
+}

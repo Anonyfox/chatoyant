@@ -1,0 +1,18 @@
+(library
+ (name chatoyant_native)
+ (public_name chatoyant.native)
+ (libraries
+  chatoyant_core
+  chatoyant_provider
+  chatoyant_runtime
+  chatoyant_schema
+  ca-certs
+  cohttp-eio
+  domain-name
+  eio
+  http
+  mirage-crypto-rng.unix
+  tls
+  tls-eio
+  uri
+  x509))

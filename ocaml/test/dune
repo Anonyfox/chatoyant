@@ -1,0 +1,70 @@
+(test
+ (name test_chatoyant_ocaml)
+ (modules test_chatoyant_ocaml)
+ (libraries chatoyant))
+
+(test
+ (name test_json_schema)
+ (modules test_json_schema)
+ (libraries chatoyant))
+
+(test
+ (name test_ppx_tool)
+ (modules test_ppx_tool)
+ (libraries chatoyant)
+ (preprocess
+  (pps chatoyant.ppx)))
+
+(test
+ (name test_anthropic)
+ (modules test_anthropic)
+ (libraries chatoyant))
+
+(test
+ (name test_openai)
+ (modules test_openai)
+ (libraries chatoyant))
+
+(test
+ (name test_openai_compatible)
+ (modules test_openai_compatible)
+ (libraries chatoyant))
+
+(test
+ (name test_xai)
+ (modules test_xai)
+ (libraries chatoyant))
+
+(test
+ (name test_eio)
+ (modules test_eio)
+ (libraries chatoyant cohttp-eio eio_main http)
+ (preprocess
+  (pps chatoyant.ppx)))
+
+(executable
+ (name smoke_anthropic_real)
+ (modules smoke_anthropic_real)
+ (libraries chatoyant unix))
+
+(executable
+ (name smoke_openai_real)
+ (modules smoke_openai_real)
+ (libraries chatoyant unix))
+
+(executable
+ (name smoke_openai_tools_eio_real)
+ (modules smoke_openai_tools_eio_real)
+ (libraries chatoyant cohttp-eio eio_main http uri)
+ (preprocess
+  (pps chatoyant.ppx)))
+
+(executable
+ (name smoke_openrouter_real)
+ (modules smoke_openrouter_real)
+ (libraries chatoyant unix))
+
+(executable
+ (name smoke_xai_real)
+ (modules smoke_xai_real)
+ (libraries chatoyant unix))
