@@ -41,3 +41,34 @@ module type HTTP = sig
 
   val send : request -> (response, error) result
 end
+
+module type WEBSOCKET = sig
+  type message =
+    | Text of string
+    | Binary of string
+
+  type close = {
+    code : int;
+    reason : string;
+  }
+
+  type request = {
+    url : string;
+    headers : (string * string) list;
+    protocols : string list;
+    timeout_ms : int option;
+  }
+
+  type error =
+    | Timeout of int
+    | Network of string
+    | Invalid_response of string
+    | Closed of close option
+
+  type connection
+
+  val with_connection : request -> (connection -> 'a) -> ('a, error) result
+  val send : connection -> message -> (unit, error) result
+  val recv : connection -> (message, error) result
+  val close : ?code:int -> ?reason:string -> connection -> (unit, error) result
+end

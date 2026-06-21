@@ -9,6 +9,7 @@ module Core = Chatoyant_core
 module Clock = Chatoyant_native.Clock
 module Env = Chatoyant_native.Env
 module Http = Chatoyant_native.Http
+module Websocket = Chatoyant_native.Websocket
 module Error = Chatoyant_native.Error
 module Chat = Chatoyant_native.Chat
 

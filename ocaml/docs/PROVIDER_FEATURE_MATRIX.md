@@ -2,8 +2,7 @@
 
 This file is the current-docs target for raw provider parity. It is intentionally
 more exhaustive than `PARITY.md`: every row should eventually be either
-implemented, intentionally unsupported, or blocked by a runtime capability such
-as WebSocket transport or mTLS client certificates.
+implemented, intentionally opt-in, or intentionally outside the SDK surface.
 
 Sources reread on 2026-06-21:
 
@@ -22,11 +21,7 @@ Sources reread on 2026-06-21:
 ## Status Legend
 
 - `done`: typed request/response/client tests exist.
-- `partial`: useful typed coverage exists, but endpoint families or event
-  variants are missing.
-- `blocked`: requires a runtime capability not yet represented in the current
-  HTTP effect boundary, or an external service/runtime not available locally.
-- `profile-opt-in`: exposed explicitly for callers that know their server
+- `opt-in`: exposed explicitly for callers that know their server
   supports the endpoint, but not used by default provider abstraction flows.
 - `skip`: intentionally not part of the SDK surface unless later requested.
 
@@ -43,7 +38,7 @@ Sources reread on 2026-06-21:
 | Vector Stores | done | Create/list/retrieve/update/delete/search, vector store files, and vector store file batches covered. |
 | Batches | done | Create/list/retrieve/cancel typed. Full JSONL workflow now has Files prerequisite available. |
 | Audio | done | Speech, transcription, and translation are typed, including multipart upload, raw audio response, and transcript stream event decoding with raw fallback. |
-| Realtime | blocked | Requires WebRTC/WebSocket effect boundary. |
+| Realtime | done | Server-to-server WebSocket uses `Chatoyant.Websocket` plus `Openai.Make_realtime`; Realtime client-secret minting and `/realtime/calls` WebRTC SDP exchange are typed/tested through the raw HTTP client. Event payloads remain provider JSON with typed schema codecs available above them. |
 | Moderation | done | Typed request/response/client coverage. |
 | Fine-tuning/checkpoints | done | Fine-tuning create/list/retrieve/cancel/events and checkpoint listing covered. |
 | Evals/containers | done | Evals, runs, run output items, containers, and container files covered through typed generic resource/list/delete envelopes with raw retention. |
@@ -69,10 +64,10 @@ Sources reread on 2026-06-21:
 | Images | done | Generation/edit request/response covered. |
 | Videos | done | Start/status/download covered. |
 | Models | done | List typed. |
-| Voice | done | REST TTS raw-audio body, built-in voice listing, REST STT multipart transcription with word/channel decoding, and custom voice create/list/retrieve/update/download/delete are typed/tested. WebSocket voice streaming remains in the WebSocket row. |
+| Voice | done | REST TTS raw-audio body, built-in voice listing, REST STT multipart transcription with word/channel decoding, custom voice create/list/retrieve/update/download/delete, ephemeral realtime client secrets, Voice Agent WebSocket URL, streaming TTS WebSocket URL, and streaming STT WebSocket URL are typed/tested. |
 | Files/Collections | done | Files upload/list/retrieve/delete/download covered on inference API. Collections CRUD, document add/list/retrieve/regenerate/remove, and search covered on management API config. |
 | Batches | done | Create/list/get/list requests/add requests/results/cancel typed. Request payloads preserve provider JSON for chat/image/video prepared requests. |
-| mTLS/WebSocket | blocked | Deferred request retrieval is implemented for REST. mTLS client-certificate auth and WebSocket mode require runtime transport/auth extensions. |
+| mTLS/WebSocket | done | Native Eio HTTP supports `Chatoyant.Http.Mutual_tls`; native WebSocket supports `ws://`/`wss://`; xAI helpers cover Responses WebSocket mode, Voice Agent, streaming TTS, and streaming STT with fake-WebSocket provider tests. |
 
 ## OpenRouter
 
@@ -93,5 +88,5 @@ Sources reread on 2026-06-21:
 | Chat Completions | done | Conservative normalization, default local auth, fake HTTP tests. |
 | Streaming | done | OpenAI-compatible SSE plus `<think>` fallback across chunk boundaries. |
 | Models | done | List/retrieve when server supports OpenAI-compatible model endpoints. |
-| Responses/Images/Embeddings | profile-opt-in | Explicit Local client methods are typed/tested for `/responses`, `/images/generations`, and `/embeddings`, but default chat flows stay conservative because local servers diverge widely. |
-| Live smoke | blocked | No `LOCAL_BASE_URL` and no common local server port responded during the last pass. |
+| Responses/Images/Embeddings | opt-in | Explicit Local client methods are typed/tested for `/responses`, `/images/generations`, and `/embeddings`, but default chat flows stay conservative because local servers diverge widely. |
+| Live smoke | opt-in | Native and Node local smoke harnesses are available through `LOCAL_BASE_URL`, `LOCAL_MODEL`, and optional `LOCAL_API_KEY`; they are not part of the default suite because local server availability is machine-specific. |

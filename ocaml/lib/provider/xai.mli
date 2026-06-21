@@ -343,6 +343,28 @@ type voice_delete = {
   voice_delete_raw : Chatoyant_runtime.Json.t;
 }
 
+type realtime_client_secret_request = {
+  realtime_client_secret_expires_after_seconds : int option;
+  realtime_client_secret_extra : (string * Chatoyant_runtime.Json.t) list;
+}
+(** Ephemeral token request for browser/mobile WebSocket clients. *)
+
+type realtime_client_secret = {
+  realtime_client_secret_value : string option;
+  realtime_client_secret_expires_at : int option;
+  realtime_client_secret_raw : Chatoyant_runtime.Json.t;
+}
+(** Ephemeral Realtime client secret returned by xAI. *)
+
+type websocket_config = {
+  websocket_api_key : string;
+  websocket_url : string;
+  websocket_timeout_ms : int option;
+  websocket_headers : (string * string) list;
+  websocket_protocols : string list;
+}
+(** xAI WebSocket config for voice-agent realtime and streaming TTS. *)
+
 type responses_stream_event =
   | Response_created of responses_response
   | Response_in_progress of responses_response
@@ -542,6 +564,8 @@ val tts_request_json : tts_request -> Chatoyant_runtime.Json.t
 val stt_request_parts : stt_request -> form_part list
 val custom_voice_request_parts : custom_voice_request -> form_part list
 val custom_voice_update_json : custom_voice_update -> Chatoyant_runtime.Json.t
+val realtime_client_secret_request_json :
+  realtime_client_secret_request -> Chatoyant_runtime.Json.t
 val chat_request_json : chat_request -> Chatoyant_runtime.Json.t
 val responses_request_json : responses_request -> Chatoyant_runtime.Json.t
 val batch_create_request_json : batch_create_request -> Chatoyant_runtime.Json.t
@@ -555,6 +579,37 @@ val video_request_json : video_request -> Chatoyant_runtime.Json.t
 val authorization_headers : api_key:string -> (string * string) list
 (** Bearer auth headers for xAI REST calls. *)
 
+val voice_agent_url : ?base_url:string -> model:string -> unit -> string
+val streaming_tts_url :
+  ?base_url:string ->
+  ?language:string ->
+  ?voice:string ->
+  ?codec:string ->
+  ?sample_rate:int ->
+  ?bit_rate:int ->
+  ?speed:float ->
+  ?optimize_streaming_latency:int ->
+  ?text_normalization:bool ->
+  ?with_timestamps:bool ->
+  unit ->
+  string
+val streaming_stt_url :
+  ?base_url:string ->
+  ?sample_rate:int ->
+  ?encoding:string ->
+  ?interim_results:bool ->
+  ?endpointing:int ->
+  ?language:string ->
+  ?diarize:bool ->
+  ?filler_words:bool ->
+  ?multichannel:bool ->
+  ?channels:int ->
+  ?keyterms:string list ->
+  ?smart_turn:float ->
+  ?smart_turn_timeout:int ->
+  unit ->
+  string
+val responses_websocket_url : ?base_url:string -> unit -> string
 val chat_response_of_json : Chatoyant_runtime.Json.t -> chat_response
 val generation_of_chat_response : chat_response -> Provider.generation
 val responses_response_of_json : Chatoyant_runtime.Json.t -> responses_response
@@ -563,6 +618,7 @@ val stt_response_of_json : Chatoyant_runtime.Json.t -> stt_response
 val voice_of_json : Chatoyant_runtime.Json.t -> voice
 val voice_list_of_json : Chatoyant_runtime.Json.t -> voice_list
 val voice_delete_of_json : Chatoyant_runtime.Json.t -> voice_delete
+val realtime_client_secret_of_json : Chatoyant_runtime.Json.t -> realtime_client_secret
 val responses_stream_event_of_json : Chatoyant_runtime.Json.t -> responses_stream_event
 val responses_stream_events_of_chunks : string list -> (responses_stream_event list, string) result
 val response_of_stream_chunks : string list -> (responses_response, string) result
@@ -618,6 +674,8 @@ module Make_client (Http : Chatoyant_runtime.Effect.HTTP) : sig
   val synthesize_speech : config -> tts_request -> (audio_body, api_error) result
   val list_tts_voices : config -> (voice_list, api_error) result
   val transcribe_speech : config -> stt_request -> (stt_response, api_error) result
+  val create_realtime_client_secret :
+    config -> realtime_client_secret_request -> (realtime_client_secret, api_error) result
   val create_custom_voice : config -> custom_voice_request -> (voice, api_error) result
   val list_custom_voices :
     ?limit:int -> ?pagination_token:string -> config -> (voice_list, api_error) result
@@ -707,6 +765,22 @@ end
 (** Runtime-independent xAI client. Native OCaml, Node/Melange, browser, and
     tests supply the [HTTP] effect implementation; the provider logic never
     performs ambient IO. *)
+
+module Make_websocket (Ws : Chatoyant_runtime.Effect.WEBSOCKET) : sig
+  type connection = Ws.connection
+
+  val default_realtime_base_url : string
+  val default_responses_base_url : string
+  val default_tts_base_url : string
+  val default_stt_base_url : string
+  val connect : websocket_config -> (connection -> 'a) -> ('a, api_error) result
+  val send_json : connection -> Chatoyant_runtime.Json.t -> (unit, api_error) result
+  val receive_json : connection -> (Chatoyant_runtime.Json.t, api_error) result
+  val send_text : connection -> string -> (unit, api_error) result
+  val receive_frame : connection -> (Ws.message, api_error) result
+  val close : ?code:int -> ?reason:string -> connection -> (unit, api_error) result
+end
+(** xAI WebSocket helper for Voice Agent and streaming TTS endpoints. *)
 
 module Make_provider
     (Http : Chatoyant_runtime.Effect.HTTP)

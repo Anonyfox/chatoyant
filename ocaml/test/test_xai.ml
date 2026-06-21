@@ -82,6 +82,64 @@ module Provider = Chatoyant.Provider.Xai.Make_provider (Fake_http) (struct
   let timeout_ms = Some 1_000
 end)
 
+module Fake_ws = struct
+  type message =
+    | Text of string
+    | Binary of string
+
+  type close = {
+    code : int;
+    reason : string;
+  }
+
+  type request = {
+    url : string;
+    headers : (string * string) list;
+    protocols : string list;
+    timeout_ms : int option;
+  }
+
+  type error =
+    | Timeout of int
+    | Network of string
+    | Invalid_response of string
+    | Closed of close option
+
+  type connection = {
+    incoming : message list ref;
+    sent : message list ref;
+    mutable closed : close option;
+  }
+
+  let last_request : request option ref = ref None
+  let last_sent : message list ref = ref []
+  let next_incoming = ref [ Text "{\"type\":\"session.created\"}" ]
+
+  let with_connection request fn =
+    last_request := Some request;
+    let connection = { incoming = ref !next_incoming; sent = ref []; closed = None } in
+    let result = fn connection in
+    last_sent := List.rev !(connection.sent);
+    Ok result
+
+  let send connection message =
+    connection.sent := message :: !(connection.sent);
+    Ok ()
+
+  let recv connection =
+    match !(connection.incoming) with
+    | [] -> Error (Closed connection.closed)
+    | message :: rest ->
+        connection.incoming := rest;
+        Ok message
+
+  let close ?(code = 1000) ?(reason = "") connection =
+    connection.closed <- Some { code; reason };
+    Ok ()
+end
+
+module Xai_ws = Chatoyant.Provider.Xai.Make_websocket (Fake_ws)
+
 let schema =
   Chatoyant.Runtime.Json.Object
     [
@@ -375,6 +433,98 @@ let test_stream_chunks () =
       assert_equal_string "Because" response.response_reasoning_content;
       assert_equal_int 3 response.response_usage.total_tokens;
       assert_equal_float 0.1 (Option.get response.response_usage.actual_cost_usd)
+
+let test_websocket_helpers () =
+  let voice_url =
+    Chatoyant.Provider.Xai.voice_agent_url ~model:"grok-voice-latest" ()
+  in
+  assert_contains "wss://api.x.ai/v1/realtime?model=grok-voice-latest" voice_url;
+  let tts_url =
+    Chatoyant.Provider.Xai.streaming_tts_url ~voice:"eve" ~codec:"mp3"
+      ~sample_rate:24000 ~bit_rate:128000 ~speed:1.2
+      ~optimize_streaming_latency:2 ~text_normalization:true
+      ~with_timestamps:true ()
+  in
+  assert_contains "wss://api.x.ai/v1/tts?language=en" tts_url;
+  assert_contains "voice=eve" tts_url;
+  assert_contains "codec=mp3" tts_url;
+  assert_contains "speed=1.2" tts_url;
+  assert_contains "optimize_streaming_latency=2" tts_url;
+  assert_contains "text_normalization=true" tts_url;
+  assert_contains "with_timestamps=true" tts_url;
+  let stt_url =
+    Chatoyant.Provider.Xai.streaming_stt_url ~sample_rate:16000 ~encoding:"pcm"
+      ~interim_results:true ~language:"en"
+      ~keyterms:[ "Understand The Universe"; "Grok" ] ~smart_turn:0.7
+      ~smart_turn_timeout:3000 ()
+  in
+  assert_contains "wss://api.x.ai/v1/stt?sample_rate=16000" stt_url;
+  assert_contains "interim_results=true" stt_url;
+  assert_contains "keyterm=Understand%20The%20Universe" stt_url;
+  assert_contains "smart_turn=0.7" stt_url;
+  assert_equal_string "wss://api.x.ai/v1/responses"
+    (Chatoyant.Provider.Xai.responses_websocket_url ());
+  assert_equal_string "wss://api.x.ai/v1/responses" Xai_ws.default_responses_base_url;
+  assert_equal_string "wss://api.x.ai/v1/stt" Xai_ws.default_stt_base_url;
+  Fake_ws.next_incoming := [ Text "{\"type\":\"session.created\"}" ];
+  (match
+     Xai_ws.connect
+       {
+         websocket_api_key = "xai-key";
+         websocket_url = voice_url;
+         websocket_timeout_ms = Some 1_000;
+         websocket_headers = [ ("X-Test", "yes") ];
+         websocket_protocols = [];
+       }
+       (fun connection ->
+         (match Xai_ws.receive_json connection with
+         | Error error -> failwith error.error_message
+         | Ok json ->
+             assert_equal_string "session.created"
+               (Option.get
+                  (Option.bind
+                     (Chatoyant.Runtime.Json.field "type" json)
+                     Chatoyant.Runtime.Json.as_string)));
+         match
+           Xai_ws.send_json connection
+             (Chatoyant.Runtime.Json.Object
+                [ ("type", Chatoyant.Runtime.Json.String "session.update") ])
+         with
+         | Error error -> failwith error.error_message
+         | Ok () -> ())
+   with
+  | Error error -> failwith error.error_message
+  | Ok () -> ());
+  (match !(Fake_ws.last_request) with
+  | Some request ->
+      assert_contains "model=grok-voice-latest" request.url;
+      if not (List.mem ("Authorization", "Bearer xai-key") request.headers) then
+        failwith "missing xAI websocket authorization";
+      if not (List.mem ("X-Test", "yes") request.headers) then
+        failwith "missing xAI websocket custom header"
+  | None -> failwith "expected xAI websocket request");
+  (match !(Fake_ws.last_sent) with
+  | [ Fake_ws.Text text ] -> assert_contains "\"session.update\"" text
+  | _ -> failwith "expected xAI websocket JSON frame");
+  Fake_ws.next_incoming := [ Binary "AUDIO" ];
+  (match
+     Xai_ws.connect
+       {
+         websocket_api_key = "xai-key";
+         websocket_url = tts_url;
+         websocket_timeout_ms = Some 1_000;
+         websocket_headers = [];
+         websocket_protocols = [];
+       }
+       (fun connection ->
+         match Xai_ws.send_text connection "{\"type\":\"text.delta\",\"text\":\"hi\"}" with
+         | Error error -> failwith error.error_message
+         | Ok () -> Xai_ws.receive_frame connection)
+   with
+  | Error error -> failwith error.error_message
+  | Ok (Error error) -> failwith error.error_message
+  | Ok (Ok (Fake_ws.Binary "AUDIO")) -> ()
+  | Ok (Ok _) -> failwith "expected xAI streaming TTS binary frame")
 
 let test_image_and_video_requests () =
   let image_body =
@@ -862,6 +1012,28 @@ let test_client_voice_endpoints () =
       | _ -> failwith "expected xAI STT multipart request")
   | None -> failwith "expected xAI STT request");
   Fake_http.next_response_body :=
+    "{\"client_secret\":{\"value\":\"xai_eph_123\",\"expires_at\":1800000000}}";
+  (match
+     Client.create_realtime_client_secret config
+       {
+         realtime_client_secret_expires_after_seconds = Some 300;
+         realtime_client_secret_extra = [];
+       }
+   with
+  | Error error -> failwith error.error_message
+  | Ok secret ->
+      assert_equal_string "xai_eph_123" (Option.get secret.realtime_client_secret_value));
+  (match !(Fake_http.last_request) with
+  | Some request -> (
+      assert_contains "/realtime/client_secrets" request.url;
+      match request.body with
+      | Fake_http.Json body ->
+          let text = Chatoyant.Runtime.Json.to_string body in
+          assert_contains "\"expires_after\"" text;
+          assert_contains "\"seconds\":300" text
+      | _ -> failwith "expected xAI realtime client secret JSON request")
+  | None -> failwith "expected xAI realtime client secret request");
+  Fake_http.next_response_body :=
     "{\"voice_id\":\"nlbqfwie\",\"name\":\"Friendly Narrator\",\"description\":\"Warm\",\"gender\":\"female\",\"language\":\"en\",\"tone\":\"warm\",\"created_at\":\"2026-04-26T18:56:34Z\"}";
   (match
      Client.create_custom_voice config
@@ -1078,6 +1250,7 @@ let () =
   test_chat_response_decode ();
   test_responses_api ();
   test_stream_chunks ();
+  test_websocket_helpers ();
   test_image_and_video_requests ();
   test_image_and_video_response_decode ();
   test_voice_and_audio_requests ();

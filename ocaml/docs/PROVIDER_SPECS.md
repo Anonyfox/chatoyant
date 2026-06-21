@@ -63,9 +63,12 @@ Audit notes:
     `test/node_openai_real.mjs`, verified against both `/v1/responses` and
     `/v1/chat/completions` with `gpt-4o-mini`.
 - Evals, containers, and administration are implemented through separate typed
-  generic resource/list/delete envelopes with raw retention. Realtime
-  WebRTC/WebSocket remains transport-bound runtime work rather than an HTTP
-  client gap.
+  generic resource/list/delete envelopes with raw retention.
+- Realtime coverage includes server-to-server WebSocket through
+  `Openai.Make_realtime`, ephemeral client-secret minting through
+  `/realtime/client_secrets`, and WebRTC unified-interface SDP exchange through
+  `/realtime/calls`. Realtime event payloads intentionally remain provider JSON
+  so newly shipped event variants are retained losslessly.
 
 ## Anthropic
 
@@ -188,9 +191,11 @@ Audit notes:
   - real opt-in smoke tests in `test/smoke_xai_real.ml` and
     `test/node_xai_real.mjs`, verified against both `/v1/chat/completions` and
     `/v1/responses` with `grok-4.20-0309-non-reasoning`.
-- xAI mTLS and WebSocket mode remain runtime transport work. The HTTP client
-  covers REST async/deferred flows and REST audio; streaming voice sessions need
-  an explicit WebSocket effect boundary.
+- xAI mTLS and WebSocket mode are represented at the runtime boundary: the HTTP
+  client is backed by native `Chatoyant.Http.Mutual_tls`, while
+  `Chatoyant.Websocket` plus `Xai.Make_websocket` covers Responses WebSocket
+  mode, Voice Agent, streaming TTS, and streaming STT. REST async/deferred flows
+  and REST audio remain covered through the normal HTTP client.
 
 ## OpenRouter
 
@@ -258,5 +263,6 @@ Audit notes:
     those routes, without making the default provider abstraction assume those
     endpoints are portable.
   - client and provider adapter functors are tested with fake HTTP.
-  - live local smoke is blocked because no `LOCAL_BASE_URL` was configured and
-    no common local OpenAI-compatible server port responded during this pass.
+  - live local smoke is available through `test/smoke_local_real.ml` and
+    `test/node_local_real.mjs` when `LOCAL_BASE_URL` and `LOCAL_MODEL` point at
+    a running OpenAI-compatible server.

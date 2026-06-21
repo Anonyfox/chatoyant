@@ -26,7 +26,9 @@ depends: [
   "dune" {>= "3.23"}
   "melange" {>= "6.0.0"}
   "ca-certs"
+  "base64"
   "cohttp-eio"
+  "digestif"
   "domain-name"
   "eio"
   "eio_main" {with-test}

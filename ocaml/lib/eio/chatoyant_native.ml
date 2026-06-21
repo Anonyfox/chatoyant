@@ -55,9 +55,16 @@ module Http = struct
        and type response = response
        and type error = error
 
+  type client_certificate = {
+    certificate_pem : string;
+    private_key_pem : string;
+    authenticator : X509.Authenticator.t option;
+  }
+
   type https =
     | System
     | Authenticator of X509.Authenticator.t
+    | Mutual_tls of client_certificate
     | Tls_config of Tls.Config.client
     | Disabled
 
@@ -76,10 +83,41 @@ module Http = struct
         | Ok config -> Ok config
         | Error (`Msg message) -> Error message)
 
+  let mtls_config ?authenticator ~certificate_pem ~private_key_pem () =
+    let authenticator =
+      match authenticator with
+      | Some authenticator -> Ok authenticator
+      | None -> Ca_certs.authenticator ()
+    in
+    match authenticator with
+    | Error (`Msg message) -> Error message
+    | Ok authenticator -> (
+        match
+          ( X509.Certificate.decode_pem_multiple certificate_pem,
+            X509.Private_key.decode_pem private_key_pem )
+        with
+        | Error (`Msg message), _ | _, Error (`Msg message) -> Error message
+        | Ok certificates, Ok private_key -> (
+            match
+              Tls.Config.client ~authenticator
+                ~certificates:(`Single (certificates, private_key))
+                ()
+            with
+            | Ok config -> Ok config
+            | Error (`Msg message) -> Error message))
+
   let tls_config_exn mode =
     match mode with
     | Disabled -> None
     | Tls_config config -> Some config
+    | Mutual_tls cert -> (
+        match
+          mtls_config ?authenticator:cert.authenticator
+            ~certificate_pem:cert.certificate_pem
+            ~private_key_pem:cert.private_key_pem ()
+        with
+        | Ok config -> Some config
+        | Error message -> invalid_arg ("Chatoyant.Http: " ^ message))
     | Authenticator authenticator -> (
         match tls_config ~authenticator () with
         | Ok config -> Some config
@@ -275,9 +313,385 @@ module Http = struct
       { method_ = "POST"; url; headers; body = Json json; timeout_ms }
 end
 
+module Websocket = struct
+  type message =
+    | Text of string
+    | Binary of string
+
+  type close = {
+    code : int;
+    reason : string;
+  }
+
+  type request = {
+    url : string;
+    headers : (string * string) list;
+    protocols : string list;
+    timeout_ms : int option;
+  }
+
+  type error =
+    | Timeout of int
+    | Network of string
+    | Invalid_response of string
+    | Closed of close option
+
+  type connection =
+    | Connection : {
+        flow : 'flow Eio.Flow.two_way;
+        reader : Eio.Buf_read.t;
+        max_frame_size : int;
+        mutable closed : close option;
+      }
+        -> connection
+
+  let error_to_string = function
+    | Timeout ms -> Printf.sprintf "timeout after %d ms" ms
+    | Network message -> "network error: " ^ message
+    | Invalid_response message -> "invalid response: " ^ message
+    | Closed None -> "websocket closed"
+    | Closed (Some close) ->
+        Printf.sprintf "websocket closed with code %d: %s" close.code close.reason
+
+  module type EFFECT =
+    Chatoyant_runtime.Effect.WEBSOCKET
+      with type message = message
+       and type close = close
+       and type request = request
+       and type error = error
+
+  let default_max_frame_size = 64 * 1024 * 1024
+  let websocket_guid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+
+  let lower_ascii = String.lowercase_ascii
+
+  let header name headers =
+    let expected = lower_ascii name in
+    headers
+    |> List.find_opt (fun (key, _) -> lower_ascii key = expected)
+    |> Option.map snd
+
+  let contains_token token value =
+    value
+    |> String.split_on_char ','
+    |> List.exists (fun item -> lower_ascii (String.trim item) = token)
+
+  let random_key () =
+    Mirage_crypto_rng_unix.use_default ();
+    Mirage_crypto_rng.generate 16 |> Base64.encode_string
+
+  let expected_accept key =
+    Digestif.SHA1.digest_string (key ^ websocket_guid)
+    |> Digestif.SHA1.to_raw_string
+    |> Base64.encode_string
+
+  let host_header uri =
+    let host = Option.value (Uri.host uri) ~default:"" in
+    match Uri.port uri with
+    | None -> host
+    | Some port -> host ^ ":" ^ string_of_int port
+
+  let endpoint uri =
+    let path = Uri.path_and_query uri in
+    if path = "" then "/" else path
+
+  let write_flow flow data =
+    Eio.Flow.copy_string data flow
+
+  let handshake flow reader request uri key =
+    let host = host_header uri in
+    let protocol_headers =
+      match request.protocols with
+      | [] -> []
+      | protocols -> [ ("Sec-WebSocket-Protocol", String.concat ", " protocols) ]
+    in
+    let headers =
+      [
+        ("Host", host);
+        ("Upgrade", "websocket");
+        ("Connection", "Upgrade");
+        ("Sec-WebSocket-Key", key);
+        ("Sec-WebSocket-Version", "13");
+      ]
+      @ protocol_headers @ request.headers
+    in
+    let request_text =
+      "GET " ^ endpoint uri ^ " HTTP/1.1\r\n"
+      ^ (headers
+        |> List.map (fun (name, value) -> name ^ ": " ^ value ^ "\r\n")
+        |> String.concat "")
+      ^ "\r\n"
+    in
+    write_flow flow request_text;
+    let status = Eio.Buf_read.line reader in
+    let rec read_headers acc =
+      match Eio.Buf_read.line reader with
+      | "" -> List.rev acc
+      | line -> (
+          match String.index_opt line ':' with
+          | None -> read_headers acc
+          | Some index ->
+              let name = String.sub line 0 index |> String.trim in
+              let value =
+                String.sub line (index + 1) (String.length line - index - 1)
+                |> String.trim
+              in
+              read_headers ((name, value) :: acc))
+    in
+    let response_headers = read_headers [] in
+    if not (String.starts_with ~prefix:"HTTP/" status && String.contains status '1') then
+      Error (Invalid_response ("invalid websocket status line: " ^ status))
+    else if not (String.contains status ' ') then
+      Error (Invalid_response ("invalid websocket status line: " ^ status))
+    else if not (String.contains status '1' && String.contains status '0') then
+      Error (Invalid_response ("websocket upgrade failed: " ^ status))
+    else
+      let status_code =
+        match String.split_on_char ' ' status with
+        | _http :: code :: _ -> code
+        | _ -> ""
+      in
+      if status_code <> "101" then
+        Error (Invalid_response ("websocket upgrade failed: " ^ status))
+      else
+        match
+          ( header "upgrade" response_headers,
+            header "connection" response_headers,
+            header "sec-websocket-accept" response_headers )
+        with
+        | Some upgrade, Some connection, Some accept
+          when lower_ascii upgrade = "websocket"
+               && contains_token "upgrade" connection
+               && String.trim accept = expected_accept key ->
+            Ok ()
+        | _ -> Error (Invalid_response "invalid websocket upgrade response")
+
+  let byte value = String.make 1 (Char.chr (value land 0xff))
+
+  let uint16 value =
+    byte (value lsr 8) ^ byte value
+
+  let uint64 value =
+    let buffer = Bytes.create 8 in
+    for index = 0 to 7 do
+      let shift = (7 - index) * 8 in
+      Bytes.set buffer index (Char.chr (Int64.to_int (Int64.shift_right_logical value shift) land 0xff))
+    done;
+    Bytes.unsafe_to_string buffer
+
+  let mask_payload mask payload =
+    let bytes = Bytes.of_string payload in
+    for index = 0 to Bytes.length bytes - 1 do
+      let masked =
+        Char.code (Bytes.get bytes index)
+        lxor Char.code mask.[index mod 4]
+      in
+      Bytes.set bytes index (Char.chr masked)
+    done;
+    Bytes.unsafe_to_string bytes
+
+  let frame ?(mask = true) opcode payload =
+    let len = String.length payload in
+    let length_header =
+      if len < 126 then byte ((if mask then 0x80 else 0) lor len)
+      else if len <= 0xffff then
+        byte ((if mask then 0x80 else 0) lor 126) ^ uint16 len
+      else
+        byte ((if mask then 0x80 else 0) lor 127) ^ uint64 (Int64.of_int len)
+    in
+    let first = byte (0x80 lor opcode) in
+    if mask then
+      let mask_key = Mirage_crypto_rng.generate 4 in
+      first ^ length_header ^ mask_key ^ mask_payload mask_key payload
+    else first ^ length_header ^ payload
+
+  let close_payload code reason =
+    uint16 code ^ reason
+
+  let send_frame (Connection connection) opcode payload =
+    if Option.is_some connection.closed then Error (Closed connection.closed)
+    else
+      try
+        write_flow connection.flow (frame opcode payload);
+        Ok ()
+      with exn -> Error (Network (Printexc.to_string exn))
+
+  let send connection = function
+    | Text text -> send_frame connection 0x1 text
+    | Binary bytes -> send_frame connection 0x2 bytes
+
+  let parse_close payload =
+    if String.length payload < 2 then { code = 1005; reason = "" }
+    else
+      let code =
+        (Char.code payload.[0] lsl 8) lor Char.code payload.[1]
+      in
+      let reason =
+        String.sub payload 2 (String.length payload - 2)
+      in
+      { code; reason }
+
+  let rec read_frame (Connection connection as conn) =
+    try
+      let first = Eio.Buf_read.uint8 connection.reader in
+      let second = Eio.Buf_read.uint8 connection.reader in
+      let fin = first land 0x80 <> 0 in
+      let opcode = first land 0x0f in
+      let masked = second land 0x80 <> 0 in
+      let length_code = second land 0x7f in
+      let length =
+        match length_code with
+        | value when value < 126 -> Int64.of_int value
+        | 126 -> Int64.of_int (Eio.Buf_read.BE.uint16 connection.reader)
+        | 127 -> Eio.Buf_read.BE.uint64 connection.reader
+        | _ -> 0L
+      in
+      if length > Int64.of_int connection.max_frame_size then
+        Error (Invalid_response "websocket frame exceeds max_frame_size")
+      else
+        let mask =
+          if masked then Some (Eio.Buf_read.take 4 connection.reader) else None
+        in
+        let payload = Eio.Buf_read.take (Int64.to_int length) connection.reader in
+        let payload =
+          match mask with
+          | None -> payload
+          | Some mask -> mask_payload mask payload
+        in
+        match opcode with
+        | 0x8 ->
+            let close = parse_close payload in
+            connection.closed <- Some close;
+            Error (Closed (Some close))
+        | 0x9 ->
+            ignore (send_frame conn 0xA payload);
+            read_frame conn
+        | 0xA -> read_frame conn
+        | _ -> Ok (fin, opcode, payload)
+    with
+    | End_of_file -> Error (Closed None)
+    | Failure message | Invalid_argument message -> Error (Invalid_response message)
+    | exn -> Error (Network (Printexc.to_string exn))
+
+  let recv connection =
+    let rec collect opcode parts =
+      match read_frame connection with
+      | Error _ as err -> err
+      | Ok (fin, frame_opcode, payload) ->
+          let opcode =
+            if frame_opcode = 0x0 then opcode else frame_opcode
+          in
+          let parts = payload :: parts in
+          if fin then
+            let payload = parts |> List.rev |> String.concat "" in
+            match opcode with
+            | 0x1 -> Ok (Text payload)
+            | 0x2 -> Ok (Binary payload)
+            | _ -> Error (Invalid_response "unsupported websocket frame opcode")
+          else collect opcode parts
+    in
+    collect 0 []
+
+  let close ?(code = 1000) ?(reason = "") (Connection connection as conn) =
+    match connection.closed with
+    | Some _ as close -> Error (Closed close)
+    | None ->
+        connection.closed <- Some { code; reason };
+        send_frame conn 0x8 (close_payload code reason)
+
+  let with_connection ?(https = Http.System) ?(max_frame_size = default_max_frame_size)
+      ~net ~clock request fn =
+    let perform () =
+      Mirage_crypto_rng_unix.use_default ();
+      let uri = Uri.of_string request.url in
+      let scheme = uri |> Uri.scheme |> Option.map lower_ascii in
+      let host =
+        match Uri.host uri with
+        | Some host -> host
+        | None -> invalid_arg "websocket URL must include a host"
+      in
+      let service =
+        match Uri.port uri, scheme with
+        | Some port, _ -> string_of_int port
+        | None, Some "ws" -> "80"
+        | None, Some "wss" -> "443"
+        | _ -> invalid_arg "websocket URL must use ws:// or wss://"
+      in
+      Eio.Net.with_tcp_connect ~host ~service net @@ fun raw ->
+      let with_flow flow =
+        let reader = Eio.Buf_read.of_flow ~max_size:max_frame_size flow in
+        let key = random_key () in
+        match handshake flow reader request uri key with
+        | Error error -> Error error
+        | Ok () ->
+            let connection =
+              Connection { flow; reader; max_frame_size; closed = None }
+            in
+            let result =
+              try Ok (fn connection) with exn -> Error (Network (Printexc.to_string exn))
+            in
+            ignore (close connection);
+            result
+      in
+      match scheme with
+      | Some "ws" -> with_flow raw
+      | Some "wss" -> (
+          match Http.tls_config_exn https with
+          | None -> invalid_arg "HTTPS is disabled for wss:// URL"
+          | Some config -> with_flow (Http.https_wrapper config uri raw))
+      | _ -> invalid_arg "websocket URL must use ws:// or wss://"
+    in
+    match request.timeout_ms with
+    | Some timeout_ms when timeout_ms > 0 -> (
+        let seconds = float_of_int timeout_ms /. 1000. in
+        try Eio.Time.with_timeout_exn clock seconds perform with
+        | Eio.Time.Timeout -> Error (Timeout timeout_ms)
+        | Failure message | Invalid_argument message -> Error (Invalid_response message)
+        | exn -> Error (Network (Printexc.to_string exn)))
+    | _ -> (
+        try perform () with
+        | Failure message | Invalid_argument message -> Error (Invalid_response message)
+        | exn -> Error (Network (Printexc.to_string exn)))
+
+  let make ?https ?max_frame_size ~net ~clock () =
+    (module struct
+      type nonrec message = message =
+        | Text of string
+        | Binary of string
+
+      type nonrec close = close = {
+        code : int;
+        reason : string;
+      }
+
+      type nonrec request = request = {
+        url : string;
+        headers : (string * string) list;
+        protocols : string list;
+        timeout_ms : int option;
+      }
+
+      type nonrec error = error =
+        | Timeout of int
+        | Network of string
+        | Invalid_response of string
+        | Closed of close option
+
+      type nonrec connection = connection
+
+      let with_connection request fn =
+        with_connection ?https ?max_frame_size ~net ~clock request fn
+
+      let send = send
+      let recv = recv
+      let close = close
+    end : EFFECT)
+end
+
 module Error = struct
   let provider = Chatoyant_provider.Provider.error_to_string
   let http = Http.error_to_string
+  let websocket = Websocket.error_to_string
 end
 
 module Noop_http : Chatoyant_runtime.Effect.HTTP = struct

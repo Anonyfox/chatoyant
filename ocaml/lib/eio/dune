@@ -6,8 +6,10 @@
   chatoyant_provider
   chatoyant_runtime
   chatoyant_schema
+  base64
   ca-certs
   cohttp-eio
+  digestif
   domain-name
   eio
   http

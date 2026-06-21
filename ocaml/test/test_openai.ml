@@ -78,6 +78,64 @@ module Provider = Chatoyant.Provider.Openai.Make_provider (Fake_http) (struct
   let timeout_ms = Some 1_000
 end)
 
+module Fake_ws = struct
+  type message =
+    | Text of string
+    | Binary of string
+
+  type close = {
+    code : int;
+    reason : string;
+  }
+
+  type request = {
+    url : string;
+    headers : (string * string) list;
+    protocols : string list;
+    timeout_ms : int option;
+  }
+
+  type error =
+    | Timeout of int
+    | Network of string
+    | Invalid_response of string
+    | Closed of close option
+
+  type connection = {
+    incoming : message list ref;
+    sent : message list ref;
+    mutable closed : close option;
+  }
+
+  let last_request : request option ref = ref None
+  let last_sent : message list ref = ref []
+  let next_incoming = ref [ Text "{\"type\":\"session.created\"}" ]
+
+  let with_connection request fn =
+    last_request := Some request;
+    let connection = { incoming = ref !next_incoming; sent = ref []; closed = None } in
+    let result = fn connection in
+    last_sent := List.rev !(connection.sent);
+    Ok result
+
+  let send connection message =
+    connection.sent := message :: !(connection.sent);
+    Ok ()
+
+  let recv connection =
+    match !(connection.incoming) with
+    | [] -> Error (Closed connection.closed)
+    | message :: rest ->
+        connection.incoming := rest;
+        Ok message
+
+  let close ?(code = 1000) ?(reason = "") connection =
+    connection.closed <- Some { code; reason };
+    Ok ()
+end
+
+module Realtime = Chatoyant.Provider.Openai.Make_realtime (Fake_ws)
+
 let schema =
   Chatoyant.Runtime.Json.Object
     [
@@ -408,6 +466,122 @@ let test_streams () =
       assert_equal_string "Because" response.responses_reasoning_text;
       assert_equal_int 3 response.responses_usage.total_tokens)
 
+let test_realtime_websocket () =
+  let url =
+    Chatoyant.Provider.Openai.realtime_url ~model:"gpt-realtime" ()
+  in
+  assert_contains "wss://api.openai.com/v1/realtime?model=gpt-realtime" url;
+  let config =
+    Chatoyant.Provider.Openai.
+      {
+        realtime_api_key = "openai-key";
+        realtime_model = "gpt-realtime";
+        realtime_base_url = Realtime.default_base_url;
+        realtime_timeout_ms = Some 1_000;
+        realtime_headers = [ ("X-Test", "yes") ];
+        realtime_safety_identifier = Some "safe-user";
+      }
+  in
+  (match
+     Realtime.connect config (fun connection ->
+         let event = Realtime.receive_json connection in
+         let () =
+           match event with
+           | Error error -> failwith error.error_message
+           | Ok json ->
+               assert_equal_string "session.created"
+                 (Option.get
+                    (Option.bind
+                       (Chatoyant.Runtime.Json.field "type" json)
+                       Chatoyant.Runtime.Json.as_string))
+         in
+         match
+           Realtime.send_json connection
+             (Chatoyant.Runtime.Json.Object
+                [ ("type", Chatoyant.Runtime.Json.String "response.create") ])
+         with
+         | Error error -> failwith error.error_message
+         | Ok () -> ())
+   with
+  | Error error -> failwith error.error_message
+  | Ok () -> ());
+  (match !(Fake_ws.last_request) with
+  | None -> failwith "expected OpenAI realtime websocket request"
+  | Some request ->
+      assert_contains "model=gpt-realtime" request.url;
+      if not (List.mem ("Authorization", "Bearer openai-key") request.headers) then
+        failwith "missing realtime authorization";
+      if not (List.mem ("OpenAI-Safety-Identifier", "safe-user") request.headers) then
+        failwith "missing realtime safety identifier";
+      if not (List.mem ("X-Test", "yes") request.headers) then
+        failwith "missing realtime custom header");
+  match !(Fake_ws.last_sent) with
+  | [ Fake_ws.Text text ] -> assert_contains "\"response.create\"" text
+  | _ -> failwith "expected sent realtime JSON frame"
+
+let test_client_realtime_bootstrap () =
+  let config =
+    Client.{ api_key = "test-key"; base_url = default_base_url; timeout_ms = Some 1_000 }
+  in
+  let session =
+    Chatoyant.Runtime.Json.Object
+      [
+        ("type", Chatoyant.Runtime.Json.String "realtime");
+        ("model", Chatoyant.Runtime.Json.String "gpt-realtime-2");
+      ]
+  in
+  let secret_body =
+    Chatoyant.Provider.Openai.realtime_client_secret_request_json
+      {
+        realtime_client_secret_session = session;
+        realtime_client_secret_extra = [];
+      }
+    |> Chatoyant.Runtime.Json.to_string
+  in
+  assert_contains "\"session\"" secret_body;
+  Fake_http.next_response_body :=
+    "{\"client_secret\":{\"value\":\"ek_123\",\"expires_at\":1800000000}}";
+  (match
+     Client.create_realtime_client_secret ~safety_identifier:"safe-user" config
+       {
+         realtime_client_secret_session = session;
+         realtime_client_secret_extra = [];
+       }
+   with
+  | Error error -> failwith error.error_message
+  | Ok secret -> assert_equal_string "ek_123" (Option.get secret.realtime_client_secret_value));
+  (match !(Fake_http.last_request) with
+  | Some request ->
+      assert_contains "/realtime/client_secrets" request.url;
+      if not (List.mem ("OpenAI-Safety-Identifier", "safe-user") request.headers) then
+        failwith "missing OpenAI realtime safety identifier";
+      (match request.body with
+      | Json json -> assert_contains "\"gpt-realtime-2\"" (Chatoyant.Runtime.Json.to_string json)
+      | _ -> failwith "expected realtime client secret JSON body")
+  | None -> failwith "expected realtime client secret request");
+  Fake_http.next_response_body := "v=0\r\ns=openai-answer\r\n";
+  (match
+     Client.create_realtime_call config
+       {
+         realtime_call_sdp = "v=0\r\ns=offer\r\n";
+         realtime_call_session = session;
+         realtime_call_extra = [ ("metadata", "demo") ];
+       }
+   with
+  | Error error -> failwith error.error_message
+  | Ok answer -> assert_contains "openai-answer" answer);
+  match !(Fake_http.last_request) with
+  | Some request -> (
+      assert_contains "/realtime/calls" request.url;
+      match request.body with
+      | Multipart parts ->
+          if not (List.exists (fun part -> part.Fake_http.name = "sdp") parts) then
+            failwith "missing realtime SDP multipart part";
+          if not (List.exists (fun part -> part.Fake_http.name = "session") parts) then
+            failwith "missing realtime session multipart part"
+      | _ -> failwith "expected realtime call multipart body")
+  | None -> failwith "expected realtime call request"
+
 let test_other_decoders () =
   let image =
     Chatoyant.Provider.Openai.image_response_of_json
@@ -606,6 +780,9 @@ let test_client_and_provider () =
   let config =
     Client.{ api_key = "test-key"; base_url = default_base_url; timeout_ms = Some 1_000 }
   in
+  Fake_http.next_response_status := 200;
+  Fake_http.next_response_body :=
+    "{\"id\":\"resp_123\",\"object\":\"response\",\"model\":\"gpt-5.4-mini\",\"status\":\"completed\",\"output\":[{\"type\":\"message\",\"content\":[{\"type\":\"output_text\",\"text\":\"Hello from Responses\"}]}],\"usage\":{\"input_tokens\":7,\"output_tokens\":3,\"total_tokens\":10}}";
   (match Client.create_response config (responses_fixture ()) with
   | Error error -> failwith error.error_message
   | Ok response -> assert_equal_string "Hello from Responses" response.responses_output_text);
@@ -1236,6 +1413,8 @@ let () =
   test_request_json ();
   test_response_decode ();
   test_streams ();
+  test_realtime_websocket ();
+  test_client_realtime_bootstrap ();
   test_other_decoders ();
   test_moderation_and_batches ();
   test_files ();

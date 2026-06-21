@@ -320,6 +320,25 @@ type voice_delete = {
   voice_delete_raw : Chatoyant_runtime.Json.t;
 }
 
+type realtime_client_secret_request = {
+  realtime_client_secret_expires_after_seconds : int option;
+  realtime_client_secret_extra : (string * Chatoyant_runtime.Json.t) list;
+}
+
+type realtime_client_secret = {
+  realtime_client_secret_value : string option;
+  realtime_client_secret_expires_at : int option;
+  realtime_client_secret_raw : Chatoyant_runtime.Json.t;
+}
+
+type websocket_config = {
+  websocket_api_key : string;
+  websocket_url : string;
+  websocket_timeout_ms : int option;
+  websocket_headers : (string * string) list;
+  websocket_protocols : string list;
+}
+
 type responses_stream_event =
   | Response_created of responses_response
   | Response_in_progress of responses_response
@@ -774,6 +793,14 @@ let custom_voice_update_json request =
   |> List.rev_append request.custom_voice_update_extra
   |> List.rev |> fun fields -> Chatoyant_runtime.Json.Object fields
 
+let realtime_client_secret_request_json request =
+  []
+  |> add_opt "expires_after"
+       (fun seconds -> Chatoyant_runtime.Json.Object [ ("seconds", int seconds) ])
+       request.realtime_client_secret_expires_after_seconds
+  |> List.rev_append request.realtime_client_secret_extra
+  |> List.rev |> fun fields -> Chatoyant_runtime.Json.Object fields
+
 let image_response_format_json = function
   | Url -> string "url"
   | Base64_json -> string "b64_json"
@@ -828,6 +855,75 @@ let video_request_json request =
 
 let authorization_headers ~api_key =
   [ ("Authorization", "Bearer " ^ api_key); ("Content-Type", "application/json") ]
+
+let pct_encode text =
+  let buffer = Buffer.create (String.length text) in
+  String.iter
+    (fun ch ->
+      match ch with
+      | 'A' .. 'Z' | 'a' .. 'z' | '0' .. '9' | '-' | '_' | '.' | '~' ->
+          Buffer.add_char buffer ch
+      | _ -> Buffer.add_string buffer (Printf.sprintf "%%%02X" (Char.code ch)))
+    text;
+  Buffer.contents buffer
+
+let string_of_float_query value =
+  if Float.is_integer value then Printf.sprintf "%.1f" value else string_of_float value
+
+let string_of_bool_query value =
+  if value then "true" else "false"
+
+let append_query base params =
+  let encoded =
+    params
+    |> List.filter_map
+         (fun (name, value) ->
+           Option.map (fun value -> pct_encode name ^ "=" ^ pct_encode value) value)
+  in
+  match encoded with
+  | [] -> base
+  | values ->
+      let separator = if String.contains base '?' then "&" else "?" in
+      base ^ separator ^ String.concat "&" values
+
+let voice_agent_url ?(base_url = "wss://api.x.ai/v1/realtime") ~model () =
+  append_query base_url [ ("model", Some model) ]
+
+let streaming_tts_url ?(base_url = "wss://api.x.ai/v1/tts") ?(language = "en") ?voice ?codec
+    ?sample_rate ?bit_rate ?speed ?optimize_streaming_latency ?text_normalization ?with_timestamps () =
+  append_query base_url
+    [
+      ("language", Some language);
+      ("voice", voice);
+      ("codec", codec);
+      ("sample_rate", Option.map string_of_int sample_rate);
+      ("bit_rate", Option.map string_of_int bit_rate);
+      ("speed", Option.map string_of_float_query speed);
+      ("optimize_streaming_latency", Option.map string_of_int optimize_streaming_latency);
+      ("text_normalization", Option.map string_of_bool_query text_normalization);
+      ("with_timestamps", Option.map string_of_bool_query with_timestamps);
+    ]
+
+let streaming_stt_url ?(base_url = "wss://api.x.ai/v1/stt") ?sample_rate ?encoding
+    ?interim_results ?endpointing ?language ?diarize ?filler_words ?multichannel ?channels
+    ?(keyterms = []) ?smart_turn ?smart_turn_timeout () =
+  append_query base_url
+    ([
+       ("sample_rate", Option.map string_of_int sample_rate);
+       ("encoding", encoding);
+       ("interim_results", Option.map string_of_bool_query interim_results);
+       ("endpointing", Option.map string_of_int endpointing);
+       ("language", language);
+       ("diarize", Option.map string_of_bool_query diarize);
+       ("filler_words", Option.map string_of_bool_query filler_words);
+       ("multichannel", Option.map string_of_bool_query multichannel);
+       ("channels", Option.map string_of_int channels);
+       ("smart_turn", Option.map string_of_float_query smart_turn);
+       ("smart_turn_timeout", Option.map string_of_int smart_turn_timeout);
+     ]
+    @ List.map (fun keyterm -> ("keyterm", Some keyterm)) keyterms)
+
+let responses_websocket_url ?(base_url = "wss://api.x.ai/v1/responses") () = base_url
 
 let string_field name json = Option.bind (field name json) Chatoyant_runtime.Json.as_string
 let int_field name json = Option.bind (field name json) Chatoyant_runtime.Json.as_int
@@ -921,6 +1017,20 @@ let voice_delete_of_json json =
       | None -> string_field "id" json);
     voice_deleted = Option.value (bool_field "deleted" json) ~default:false;
     voice_delete_raw = json;
+  }
+
+let realtime_client_secret_of_json json =
+  let secret = Option.value (field "client_secret" json) ~default:json in
+  {
+    realtime_client_secret_value =
+      (match string_field "value" secret with
+      | Some _ as value -> value
+      | None -> string_field "client_secret" json);
+    realtime_client_secret_expires_at =
+      (match int_field "expires_at" secret with
+      | Some _ as value -> value
+      | None -> int_field "expires_at" json);
+    realtime_client_secret_raw = json;
   }
 
 let chat_response_of_json json =
@@ -1700,6 +1810,11 @@ module Make_client (Http : Chatoyant_runtime.Effect.HTTP) = struct
     let parts = List.map form_part_to_multipart (stt_request_parts request_body) in
     send stt_response_of_json (request config "/stt" (Multipart parts))
 
+  let create_realtime_client_secret config request_body =
+    send realtime_client_secret_of_json
+      (request config "/realtime/client_secrets"
+         (Json (realtime_client_secret_request_json request_body)))
+
   let create_custom_voice config request_body =
     let parts = List.map form_part_to_multipart (custom_voice_request_parts request_body) in
     send voice_of_json (request config "/custom-voices" (Multipart parts))
@@ -1872,6 +1987,63 @@ module Make_client (Http : Chatoyant_runtime.Effect.HTTP) = struct
       (management_request config
          ("/collections/" ^ collection_id ^ "/search")
          (Json (collection_search_request_json request_body)))
+end
+
+module Make_websocket (Ws : Chatoyant_runtime.Effect.WEBSOCKET) = struct
+  type connection = Ws.connection
+
+  let default_realtime_base_url = "wss://api.x.ai/v1/realtime"
+  let default_responses_base_url = "wss://api.x.ai/v1/responses"
+  let default_tts_base_url = "wss://api.x.ai/v1/tts"
+  let default_stt_base_url = "wss://api.x.ai/v1/stt"
+
+  let api_error message =
+    { error_type = Some "websocket_error"; error_message = message; error_raw = None }
+
+  let websocket_error = function
+    | Ws.Timeout ms -> api_error ("xAI WebSocket timed out after " ^ string_of_int ms ^ "ms")
+    | Ws.Network message -> api_error message
+    | Ws.Invalid_response message -> api_error message
+    | Ws.Closed None -> api_error "xAI WebSocket closed"
+    | Ws.Closed (Some close) ->
+        api_error
+          ("xAI WebSocket closed with code " ^ string_of_int close.Ws.code ^ ": "
+         ^ close.reason)
+
+  let connect config fn =
+    Ws.with_connection
+      {
+        Ws.url = config.websocket_url;
+        headers =
+          ("Authorization", "Bearer " ^ config.websocket_api_key)
+          :: config.websocket_headers;
+        protocols = config.websocket_protocols;
+        timeout_ms = config.websocket_timeout_ms;
+      }
+      fn
+    |> Result.map_error websocket_error
+
+  let send_json connection json =
+    Ws.send connection (Ws.Text (Chatoyant_runtime.Json.to_string json))
+    |> Result.map_error websocket_error
+
+  let receive_json connection =
+    match Ws.recv connection with
+    | Error error -> Error (websocket_error error)
+    | Ok (Ws.Text text) -> (
+        match Chatoyant_runtime.Json.parse text with
+        | Ok json -> Ok json
+        | Error message -> Error (api_error message))
+    | Ok (Ws.Binary _) -> Error (api_error "xAI WebSocket returned a binary frame")
+
+  let send_text connection text =
+    Ws.send connection (Ws.Text text) |> Result.map_error websocket_error
+
+  let receive_frame connection =
+    Ws.recv connection |> Result.map_error websocket_error
+
+  let close ?code ?reason connection =
+    Ws.close ?code ?reason connection |> Result.map_error websocket_error
 end
 
 let xai_message_of_provider_message (message : Provider.message) =

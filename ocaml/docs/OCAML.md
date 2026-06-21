@@ -179,6 +179,48 @@ The one-shot helpers `Chatoyant.gen_text`, `Chatoyant.gen_result`, and
 `Chatoyant.gen_data` do not mutate the chat history. Use `Chatoyant.Chat.*`
 when conversation state is the point.
 
+## Realtime And mTLS
+
+Native OCaml uses Eio for both HTTP and WebSocket effects. Low-level Realtime
+sessions stay provider-owned so rapidly changing event shapes are preserved as
+JSON.
+
+```ocaml
+let openai_realtime env api_key =
+  let module Ws = (val Chatoyant.Websocket.make ~net:env#net ~clock:env#clock ()) in
+  let module Realtime = Chatoyant.Provider.Openai.Make_realtime (Ws) in
+  Realtime.connect
+    {
+      realtime_api_key = api_key;
+      realtime_model = "gpt-realtime-2";
+      realtime_base_url = Realtime.default_base_url;
+      realtime_timeout_ms = Some 30_000;
+      realtime_headers = [];
+      realtime_safety_identifier = None;
+    }
+    (fun socket ->
+      Realtime.send_json socket
+        (Chatoyant.Runtime.Json.Object
+           [ ("type", Chatoyant.Runtime.Json.String "response.create") ]))
+```
+
+xAI voice, streaming TTS/STT, and Responses WebSocket mode use the same
+`Chatoyant.Websocket` effect through `Chatoyant.Provider.Xai.Make_websocket`.
+Enterprise mTLS endpoints use the normal provider constructors with a native
+TLS mode:
+
+```ocaml
+let cert =
+  Chatoyant.Http.
+    {
+      certificate_pem = my_certificate_pem;
+      private_key_pem = my_private_key_pem;
+      authenticator = None;
+    }
+
+let ai = Chatoyant.xai ~https:(Chatoyant.Http.Mutual_tls cert) env
+```
+
 ## Error Handling
 
 Provider operations return `('a, Chatoyant.Provider.Provider.error) result`.

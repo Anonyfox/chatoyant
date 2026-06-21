@@ -65,6 +65,11 @@
  (libraries chatoyant unix))
 
 (executable
+ (name smoke_local_real)
+ (modules smoke_local_real)
+ (libraries chatoyant unix))
+
+(executable
  (name smoke_xai_real)
  (modules smoke_xai_real)
  (libraries chatoyant unix))

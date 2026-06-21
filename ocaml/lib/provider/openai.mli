@@ -175,6 +175,39 @@ type api_error = {
   error_raw : Chatoyant_runtime.Json.t option;
 }
 
+type realtime_config = {
+  realtime_api_key : string;
+  realtime_model : string;
+  realtime_base_url : string;
+  realtime_timeout_ms : int option;
+  realtime_headers : (string * string) list;
+  realtime_safety_identifier : string option;
+}
+(** Server-to-server Realtime WebSocket config. [realtime_base_url] defaults to
+    [wss://api.openai.com/v1/realtime]; the model is encoded as a query
+    parameter. *)
+
+type realtime_client_secret_request = {
+  realtime_client_secret_session : Chatoyant_runtime.Json.t;
+  realtime_client_secret_extra : (string * Chatoyant_runtime.Json.t) list;
+}
+(** Realtime ephemeral-token request body for [/realtime/client_secrets]. *)
+
+type realtime_client_secret = {
+  realtime_client_secret_value : string option;
+  realtime_client_secret_expires_at : int option;
+  realtime_client_secret_raw : Chatoyant_runtime.Json.t;
+}
+(** Ephemeral Realtime client secret returned by OpenAI. *)
+
+type realtime_call_request = {
+  realtime_call_sdp : string;
+  realtime_call_session : Chatoyant_runtime.Json.t;
+  realtime_call_extra : (string * string) list;
+}
+(** WebRTC unified-interface request for [/realtime/calls]. The response is an
+    SDP answer string. *)
+
 type responses_stream_event =
   | Response_created of responses_response
   | Response_in_progress of responses_response
@@ -704,7 +737,10 @@ val vector_store_file_batch_request_json :
   vector_store_file_batch_request -> Chatoyant_runtime.Json.t
 val vector_store_search_request_json : vector_store_search_request -> Chatoyant_runtime.Json.t
 val fine_tuning_job_request_json : fine_tuning_job_request -> Chatoyant_runtime.Json.t
+val realtime_client_secret_request_json :
+  realtime_client_secret_request -> Chatoyant_runtime.Json.t
 val authorization_headers : api_key:string -> (string * string) list
+val realtime_url : ?base_url:string -> model:string -> unit -> string
 
 val chat_response_of_json : Chatoyant_runtime.Json.t -> chat_response
 val generation_of_chat_response : chat_response -> Provider.generation
@@ -735,6 +771,7 @@ val file_delete_of_json : Chatoyant_runtime.Json.t -> file_delete
 val moderation_response_of_json : Chatoyant_runtime.Json.t -> moderation_response
 val batch_of_json : Chatoyant_runtime.Json.t -> batch
 val batch_list_of_json : Chatoyant_runtime.Json.t -> batch_list
+val realtime_client_secret_of_json : Chatoyant_runtime.Json.t -> realtime_client_secret
 val transcription_of_json : Chatoyant_runtime.Json.t -> transcription
 val vector_store_of_json : Chatoyant_runtime.Json.t -> vector_store
 val vector_store_list_of_json : Chatoyant_runtime.Json.t -> vector_store_list
@@ -775,6 +812,12 @@ module Make_client (Http : Chatoyant_runtime.Effect.HTTP) : sig
     config -> responses_request -> (response_input_token_count, api_error) result
   val cancel_response : config -> response_id:string -> (responses_response, api_error) result
   val compact_response : config -> responses_request -> (responses_response, api_error) result
+  val create_realtime_client_secret :
+    ?safety_identifier:string ->
+    config ->
+    realtime_client_secret_request ->
+    (realtime_client_secret, api_error) result
+  val create_realtime_call : config -> realtime_call_request -> (string, api_error) result
   val create_conversation : config -> Chatoyant_runtime.Json.t -> (api_object, api_error) result
   val retrieve_conversation : config -> conversation_id:string -> (api_object, api_error) result
   val update_conversation :
@@ -908,6 +951,19 @@ module Make_client (Http : Chatoyant_runtime.Effect.HTTP) : sig
     admin_config -> key_id:string -> (api_object, api_error) result
   val delete_admin_api_key : admin_config -> key_id:string -> (api_delete, api_error) result
 end
+
+module Make_realtime (Ws : Chatoyant_runtime.Effect.WEBSOCKET) : sig
+  type connection = Ws.connection
+
+  val default_base_url : string
+  val connect : realtime_config -> (connection -> 'a) -> ('a, api_error) result
+  val send_json : connection -> Chatoyant_runtime.Json.t -> (unit, api_error) result
+  val receive_json : connection -> (Chatoyant_runtime.Json.t, api_error) result
+  val close : ?code:int -> ?reason:string -> connection -> (unit, api_error) result
+end
+(** OpenAI Realtime WebSocket helper. Events stay provider JSON because the
+    Realtime API evolves quickly; callers can still use typed JSON-schema
+    codecs on top. *)
 
 module Make_provider
     (Http : Chatoyant_runtime.Effect.HTTP)

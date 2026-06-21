@@ -59,11 +59,22 @@ module Http : sig
        and type error = error
   (** HTTP effect module with types tied to [Chatoyant.Http]. *)
 
+  type client_certificate = {
+    certificate_pem : string;
+    private_key_pem : string;
+    authenticator : X509.Authenticator.t option;
+  }
+  (** PEM-encoded client certificate chain and private key for mTLS provider
+      endpoints. When [authenticator] is omitted, system trust roots are used
+      for server verification. *)
+
   type https =
     | System
         (** Use system trust roots through [ca-certs] and verify HTTPS hosts. *)
     | Authenticator of X509.Authenticator.t
         (** Build a TLS client from a caller-supplied X.509 authenticator. *)
+    | Mutual_tls of client_certificate
+        (** Use system/server authentication plus a PEM client certificate. *)
     | Tls_config of Tls.Config.client
         (** Use an already constructed TLS client config. *)
     | Disabled
@@ -74,6 +85,15 @@ module Http : sig
 
   val tls_config : ?authenticator:X509.Authenticator.t -> unit -> (Tls.Config.client, string) result
   (** Build the TLS client config used by [System] and [Authenticator]. *)
+
+  val mtls_config :
+    ?authenticator:X509.Authenticator.t ->
+    certificate_pem:string ->
+    private_key_pem:string ->
+    unit ->
+    (Tls.Config.client, string) result
+  (** Build a TLS client config with a PEM certificate chain/private key for
+      mTLS endpoints such as xAI enterprise deployments. *)
 
   val make :
     ?https:https ->
@@ -135,12 +155,73 @@ module Http : sig
   (** Convenience JSON POST helper. *)
 end
 
+module Websocket : sig
+  type message =
+    | Text of string
+    | Binary of string
+
+  type close = {
+    code : int;
+    reason : string;
+  }
+
+  type request = {
+    url : string;
+    headers : (string * string) list;
+    protocols : string list;
+    timeout_ms : int option;
+  }
+
+  type error =
+    | Timeout of int
+    | Network of string
+    | Invalid_response of string
+    | Closed of close option
+
+  type connection
+
+  val error_to_string : error -> string
+
+  module type EFFECT =
+    Chatoyant_runtime.Effect.WEBSOCKET
+      with type message = message
+       and type close = close
+       and type request = request
+       and type error = error
+
+  val make :
+    ?https:Http.https ->
+    ?max_frame_size:int ->
+    net:_ Eio.Net.t ->
+    clock:_ Eio.Time.clock ->
+    unit ->
+    (module EFFECT)
+  (** Eio WebSocket effect with RFC 6455 handshake validation, masked client
+      frames, close/ping/pong handling, and scoped connection resources. *)
+
+  val with_connection :
+    ?https:Http.https ->
+    ?max_frame_size:int ->
+    net:_ Eio.Net.t ->
+    clock:_ Eio.Time.clock ->
+    request ->
+    (connection -> 'a) ->
+    ('a, error) result
+
+  val send : connection -> message -> (unit, error) result
+  val recv : connection -> (message, error) result
+  val close : ?code:int -> ?reason:string -> connection -> (unit, error) result
+end
+
 module Error : sig
   val provider : Chatoyant_provider.Provider.error -> string
   (** Human-readable provider error rendering. *)
 
   val http : Http.error -> string
   (** Human-readable Eio HTTP helper error rendering. *)
+
+  val websocket : Websocket.error -> string
+  (** Human-readable Eio WebSocket helper error rendering. *)
 end
 
 module Provider : sig

@@ -159,6 +159,32 @@ type api_error = {
   error_raw : Chatoyant_runtime.Json.t option;
 }
 
+type realtime_config = {
+  realtime_api_key : string;
+  realtime_model : string;
+  realtime_base_url : string;
+  realtime_timeout_ms : int option;
+  realtime_headers : (string * string) list;
+  realtime_safety_identifier : string option;
+}
+
+type realtime_client_secret_request = {
+  realtime_client_secret_session : Chatoyant_runtime.Json.t;
+  realtime_client_secret_extra : (string * Chatoyant_runtime.Json.t) list;
+}
+
+type realtime_client_secret = {
+  realtime_client_secret_value : string option;
+  realtime_client_secret_expires_at : int option;
+  realtime_client_secret_raw : Chatoyant_runtime.Json.t;
+}
+
+type realtime_call_request = {
+  realtime_call_sdp : string;
+  realtime_call_session : Chatoyant_runtime.Json.t;
+  realtime_call_extra : (string * string) list;
+}
+
 type responses_stream_event =
   | Response_created of responses_response
   | Response_in_progress of responses_response
@@ -1028,8 +1054,28 @@ let fine_tuning_job_request_json request =
   |> List.rev_append request.fine_tuning_extra
   |> List.rev |> fun fields -> Chatoyant_runtime.Json.Object fields
 
+let realtime_client_secret_request_json request =
+  [ ("session", request.realtime_client_secret_session) ]
+  |> List.rev_append request.realtime_client_secret_extra
+  |> List.rev |> fun fields -> Chatoyant_runtime.Json.Object fields
+
 let authorization_headers ~api_key =
   [ ("Authorization", "Bearer " ^ api_key); ("Content-Type", "application/json") ]
+
+let pct_encode text =
+  let buffer = Buffer.create (String.length text) in
+  String.iter
+    (fun ch ->
+      match ch with
+      | 'A' .. 'Z' | 'a' .. 'z' | '0' .. '9' | '-' | '_' | '.' | '~' ->
+          Buffer.add_char buffer ch
+      | _ -> Buffer.add_string buffer (Printf.sprintf "%%%02X" (Char.code ch)))
+    text;
+  Buffer.contents buffer
+
+let realtime_url ?(base_url = "wss://api.openai.com/v1/realtime") ~model () =
+  let separator = if String.contains base_url '?' then "&" else "?" in
+  base_url ^ separator ^ "model=" ^ pct_encode model
 
 let string_field name json = Option.bind (field name json) Chatoyant_runtime.Json.as_string
 let bool_field name json = Option.bind (field name json) Chatoyant_runtime.Json.as_bool
@@ -1703,6 +1749,20 @@ let batch_list_of_json json =
     raw = json;
   }
 
+let realtime_client_secret_of_json json =
+  let secret = Option.value (field "client_secret" json) ~default:json in
+  {
+    realtime_client_secret_value =
+      (match string_field "value" secret with
+      | Some _ as value -> value
+      | None -> string_field "client_secret" json);
+    realtime_client_secret_expires_at =
+      (match int_field "expires_at" secret with
+      | Some _ as value -> value
+      | None -> int_field "expires_at" json);
+    realtime_client_secret_raw = json;
+  }
+
 let transcription_of_json json =
   {
     transcription_text = Option.value (string_field "text" json) ~default:"";
@@ -1962,6 +2022,23 @@ module Make_client (Http : Chatoyant_runtime.Effect.HTTP) = struct
     | Error error -> Error (map_http_error error)
     | Ok response -> parse_response decode response
 
+  let raw_text_response request =
+    match Http.send request with
+    | Error error -> Error (map_http_error error)
+    | Ok response when response.status < 200 || response.status >= 300 ->
+        (match Chatoyant_runtime.Json.parse response.body with
+        | Ok json -> Error (api_error_of_json json)
+        | Error _ ->
+            Error
+              {
+                error_type = Some "http_error";
+                error_message = "OpenAI HTTP " ^ string_of_int response.status ^ ": " ^ response.body;
+                error_code = None;
+                error_param = None;
+                error_raw = None;
+              })
+    | Ok response -> Ok response.body
+
   let create_response config request_body =
     send responses_response_of_json (request config "/responses" (Json (responses_request_json request_body)))
 
@@ -1986,6 +2063,18 @@ module Make_client (Http : Chatoyant_runtime.Effect.HTTP) = struct
   let compact_response config request_body =
     send responses_response_of_json
       (request config "/responses/compact" (Json (responses_request_json request_body)))
+
+  let create_realtime_client_secret ?safety_identifier config request_body =
+    let request =
+      request config "/realtime/client_secrets"
+        (Json (realtime_client_secret_request_json request_body))
+    in
+    let request =
+      match safety_identifier with
+      | None -> request
+      | Some value -> { request with headers = ("OpenAI-Safety-Identifier", value) :: request.headers }
+    in
+    send realtime_client_secret_of_json request
 
   let create_conversation config body =
     send api_object_of_json (request config "/conversations" (Json body))
@@ -2030,6 +2119,21 @@ module Make_client (Http : Chatoyant_runtime.Effect.HTTP) = struct
 
   let multipart_part name ?filename ?content_type body =
     { Http.name; filename; content_type; body }
+
+  let realtime_call_parts request_body =
+    let extra =
+      List.map (fun (name, body) -> multipart_part name body) request_body.realtime_call_extra
+    in
+    extra
+    @ [
+        multipart_part "sdp" ~content_type:"application/sdp" request_body.realtime_call_sdp;
+        multipart_part "session" ~content_type:"application/json"
+          (Chatoyant_runtime.Json.to_string request_body.realtime_call_session);
+      ]
+
+  let create_realtime_call config request_body =
+    raw_text_response
+      (request config "/realtime/calls" (Multipart (realtime_call_parts request_body)))
 
   let multipart_scalar_parts fields =
     let scalar name value =
@@ -2460,6 +2564,68 @@ module Make_client (Http : Chatoyant_runtime.Effect.HTTP) = struct
 
   let delete_admin_api_key config ~key_id =
     admin_delete config ~path:("/organization/admin_api_keys/" ^ key_id)
+end
+
+module Make_realtime (Ws : Chatoyant_runtime.Effect.WEBSOCKET) = struct
+  type connection = Ws.connection
+
+  let default_base_url = "wss://api.openai.com/v1/realtime"
+
+  let api_error message =
+    {
+      error_type = Some "websocket_error";
+      error_message = message;
+      error_code = None;
+      error_param = None;
+      error_raw = None;
+    }
+
+  let websocket_error = function
+    | Ws.Timeout ms -> api_error ("Realtime WebSocket timed out after " ^ string_of_int ms ^ "ms")
+    | Ws.Network message -> api_error message
+    | Ws.Invalid_response message -> api_error message
+    | Ws.Closed None -> api_error "Realtime WebSocket closed"
+    | Ws.Closed (Some close) ->
+        api_error
+          ("Realtime WebSocket closed with code "
+          ^ string_of_int close.Ws.code ^ ": " ^ close.reason)
+
+  let headers config =
+    let base = [ ("Authorization", "Bearer " ^ config.realtime_api_key) ] in
+    let base =
+      match config.realtime_safety_identifier with
+      | None -> base
+      | Some value -> ("OpenAI-Safety-Identifier", value) :: base
+    in
+    List.rev_append config.realtime_headers base |> List.rev
+
+  let connect config fn =
+    Ws.with_connection
+      {
+        Ws.url =
+          realtime_url ~base_url:config.realtime_base_url ~model:config.realtime_model ();
+        headers = headers config;
+        protocols = [];
+        timeout_ms = config.realtime_timeout_ms;
+      }
+      fn
+    |> Result.map_error websocket_error
+
+  let send_json connection json =
+    Ws.send connection (Ws.Text (Chatoyant_runtime.Json.to_string json))
+    |> Result.map_error websocket_error
+
+  let receive_json connection =
+    match Ws.recv connection with
+    | Error error -> Error (websocket_error error)
+    | Ok (Ws.Text text) -> (
+        match Chatoyant_runtime.Json.parse text with
+        | Ok json -> Ok json
+        | Error message -> Error (api_error message))
+    | Ok (Ws.Binary _) -> Error (api_error "Realtime WebSocket returned a binary frame")
+
+  let close ?code ?reason connection =
+    Ws.close ?code ?reason connection |> Result.map_error websocket_error
 end
 
 let openai_message_of_provider_message (message : Provider.message) =
