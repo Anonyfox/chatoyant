@@ -39,7 +39,8 @@ coverage/
 
 # Documentation (generated, do not commit)
 docs/
+!ocaml/docs/
+!ocaml/docs/**
 
 # Playground scripts (local experiments, not for commit)
 src/playground/
-

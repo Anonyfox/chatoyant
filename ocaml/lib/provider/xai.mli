@@ -30,6 +30,12 @@ type tool_choice =
   | Tool of string
   | Raw_tool_choice of Chatoyant_runtime.Json.t
 
+type service_tier =
+  | Auto_tier
+  | Default_tier
+  | Priority_tier
+  | Service_tier of string
+
 type response_format =
   | Text
   | Json_object
@@ -145,6 +151,13 @@ type upload_part = {
   upload_body : string;
 }
 
+type form_part = {
+  form_name : string;
+  form_filename : string option;
+  form_content_type : string option;
+  form_body : string;
+}
+
 type file_upload = {
   file_filename : string;
   file_content_type : string option;
@@ -210,6 +223,169 @@ type api_error = {
   error_message : string;
   error_raw : Chatoyant_runtime.Json.t option;
 }
+
+type tts_output_format = {
+  output_codec : string option;
+  output_sample_rate : int option;
+  output_bit_rate : int option;
+}
+
+type tts_request = {
+  tts_text : string;
+  tts_voice_id : string option;
+  tts_language : string;
+  tts_output_format : tts_output_format option;
+  tts_speed : float option;
+  tts_optimize_streaming_latency : int option;
+  tts_text_normalization : bool option;
+  tts_with_timestamps : bool option;
+  tts_extra : (string * Chatoyant_runtime.Json.t) list;
+}
+(** REST text-to-speech request for [/v1/tts]. The normal response body is raw
+    audio bytes; when [tts_with_timestamps] is true, xAI returns a JSON envelope
+    as the body. *)
+
+type audio_body = {
+  audio_body : string;
+  audio_content_type : string option;
+}
+
+type stt_request = {
+  stt_file : upload_part option;
+  stt_url : string option;
+  stt_audio_format : string option;
+  stt_sample_rate : int option;
+  stt_language : string option;
+  stt_format : bool option;
+  stt_multichannel : bool option;
+  stt_channels : int option;
+  stt_diarize : bool option;
+  stt_keyterms : string list;
+  stt_filler_words : bool option;
+  stt_extra : (string * string) list;
+}
+(** REST speech-to-text request for [/v1/stt]. Either [stt_file] or [stt_url]
+    must be supplied. When [stt_file] is present it is encoded last, matching
+    xAI's multipart requirement. *)
+
+type stt_word = {
+  word_text : string option;
+  word_start : float option;
+  word_end : float option;
+  word_speaker : int option;
+  word_raw : Chatoyant_runtime.Json.t;
+}
+
+type stt_channel = {
+  channel_index : int option;
+  channel_text : string option;
+  channel_words : stt_word list;
+  channel_raw : Chatoyant_runtime.Json.t;
+}
+
+type stt_response = {
+  stt_text : string option;
+  stt_language : string option;
+  stt_duration : float option;
+  stt_words : stt_word list;
+  stt_channels : stt_channel list;
+  stt_raw : Chatoyant_runtime.Json.t;
+}
+
+type voice = {
+  voice_id : string option;
+  voice_name : string option;
+  voice_description : string option;
+  voice_gender : string option;
+  voice_accent : string option;
+  voice_age : string option;
+  voice_language : string option;
+  voice_use_case : string option;
+  voice_tone : string option;
+  voice_created_at : string option;
+  voice_raw : Chatoyant_runtime.Json.t;
+}
+
+type voice_list = {
+  voices : voice list;
+  voices_pagination_token : string option;
+  voices_raw : Chatoyant_runtime.Json.t;
+}
+
+type custom_voice_request = {
+  custom_voice_file : upload_part;
+  custom_voice_name : string option;
+  custom_voice_description : string option;
+  custom_voice_gender : string option;
+  custom_voice_accent : string option;
+  custom_voice_age : string option;
+  custom_voice_language : string option;
+  custom_voice_use_case : string option;
+  custom_voice_tone : string option;
+  custom_voice_extra : (string * string) list;
+}
+
+type custom_voice_update = {
+  custom_voice_update_name : string option;
+  custom_voice_update_description : string option;
+  custom_voice_update_gender : string option;
+  custom_voice_update_accent : string option;
+  custom_voice_update_age : string option;
+  custom_voice_update_language : string option;
+  custom_voice_update_use_case : string option;
+  custom_voice_update_tone : string option;
+  custom_voice_update_extra : (string * Chatoyant_runtime.Json.t) list;
+}
+
+type voice_delete = {
+  deleted_voice_id : string option;
+  voice_deleted : bool;
+  voice_delete_raw : Chatoyant_runtime.Json.t;
+}
+
+type responses_stream_event =
+  | Response_created of responses_response
+  | Response_in_progress of responses_response
+  | Response_completed of responses_response
+  | Response_failed of responses_response
+  | Response_incomplete of responses_response
+  | Response_output_text_delta of {
+      item_id : string option;
+      output_index : int option;
+      content_index : int option;
+      delta : string;
+    }
+  | Response_output_text_done of {
+      item_id : string option;
+      output_index : int option;
+      content_index : int option;
+      text : string;
+    }
+  | Response_reasoning_summary_text_delta of {
+      item_id : string option;
+      output_index : int option;
+      summary_index : int option;
+      delta : string;
+    }
+  | Response_function_call_arguments_delta of {
+      item_id : string option;
+      output_index : int option;
+      delta : string;
+    }
+  | Response_function_call_arguments_done of {
+      item_id : string option;
+      output_index : int option;
+      arguments : string;
+    }
+  | Response_refusal_delta of string
+  | Response_error of api_error
+  | Response_raw_event of {
+      event_type : string option;
+      raw : Chatoyant_runtime.Json.t;
+    }
+(** xAI Responses SSE events. The provider currently follows OpenAI's event
+    names for [/v1/responses], while this type remains owned by the xAI module
+    so downstream explicit-provider code never depends on OpenAI internals. *)
 
 type image_response_format =
   | Url
@@ -359,6 +535,13 @@ type collection_search_response = {
 }
 
 val role_to_string : role -> string
+val service_tier_to_string : service_tier -> string
+val service_tier_extra : service_tier -> string * Chatoyant_runtime.Json.t
+val background_extra : bool -> string * Chatoyant_runtime.Json.t
+val tts_request_json : tts_request -> Chatoyant_runtime.Json.t
+val stt_request_parts : stt_request -> form_part list
+val custom_voice_request_parts : custom_voice_request -> form_part list
+val custom_voice_update_json : custom_voice_update -> Chatoyant_runtime.Json.t
 val chat_request_json : chat_request -> Chatoyant_runtime.Json.t
 val responses_request_json : responses_request -> Chatoyant_runtime.Json.t
 val batch_create_request_json : batch_create_request -> Chatoyant_runtime.Json.t
@@ -376,6 +559,13 @@ val chat_response_of_json : Chatoyant_runtime.Json.t -> chat_response
 val generation_of_chat_response : chat_response -> Provider.generation
 val responses_response_of_json : Chatoyant_runtime.Json.t -> responses_response
 val generation_of_responses_response : responses_response -> Provider.generation
+val stt_response_of_json : Chatoyant_runtime.Json.t -> stt_response
+val voice_of_json : Chatoyant_runtime.Json.t -> voice
+val voice_list_of_json : Chatoyant_runtime.Json.t -> voice_list
+val voice_delete_of_json : Chatoyant_runtime.Json.t -> voice_delete
+val responses_stream_event_of_json : Chatoyant_runtime.Json.t -> responses_stream_event
+val responses_stream_events_of_chunks : string list -> (responses_stream_event list, string) result
+val response_of_stream_chunks : string list -> (responses_response, string) result
 val delete_response_of_json : Chatoyant_runtime.Json.t -> delete_response
 val model_list_of_json : Chatoyant_runtime.Json.t -> model_list
 val file_object_of_json : Chatoyant_runtime.Json.t -> file_object
@@ -417,10 +607,25 @@ module Make_client (Http : Chatoyant_runtime.Effect.HTTP) : sig
   val default_base_url : string
   val default_management_base_url : string
   val create_chat : config -> chat_request -> (chat_response, api_error) result
+  val retrieve_deferred_chat :
+    config -> request_id:string -> (chat_response, api_error) result
   val create_response : config -> responses_request -> (responses_response, api_error) result
   val compact_response : config -> responses_request -> (responses_response, api_error) result
+  val retrieve_deferred_response :
+    config -> request_id:string -> (responses_response, api_error) result
   val retrieve_response : config -> response_id:string -> (responses_response, api_error) result
   val delete_response : config -> response_id:string -> (delete_response, api_error) result
+  val synthesize_speech : config -> tts_request -> (audio_body, api_error) result
+  val list_tts_voices : config -> (voice_list, api_error) result
+  val transcribe_speech : config -> stt_request -> (stt_response, api_error) result
+  val create_custom_voice : config -> custom_voice_request -> (voice, api_error) result
+  val list_custom_voices :
+    ?limit:int -> ?pagination_token:string -> config -> (voice_list, api_error) result
+  val retrieve_custom_voice : config -> voice_id:string -> (voice, api_error) result
+  val update_custom_voice :
+    config -> voice_id:string -> custom_voice_update -> (voice, api_error) result
+  val download_custom_voice_audio : config -> voice_id:string -> (audio_body, api_error) result
+  val delete_custom_voice : config -> voice_id:string -> (voice_delete, api_error) result
   val list_models : config -> (model_list, api_error) result
   val upload_file : config -> file_upload -> (file_object, api_error) result
   val list_files :

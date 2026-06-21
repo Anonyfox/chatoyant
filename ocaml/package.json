@@ -1,11 +1,12 @@
 {
   "name": "chatoyant",
   "version": "0.12.0",
-  "description": "OCaml-first Chatoyant SDK with a Melange-generated ESM npm package.",
+  "description": "OCaml-first LLM SDK with a Melange-generated JavaScript package.",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "sideEffects": false,
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -15,7 +16,10 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "docs",
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build:ocaml": "dune build @runtest @melange",
@@ -25,9 +29,54 @@
     "test:types": "tsc --noEmit -p tsconfig.json",
     "test:json-schema-suite": "node scripts/ensure-json-schema-test-suite.mjs && JSON_SCHEMA_TEST_SUITE_DIR=.cache/json-schema-test-suite node --test --test-reporter=dot test/js/json-schema-official.test.mjs",
     "test": "npm run build && npm run test:node && npm run test:types && npm run test:json-schema-suite",
+    "check": "npm test",
+    "prepublishOnly": "npm test",
     "typecheck": "npm run test:types",
     "pack:dry-run": "npm run build && npm pack --dry-run"
   },
+  "keywords": [
+    "llm",
+    "ai",
+    "openai",
+    "anthropic",
+    "claude",
+    "gpt",
+    "xai",
+    "grok",
+    "openrouter",
+    "json-schema",
+    "structured-output",
+    "function-calling",
+    "streaming",
+    "ocaml",
+    "eio",
+    "melange",
+    "typescript",
+    "typesafe"
+  ],
+  "author": {
+    "name": "Anonyfox",
+    "email": "max@anonyfox.com",
+    "url": "https://anonyfox.com"
+  },
+  "license": "MIT",
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/Anonyfox"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Anonyfox/chatoyant.git",
+    "directory": "ocaml"
+  },
+  "bugs": {
+    "url": "https://github.com/Anonyfox/chatoyant/issues"
+  },
+  "homepage": "https://github.com/Anonyfox/chatoyant/tree/main/ocaml#readme",
   "devDependencies": {
     "@types/node": "^25.0.3",
     "esbuild": "^0.28.1",

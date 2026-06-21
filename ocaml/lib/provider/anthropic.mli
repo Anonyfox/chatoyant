@@ -4,8 +4,23 @@ type role =
   | User
   | Assistant
 
+type cache_ttl =
+  | Ttl_5m
+  | Ttl_1h
+  | Cache_ttl of string
+
+type cache_control =
+  | Ephemeral_cache of cache_ttl option
+  | Raw_cache_control of Chatoyant_runtime.Json.t
+(** Prompt caching marker. Anthropic accepts [cache_control] at the request
+    top level, on cacheable content blocks, and on tool definitions. *)
+
 type content_block =
   | Text of string
+  | Cached_block of {
+      block : content_block;
+      cache_control : cache_control;
+    }
   | Thinking of string
   | Redacted_thinking of string
   | Tool_use of {
@@ -18,6 +33,31 @@ type content_block =
       content : string;
       is_error : bool option;
     }
+  | Server_tool_use of {
+      id : string;
+      name : string;
+      input : Chatoyant_runtime.Json.t;
+      raw : Chatoyant_runtime.Json.t;
+    }
+  | Web_search_tool_result of {
+      tool_use_id : string;
+      content : Chatoyant_runtime.Json.t;
+      raw : Chatoyant_runtime.Json.t;
+    }
+  | Web_fetch_tool_result of {
+      tool_use_id : string;
+      content : Chatoyant_runtime.Json.t;
+      raw : Chatoyant_runtime.Json.t;
+    }
+  | Code_execution_tool_result of {
+      tool_use_id : string;
+      content : Chatoyant_runtime.Json.t;
+      raw : Chatoyant_runtime.Json.t;
+    }
+  | Container_upload of {
+      file_id : string option;
+      raw : Chatoyant_runtime.Json.t;
+    }
   | Raw_block of Chatoyant_runtime.Json.t
 
 type message = {
@@ -29,6 +69,7 @@ type tool = {
   tool_name : string;
   tool_description : string option;
   input_schema : Chatoyant_runtime.Json.t;
+  tool_cache_control : cache_control option;
 }
 
 type tool_choice =
@@ -45,6 +86,7 @@ type request = {
   model : string;
   messages : message list;
   system : string option;
+  system_blocks : content_block list;
   max_tokens : int;
   stream : bool;
   temperature : float option;
@@ -55,6 +97,7 @@ type request = {
   tools : tool list;
   tool_choice : tool_choice option;
   thinking : thinking option;
+  cache_control : cache_control option;
   extra : (string * Chatoyant_runtime.Json.t) list;
 }
 
@@ -225,10 +268,29 @@ val apply_stream_event : stream_state -> stream_event -> stream_state
 val stream_state_to_response : stream_state -> response
 
 val role_to_string : role -> string
+val cache_ttl_to_string : cache_ttl -> string
+val cache_control_json : cache_control -> Chatoyant_runtime.Json.t
+val ephemeral_cache_control : ?ttl:cache_ttl -> unit -> cache_control
 val content_block_json : content_block -> Chatoyant_runtime.Json.t
 val tool_json : tool -> Chatoyant_runtime.Json.t
+val web_search_tool_json :
+  ?name:string ->
+  ?cache_control:cache_control ->
+  ?max_uses:int ->
+  ?allowed_domains:string list ->
+  ?blocked_domains:string list ->
+  ?user_location:Chatoyant_runtime.Json.t ->
+  unit ->
+  Chatoyant_runtime.Json.t
+val web_fetch_tool_json :
+  ?name:string -> ?cache_control:cache_control -> unit -> Chatoyant_runtime.Json.t
+val code_execution_tool_json :
+  ?name:string -> ?cache_control:cache_control -> unit -> Chatoyant_runtime.Json.t
+val request_json_with_raw_tools :
+  request -> Chatoyant_runtime.Json.t list -> Chatoyant_runtime.Json.t
 val request_json : request -> Chatoyant_runtime.Json.t
 val authorization_headers : api_key:string -> (string * string) list
+val content_block_of_json : Chatoyant_runtime.Json.t -> content_block
 val response_of_json : Chatoyant_runtime.Json.t -> response
 val api_error_of_json : Chatoyant_runtime.Json.t -> api_error
 val model_of_json : Chatoyant_runtime.Json.t -> model
@@ -255,8 +317,16 @@ module Make_client (Http : Chatoyant_runtime.Effect.HTTP) : sig
     beta_headers : string list;
   }
 
+  type admin_config = {
+    admin_api_key : string;
+    admin_base_url : string;
+    admin_timeout_ms : int option;
+  }
+
   val default_base_url : string
   val create_message : config -> request -> (response, api_error) result
+  val create_message_with_raw_tools :
+    config -> raw_tools:Chatoyant_runtime.Json.t list -> request -> (response, api_error) result
   val list_models : config -> (model_list, api_error) result
   val retrieve_model : config -> model_id:string -> (model, api_error) result
   val create_message_batch : config -> batch_request list -> (message_batch, api_error) result
@@ -269,6 +339,24 @@ module Make_client (Http : Chatoyant_runtime.Effect.HTTP) : sig
   val retrieve_file : config -> file_id:string -> (file_metadata, api_error) result
   val delete_file : config -> file_id:string -> (file_delete, api_error) result
   val download_file : config -> file_id:string -> (string, api_error) result
+  val admin_get_json :
+    admin_config -> path:string -> (Chatoyant_runtime.Json.t, api_error) result
+  val get_usage_report_messages :
+    admin_config ->
+    ?starting_at:string ->
+    ?ending_at:string ->
+    ?bucket_width:string ->
+    ?group_by:string list ->
+    unit ->
+    (Chatoyant_runtime.Json.t, api_error) result
+  val get_cost_report :
+    admin_config ->
+    ?starting_at:string ->
+    ?ending_at:string ->
+    ?bucket_width:string ->
+    ?group_by:string list ->
+    unit ->
+    (Chatoyant_runtime.Json.t, api_error) result
 end
 
 module Make_provider

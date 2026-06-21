@@ -9,10 +9,19 @@ type message = {
   name : string option;
 }
 
+type overhead = {
+  per_message : int;
+  conversation : int;
+}
+
 let overhead = function
   | Openai -> (4, 3)
   | Anthropic -> (3, 3)
   | Xai -> (4, 3)
+
+let get_overhead ?(provider = Openai) () =
+  let per_message, conversation = overhead provider in
+  { per_message; conversation }
 
 let estimate_message ?(provider = Openai) message =
   let per_message, _ = overhead provider in
@@ -29,8 +38,17 @@ let estimate_message ?(provider = Openai) message =
   per_message + content_tokens + name_tokens
 
 let estimate_chat ?(provider = Openai) messages =
+  if messages = [] then 0
+  else
   let _, conversation = overhead provider in
   List.fold_left (fun total message -> total + estimate_message ~provider message) conversation messages
+
+let estimate_system_prompt ?(provider = Openai) system_prompt =
+  estimate_message ~provider { role = "system"; content = Some system_prompt; name = None }
+
+let available_tokens ~context_window ?(system_prompt_tokens = 0) ?(reserve_for_response = 0)
+    ?(history_tokens = 0) () =
+  max 0 (context_window - system_prompt_tokens - reserve_for_response - history_tokens)
 
 let fits ?(provider = Openai) ~max_tokens messages =
   estimate_chat ~provider messages <= max_tokens

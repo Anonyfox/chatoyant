@@ -344,6 +344,42 @@ let test_response_decode () =
 
 let test_streams () =
   (match
+     Chatoyant.Provider.Openai.responses_stream_events_of_chunks
+       [
+         "data: {\"type\":\"response.output_text.delta\",\"item_id\":\"item_1\",\"output_index\":0,\"content_index\":0,\"delta\":\"Hel\"}\n\n";
+         "data: {\"type\":\"response.function_call_arguments.done\",\"item_id\":\"item_2\",\"output_index\":1,\"arguments\":\"{\\\"q\\\":\\\"ocaml\\\"}\"}\n\n";
+         "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_123\",\"status\":\"completed\",\"output_text\":\"Hello\",\"usage\":{\"input_tokens\":2,\"output_tokens\":1,\"total_tokens\":3}}}\n\n";
+       ]
+   with
+  | Error message -> failwith message
+  | Ok
+      [
+        Chatoyant.Provider.Openai.Response_output_text_delta { delta = "Hel"; _ };
+        Chatoyant.Provider.Openai.Response_function_call_arguments_done { arguments; _ };
+        Chatoyant.Provider.Openai.Response_completed response;
+      ] ->
+      assert_contains "\"q\":\"ocaml\"" arguments;
+      assert_equal_string "Hello" response.responses_output_text
+  | Ok _ -> failwith "unexpected OpenAI response stream event sequence");
+  (match
+     Chatoyant.Provider.Openai.transcription_stream_events_of_chunks
+       [
+         "data: {\"type\":\"transcript.text.delta\",\"delta\":\"Hel\"}\n\n";
+         "data: {\"type\":\"transcript.text.done\",\"text\":\"Hello\"}\n\n";
+         "data: {\"type\":\"transcript.text.segment\",\"id\":\"seg_001\",\"start\":0.0,\"end\":1.2,\"text\":\"Hello\",\"speaker\":\"agent\"}\n\n";
+       ]
+   with
+  | Error message -> failwith message
+  | Ok
+      [
+        Chatoyant.Provider.Openai.Transcription_text_delta { transcript_delta = "Hel"; _ };
+        Chatoyant.Provider.Openai.Transcription_text_done { transcript_text = "Hello"; _ };
+        Chatoyant.Provider.Openai.Transcription_text_segment
+          { transcript_segment_speaker = Some "agent"; transcript_segment_end = Some 1.2; _ };
+      ] ->
+      ()
+  | Ok _ -> failwith "unexpected OpenAI transcription stream event sequence");
+  (match
      Chatoyant.Provider.Openai.chat_response_of_stream_chunks
        [
          "data: {\"choices\":[{\"delta\":{\"content\":\"Hel\",\"reasoning_content\":\"Be\"}}]}\n\n";
@@ -607,6 +643,13 @@ let test_client_and_provider () =
          Chatoyant.Provider.Provider.model = "gpt-5.4-mini";
          temperature = None;
          max_tokens = Some 64;
+         top_p = None;
+         stop = [];
+         frequency_penalty = None;
+         presence_penalty = None;
+         web_search = None;
+         thinking_budget = None;
+         reasoning_effort = None;
          timeout_ms = Some 1_000;
          tools = [];
          tool_choice = None;
@@ -640,6 +683,13 @@ let test_client_and_provider () =
          Chatoyant.Provider.Provider.model = "gpt-5.4-mini";
          temperature = None;
          max_tokens = Some 64;
+         top_p = Some 0.5;
+         stop = [ "END" ];
+         frequency_penalty = Some 0.1;
+         presence_penalty = Some 0.2;
+         web_search = None;
+         thinking_budget = None;
+         reasoning_effort = Some "low";
          timeout_ms = Some 1_000;
          tools =
            [
@@ -660,13 +710,136 @@ let test_client_and_provider () =
   | Some { body = Json json; _ } ->
       let body = Chatoyant.Runtime.Json.to_string json in
       assert_contains "\"additionalProperties\":false" body;
-      assert_contains "\"required\":[\"q\",\"limit\"]" body
+      assert_contains "\"required\":[\"q\",\"limit\"]" body;
+      assert_contains "\"top_p\":0.5" body;
+      assert_contains "\"stop\":[\"END\"]" body;
+      assert_contains "\"frequency_penalty\":0.1" body;
+      assert_contains "\"presence_penalty\":0.2" body;
+      assert_contains "\"reasoning\":{\"effort\":\"low\"}" body
   | _ -> failwith "expected JSON OpenAI provider request with strict tool schema");
   Fake_http.next_response_body :=
     "{\"object\":\"list\",\"data\":[{\"id\":\"gpt-5.4-mini\",\"object\":\"model\",\"created\":1700000000,\"owned_by\":\"openai\"}]}";
   match Client.list_models config with
   | Error error -> failwith error.error_message
   | Ok list -> assert_equal_string "gpt-5.4-mini" (Option.get (List.hd list.models).model_id)
+
+let test_client_responses_and_conversations () =
+  let config =
+    Client.{ api_key = "test-key"; base_url = default_base_url; timeout_ms = Some 1_000 }
+  in
+  Fake_http.next_response_status := 200;
+  Fake_http.next_response_body :=
+    "{\"object\":\"list\",\"data\":[{\"id\":\"msg_abc\",\"type\":\"message\"}],\"first_id\":\"msg_abc\",\"last_id\":\"msg_abc\",\"has_more\":false}";
+  (match Client.list_response_input_items config ~response_id:"resp_123" with
+  | Error error -> failwith error.error_message
+  | Ok items -> assert_equal_int 1 (List.length items.api_list_data));
+  (match !(Fake_http.last_request) with
+  | Some request ->
+      assert_equal_string "GET" request.method_;
+      assert_contains "/responses/resp_123/input_items" request.url
+  | None -> failwith "expected response input items request");
+  Fake_http.next_response_body :=
+    "{\"object\":\"response.input_tokens\",\"input_tokens\":11}";
+  (match Client.count_response_input_tokens config (responses_fixture ()) with
+  | Error error -> failwith error.error_message
+  | Ok count -> assert_equal_int 11 count.response_input_tokens);
+  (match !(Fake_http.last_request) with
+  | Some request ->
+      assert_equal_string "POST" request.method_;
+      assert_contains "/responses/input_tokens" request.url;
+      (match request.body with
+      | Json json ->
+          let body = Chatoyant.Runtime.Json.to_string json in
+          assert_contains "\"model\":\"gpt-5.4-mini\"" body;
+          if contains_substring "\"stream\"" body then
+            failwith "count input tokens body should not include stream"
+      | _ -> failwith "expected count input tokens JSON body")
+  | None -> failwith "expected response token count request");
+  Fake_http.next_response_body :=
+    "{\"id\":\"conv_123\",\"object\":\"conversation\",\"created_at\":1741900000,\"metadata\":{\"topic\":\"demo\"}}";
+  let conversation_body =
+    Chatoyant.Runtime.Json.Object
+      [
+        ( "metadata",
+          Chatoyant.Runtime.Json.Object [ ("topic", Chatoyant.Runtime.Json.String "demo") ] );
+      ]
+  in
+  (match Client.create_conversation config conversation_body with
+  | Error error -> failwith error.error_message
+  | Ok conversation -> assert_equal_string "conv_123" (Option.get conversation.api_object_id));
+  (match !(Fake_http.last_request) with
+  | Some request ->
+      assert_equal_string "POST" request.method_;
+      assert_contains "/conversations" request.url
+  | None -> failwith "expected conversation create request");
+  (match Client.retrieve_conversation config ~conversation_id:"conv_123" with
+  | Error error -> failwith error.error_message
+  | Ok conversation -> assert_equal_string "conversation" (Option.get conversation.api_object_type));
+  (match !(Fake_http.last_request) with
+  | Some request ->
+      assert_equal_string "GET" request.method_;
+      assert_contains "/conversations/conv_123" request.url
+  | None -> failwith "expected conversation retrieve request");
+  (match Client.update_conversation config ~conversation_id:"conv_123" conversation_body with
+  | Error error -> failwith error.error_message
+  | Ok conversation -> assert_equal_string "conv_123" (Option.get conversation.api_object_id));
+  (match !(Fake_http.last_request) with
+  | Some request ->
+      assert_equal_string "POST" request.method_;
+      assert_contains "/conversations/conv_123" request.url
+  | None -> failwith "expected conversation update request");
+  Fake_http.next_response_body :=
+    "{\"object\":\"list\",\"data\":[{\"id\":\"msg_abc\",\"type\":\"message\"}],\"first_id\":\"msg_abc\",\"last_id\":\"msg_abc\",\"has_more\":false}";
+  let items_body =
+    Chatoyant.Runtime.Json.Object
+      [
+        ( "items",
+          Chatoyant.Runtime.Json.Array
+            [
+              Chatoyant.Runtime.Json.Object
+                [
+                  ("type", Chatoyant.Runtime.Json.String "message");
+                  ("role", Chatoyant.Runtime.Json.String "user");
+                  ("content", Chatoyant.Runtime.Json.String "Hello");
+                ];
+            ] );
+      ]
+  in
+  (match Client.create_conversation_items config ~conversation_id:"conv_123" items_body with
+  | Error error -> failwith error.error_message
+  | Ok items -> assert_equal_string "msg_abc" (Option.get (List.hd items.api_list_data).api_object_id));
+  (match !(Fake_http.last_request) with
+  | Some request ->
+      assert_equal_string "POST" request.method_;
+      assert_contains "/conversations/conv_123/items" request.url
+  | None -> failwith "expected conversation item create request");
+  Fake_http.next_response_body :=
+    "{\"id\":\"msg_abc\",\"type\":\"message\",\"status\":\"completed\",\"role\":\"user\"}";
+  (match Client.retrieve_conversation_item config ~conversation_id:"conv_123" ~item_id:"msg_abc" with
+  | Error error -> failwith error.error_message
+  | Ok item -> assert_equal_string "msg_abc" (Option.get item.api_object_id));
+  (match !(Fake_http.last_request) with
+  | Some request ->
+      assert_equal_string "GET" request.method_;
+      assert_contains "/conversations/conv_123/items/msg_abc" request.url
+  | None -> failwith "expected conversation item retrieve request");
+  Fake_http.next_response_body :=
+    "{\"object\":\"list\",\"data\":[{\"id\":\"msg_abc\",\"type\":\"message\"}],\"first_id\":\"msg_abc\",\"last_id\":\"msg_abc\",\"has_more\":false}";
+  (match Client.list_conversation_items config ~conversation_id:"conv_123" with
+  | Error error -> failwith error.error_message
+  | Ok items -> assert_equal_int 1 (List.length items.api_list_data));
+  Fake_http.next_response_body :=
+    "{\"id\":\"conv_123\",\"object\":\"conversation\",\"created_at\":1741900000}";
+  (match Client.delete_conversation_item config ~conversation_id:"conv_123" ~item_id:"msg_abc" with
+  | Error error -> failwith error.error_message
+  | Ok conversation -> assert_equal_string "conv_123" (Option.get conversation.api_object_id));
+  Fake_http.next_response_body :=
+    "{\"id\":\"conv_123\",\"object\":\"conversation.deleted\",\"deleted\":true}";
+  match Client.delete_conversation config ~conversation_id:"conv_123" with
+  | Error error -> failwith error.error_message
+  | Ok deleted ->
+      assert_equal_string "conv_123" (Option.get deleted.api_delete_id);
+      if not deleted.api_delete_deleted then failwith "expected deleted conversation"
 
 let test_client_moderation_and_batches () =
   let config =
@@ -998,6 +1171,67 @@ let test_client_vector_and_fine_tuning () =
   | Error error -> failwith error.error_message
   | Ok checkpoints -> assert_equal_int 1 (List.length checkpoints.fine_tuning_checkpoints)
 
+let test_client_evals_containers_and_admin () =
+  let config =
+    Client.{ api_key = "test-key"; base_url = default_base_url; timeout_ms = Some 1_000 }
+  in
+  Fake_http.next_response_status := 200;
+  Fake_http.next_response_body :=
+    "{\"id\":\"eval_123\",\"object\":\"eval\",\"name\":\"nightly parity\"}";
+  (match
+     Client.create_eval config
+       (Chatoyant.Runtime.Json.Object [ ("name", Chatoyant.Runtime.Json.String "nightly parity") ])
+   with
+  | Error error -> failwith error.error_message
+  | Ok eval -> assert_equal_string "eval_123" (Option.get eval.api_object_id));
+  (match !(Fake_http.last_request) with
+  | Some request ->
+      assert_equal_string "POST" request.method_;
+      assert_contains "/evals" request.url
+  | None -> failwith "expected eval create request");
+  Fake_http.next_response_body :=
+    "{\"data\":[{\"id\":\"run_123\",\"object\":\"eval.run\"}],\"has_more\":false}";
+  (match Client.list_eval_runs config ~eval_id:"eval_123" with
+  | Error error -> failwith error.error_message
+  | Ok runs -> assert_equal_int 1 (List.length runs.api_list_data));
+  (match !(Fake_http.last_request) with
+  | Some request -> assert_contains "/evals/eval_123/runs" request.url
+  | None -> failwith "expected eval runs request");
+  Fake_http.next_response_body :=
+    "{\"id\":\"container_123\",\"object\":\"container\",\"name\":\"sandbox\"}";
+  (match
+     Client.create_container config
+       (Chatoyant.Runtime.Json.Object [ ("name", Chatoyant.Runtime.Json.String "sandbox") ])
+   with
+  | Error error -> failwith error.error_message
+  | Ok container -> assert_equal_string "container_123" (Option.get container.api_object_id));
+  (match !(Fake_http.last_request) with
+  | Some request -> assert_contains "/containers" request.url
+  | None -> failwith "expected container create request");
+  Fake_http.next_response_body := "CONTAINER_FILE";
+  (match Client.download_container_file config ~container_id:"container_123" ~file_id:"file_123" with
+  | Error error -> failwith error.error_message
+  | Ok body -> assert_equal_string "CONTAINER_FILE" body);
+  let admin =
+    Client.
+      {
+        admin_api_key = "admin-key";
+        admin_base_url = default_base_url;
+        admin_timeout_ms = Some 1_000;
+      }
+  in
+  Fake_http.next_response_body :=
+    "{\"data\":[{\"id\":\"key_123\",\"object\":\"organization.admin_api_key\"}],\"has_more\":false}";
+  (match Client.list_admin_api_keys admin with
+  | Error error -> failwith error.error_message
+  | Ok keys -> assert_equal_int 1 (List.length keys.api_list_data));
+  match !(Fake_http.last_request) with
+  | Some request ->
+      assert_contains "/organization/admin_api_keys" request.url;
+      if not (List.mem ("Authorization", "Bearer admin-key") request.headers) then
+        failwith "missing admin authorization"
+  | None -> failwith "expected admin request"
+
 let () =
   test_request_json ();
   test_response_decode ();
@@ -1008,7 +1242,10 @@ let () =
   test_media_vector_and_fine_tuning_json ();
   test_client_and_provider ()
   ;
+  test_client_responses_and_conversations ();
   test_client_moderation_and_batches ();
   test_client_files ();
   test_client_media ();
   test_client_vector_and_fine_tuning ()
+  ;
+  test_client_evals_containers_and_admin ()

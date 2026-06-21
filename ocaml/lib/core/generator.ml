@@ -2,7 +2,13 @@ module Make
     (Provider : Chatoyant_provider.Provider.CHAT)
     (Clock : Chatoyant_runtime.Effect.CLOCK) =
 struct
-  let provider_options options chat =
+  let provider_options (options : Options.t) chat =
+    let reasoning_effort = Option.map Options.reasoning_effort options.reasoning in
+    let thinking_budget =
+      match options.thinking_budget with
+      | Some _ as value -> value
+      | None -> Option.bind options.reasoning Options.anthropic_thinking_budget
+    in
     {
       Chatoyant_provider.Provider.model =
         Option.value options.Options.model ~default:(Chat.model chat);
@@ -11,6 +17,13 @@ struct
         | Some value -> Some value
         | None -> Option.map Options.temperature_of_creativity options.creativity);
       max_tokens = options.max_tokens;
+      top_p = options.top_p;
+      stop = options.stop;
+      frequency_penalty = options.frequency_penalty;
+      presence_penalty = options.presence_penalty;
+      web_search = options.web_search;
+      thinking_budget;
+      reasoning_effort;
       timeout_ms = options.timeout_ms;
       tools = List.map Tool.to_provider_definition (Chat.tools chat);
       tool_choice = None;

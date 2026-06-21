@@ -24,6 +24,12 @@ type tool_choice =
   | Tool of string
   | Raw_tool_choice of Chatoyant_runtime.Json.t
 
+type service_tier =
+  | Auto_tier
+  | Default_tier
+  | Priority_tier
+  | Service_tier of string
+
 type response_format =
   | Text
   | Json_object
@@ -128,6 +134,13 @@ type upload_part = {
   upload_body : string;
 }
 
+type form_part = {
+  form_name : string;
+  form_filename : string option;
+  form_content_type : string option;
+  form_body : string;
+}
+
 type file_upload = {
   file_filename : string;
   file_content_type : string option;
@@ -193,6 +206,160 @@ type api_error = {
   error_message : string;
   error_raw : Chatoyant_runtime.Json.t option;
 }
+
+type tts_output_format = {
+  output_codec : string option;
+  output_sample_rate : int option;
+  output_bit_rate : int option;
+}
+
+type tts_request = {
+  tts_text : string;
+  tts_voice_id : string option;
+  tts_language : string;
+  tts_output_format : tts_output_format option;
+  tts_speed : float option;
+  tts_optimize_streaming_latency : int option;
+  tts_text_normalization : bool option;
+  tts_with_timestamps : bool option;
+  tts_extra : (string * Chatoyant_runtime.Json.t) list;
+}
+
+type audio_body = {
+  audio_body : string;
+  audio_content_type : string option;
+}
+
+type stt_request = {
+  stt_file : upload_part option;
+  stt_url : string option;
+  stt_audio_format : string option;
+  stt_sample_rate : int option;
+  stt_language : string option;
+  stt_format : bool option;
+  stt_multichannel : bool option;
+  stt_channels : int option;
+  stt_diarize : bool option;
+  stt_keyterms : string list;
+  stt_filler_words : bool option;
+  stt_extra : (string * string) list;
+}
+
+type stt_word = {
+  word_text : string option;
+  word_start : float option;
+  word_end : float option;
+  word_speaker : int option;
+  word_raw : Chatoyant_runtime.Json.t;
+}
+
+type stt_channel = {
+  channel_index : int option;
+  channel_text : string option;
+  channel_words : stt_word list;
+  channel_raw : Chatoyant_runtime.Json.t;
+}
+
+type stt_response = {
+  stt_text : string option;
+  stt_language : string option;
+  stt_duration : float option;
+  stt_words : stt_word list;
+  stt_channels : stt_channel list;
+  stt_raw : Chatoyant_runtime.Json.t;
+}
+
+type voice = {
+  voice_id : string option;
+  voice_name : string option;
+  voice_description : string option;
+  voice_gender : string option;
+  voice_accent : string option;
+  voice_age : string option;
+  voice_language : string option;
+  voice_use_case : string option;
+  voice_tone : string option;
+  voice_created_at : string option;
+  voice_raw : Chatoyant_runtime.Json.t;
+}
+
+type voice_list = {
+  voices : voice list;
+  voices_pagination_token : string option;
+  voices_raw : Chatoyant_runtime.Json.t;
+}
+
+type custom_voice_request = {
+  custom_voice_file : upload_part;
+  custom_voice_name : string option;
+  custom_voice_description : string option;
+  custom_voice_gender : string option;
+  custom_voice_accent : string option;
+  custom_voice_age : string option;
+  custom_voice_language : string option;
+  custom_voice_use_case : string option;
+  custom_voice_tone : string option;
+  custom_voice_extra : (string * string) list;
+}
+
+type custom_voice_update = {
+  custom_voice_update_name : string option;
+  custom_voice_update_description : string option;
+  custom_voice_update_gender : string option;
+  custom_voice_update_accent : string option;
+  custom_voice_update_age : string option;
+  custom_voice_update_language : string option;
+  custom_voice_update_use_case : string option;
+  custom_voice_update_tone : string option;
+  custom_voice_update_extra : (string * Chatoyant_runtime.Json.t) list;
+}
+
+type voice_delete = {
+  deleted_voice_id : string option;
+  voice_deleted : bool;
+  voice_delete_raw : Chatoyant_runtime.Json.t;
+}
+
+type responses_stream_event =
+  | Response_created of responses_response
+  | Response_in_progress of responses_response
+  | Response_completed of responses_response
+  | Response_failed of responses_response
+  | Response_incomplete of responses_response
+  | Response_output_text_delta of {
+      item_id : string option;
+      output_index : int option;
+      content_index : int option;
+      delta : string;
+    }
+  | Response_output_text_done of {
+      item_id : string option;
+      output_index : int option;
+      content_index : int option;
+      text : string;
+    }
+  | Response_reasoning_summary_text_delta of {
+      item_id : string option;
+      output_index : int option;
+      summary_index : int option;
+      delta : string;
+    }
+  | Response_function_call_arguments_delta of {
+      item_id : string option;
+      output_index : int option;
+      delta : string;
+    }
+  | Response_function_call_arguments_done of {
+      item_id : string option;
+      output_index : int option;
+      arguments : string;
+    }
+  | Response_refusal_delta of string
+  | Response_error of api_error
+  | Response_raw_event of {
+      event_type : string option;
+      raw : Chatoyant_runtime.Json.t;
+    }
 
 type image_response_format =
   | Url
@@ -358,6 +525,15 @@ let role_to_string = function
   | Assistant -> "assistant"
   | Tool -> "tool"
 
+let service_tier_to_string = function
+  | Auto_tier -> "auto"
+  | Default_tier -> "default"
+  | Priority_tier -> "priority"
+  | Service_tier value -> value
+
+let service_tier_extra tier = ("service_tier", string (service_tier_to_string tier))
+let background_extra enabled = ("background", bool enabled)
+
 let message_json message =
   let tool_call_json (call : Provider.tool_call) =
     Chatoyant_runtime.Json.Object
@@ -405,6 +581,27 @@ let response_format_json = function
       in
       Chatoyant_runtime.Json.Object
         [ ("type", string "json_schema"); ("json_schema", Chatoyant_runtime.Json.Object json_schema) ]
+
+let tts_output_format_json format =
+  []
+  |> add_opt "codec" string format.output_codec
+  |> add_opt "sample_rate" int format.output_sample_rate
+  |> add_opt "bit_rate" int format.output_bit_rate
+  |> List.rev |> fun fields -> Chatoyant_runtime.Json.Object fields
+
+let tts_request_json request =
+  [
+    ("text", string request.tts_text);
+    ("language", string request.tts_language);
+  ]
+  |> add_opt "voice_id" string request.tts_voice_id
+  |> add_opt "output_format" tts_output_format_json request.tts_output_format
+  |> add_opt "speed" float request.tts_speed
+  |> add_opt "optimize_streaming_latency" int request.tts_optimize_streaming_latency
+  |> add_opt "text_normalization" bool request.tts_text_normalization
+  |> add_opt "with_timestamps" bool request.tts_with_timestamps
+  |> List.rev_append request.tts_extra
+  |> List.rev |> fun fields -> Chatoyant_runtime.Json.Object fields
 
 let chat_request_json request =
   [
@@ -491,6 +688,92 @@ let collection_search_request_json request =
   |> List.rev_append request.collection_search_extra
   |> List.rev |> fun fields -> Chatoyant_runtime.Json.Object fields
 
+let stt_request_parts (request : stt_request) =
+  let scalar name value =
+    { form_name = name; form_filename = None; form_content_type = None; form_body = value }
+  in
+  let file_part file =
+    {
+      form_name = "file";
+      form_filename = Some file.upload_filename;
+      form_content_type = file.upload_content_type;
+      form_body = file.upload_body;
+    }
+  in
+  let opt_string name value fields =
+    match value with
+    | None -> fields
+    | Some value -> scalar name value :: fields
+  in
+  let opt_int name value fields = opt_string name (Option.map string_of_int value) fields in
+  let opt_bool name value fields =
+    opt_string name (Option.map (fun value -> if value then "true" else "false") value) fields
+  in
+  let fields =
+    []
+    |> opt_string "url" request.stt_url
+    |> opt_string "audio_format" request.stt_audio_format
+    |> opt_int "sample_rate" request.stt_sample_rate
+    |> opt_string "language" request.stt_language
+    |> opt_bool "format" request.stt_format
+    |> opt_bool "multichannel" request.stt_multichannel
+    |> opt_int "channels" request.stt_channels
+    |> opt_bool "diarize" request.stt_diarize
+    |> opt_bool "filler_words" request.stt_filler_words
+    |> List.rev_append
+         (List.rev_map (fun (name, value) -> scalar name value) request.stt_extra)
+    |> List.rev_append
+         (List.rev_map (fun value -> scalar "keyterm" value) request.stt_keyterms)
+    |> List.rev
+  in
+  match request.stt_file with
+  | None -> fields
+  | Some file -> fields @ [ file_part file ]
+
+let custom_voice_request_parts (request : custom_voice_request) =
+  let scalar name value =
+    { form_name = name; form_filename = None; form_content_type = None; form_body = value }
+  in
+  let file =
+    {
+      form_name = "file";
+      form_filename = Some request.custom_voice_file.upload_filename;
+      form_content_type = request.custom_voice_file.upload_content_type;
+      form_body = request.custom_voice_file.upload_body;
+    }
+  in
+  let add name value fields =
+    match value with
+    | None -> fields
+    | Some value -> scalar name value :: fields
+  in
+  []
+  |> add "name" request.custom_voice_name
+  |> add "description" request.custom_voice_description
+  |> add "gender" request.custom_voice_gender
+  |> add "accent" request.custom_voice_accent
+  |> add "age" request.custom_voice_age
+  |> add "language" request.custom_voice_language
+  |> add "use_case" request.custom_voice_use_case
+  |> add "tone" request.custom_voice_tone
+  |> List.rev_append
+       (List.rev_map (fun (name, value) -> scalar name value) request.custom_voice_extra)
+  |> List.rev
+  |> fun fields -> fields @ [ file ]
+
+let custom_voice_update_json request =
+  []
+  |> add_opt "name" string request.custom_voice_update_name
+  |> add_opt "description" string request.custom_voice_update_description
+  |> add_opt "gender" string request.custom_voice_update_gender
+  |> add_opt "accent" string request.custom_voice_update_accent
+  |> add_opt "age" string request.custom_voice_update_age
+  |> add_opt "language" string request.custom_voice_update_language
+  |> add_opt "use_case" string request.custom_voice_update_use_case
+  |> add_opt "tone" string request.custom_voice_update_tone
+  |> List.rev_append request.custom_voice_update_extra
+  |> List.rev |> fun fields -> Chatoyant_runtime.Json.Object fields
+
 let image_response_format_json = function
   | Url -> string "url"
   | Base64_json -> string "b64_json"
@@ -549,6 +832,7 @@ let authorization_headers ~api_key =
 let string_field name json = Option.bind (field name json) Chatoyant_runtime.Json.as_string
 let int_field name json = Option.bind (field name json) Chatoyant_runtime.Json.as_int
 let bool_field name json = Option.bind (field name json) Chatoyant_runtime.Json.as_bool
+let float_field name json = Option.bind (field name json) Chatoyant_runtime.Json.as_float
 
 let api_error_of_json json =
   match field "error" json with
@@ -564,6 +848,80 @@ let api_error_of_json json =
         error_message = Option.value (string_field "message" json) ~default:"xAI API error";
         error_raw = Some json;
       }
+
+let stt_word_of_json json =
+  {
+    word_text = string_field "text" json;
+    word_start = float_field "start" json;
+    word_end = float_field "end" json;
+    word_speaker = int_field "speaker" json;
+    word_raw = json;
+  }
+
+let stt_channel_of_json json =
+  {
+    channel_index = int_field "index" json;
+    channel_text = string_field "text" json;
+    channel_words =
+      (match field "words" json with
+      | Some (Chatoyant_runtime.Json.Array values) -> List.map stt_word_of_json values
+      | _ -> []);
+    channel_raw = json;
+  }
+
+let stt_response_of_json json =
+  {
+    stt_text = string_field "text" json;
+    stt_language = string_field "language" json;
+    stt_duration = float_field "duration" json;
+    stt_words =
+      (match field "words" json with
+      | Some (Chatoyant_runtime.Json.Array values) -> List.map stt_word_of_json values
+      | _ -> []);
+    stt_channels =
+      (match field "channels" json with
+      | Some (Chatoyant_runtime.Json.Array values) -> List.map stt_channel_of_json values
+      | _ -> []);
+    stt_raw = json;
+  }
+
+let voice_of_json json =
+  {
+    voice_id = string_field "voice_id" json;
+    voice_name = string_field "name" json;
+    voice_description = string_field "description" json;
+    voice_gender = string_field "gender" json;
+    voice_accent = string_field "accent" json;
+    voice_age = string_field "age" json;
+    voice_language = string_field "language" json;
+    voice_use_case = string_field "use_case" json;
+    voice_tone = string_field "tone" json;
+    voice_created_at = string_field "created_at" json;
+    voice_raw = json;
+  }
+
+let voice_list_of_json json =
+  {
+    voices =
+      (match field "voices" json with
+      | Some (Chatoyant_runtime.Json.Array values) -> List.map voice_of_json values
+      | _ -> (
+          match field "data" json with
+          | Some (Chatoyant_runtime.Json.Array values) -> List.map voice_of_json values
+          | _ -> []));
+    voices_pagination_token = string_field "pagination_token" json;
+    voices_raw = json;
+  }
+
+let voice_delete_of_json json =
+  {
+    deleted_voice_id =
+      (match string_field "voice_id" json with
+      | Some _ as value -> value
+      | None -> string_field "id" json);
+    voice_deleted = Option.value (bool_field "deleted" json) ~default:false;
+    voice_delete_raw = json;
+  }
 
 let chat_response_of_json json =
   let response_content =
@@ -713,7 +1071,10 @@ let responses_response_of_json json =
     responses_status =
       json |> string_field "status" |> Option.map response_status_of_string
       |> Option.value ~default:(Unknown_response_status "");
-    responses_output_text = output_items |> List.map output_item_text |> String.concat "";
+    responses_output_text =
+      (match string_field "output_text" json with
+      | Some text -> text
+      | None -> output_items |> List.map output_item_text |> String.concat "");
     responses_reasoning_text = output_items |> List.map reasoning_item_text |> String.concat "";
     responses_usage = responses_usage json;
     responses_raw = json;
@@ -736,6 +1097,184 @@ let generation_of_responses_response response =
       | Unknown_response_status value -> Some value);
     raw = Some response.responses_raw;
   }
+
+let responses_stream_event_of_json json =
+  let event_type = string_field "type" json in
+  let response_event constructor =
+    match field "response" json with
+    | Some response -> constructor (responses_response_of_json response)
+    | None -> Response_raw_event { event_type; raw = json }
+  in
+  match event_type with
+  | Some "response.created" -> response_event (fun value -> Response_created value)
+  | Some "response.in_progress" -> response_event (fun value -> Response_in_progress value)
+  | Some "response.completed" -> response_event (fun value -> Response_completed value)
+  | Some "response.failed" -> response_event (fun value -> Response_failed value)
+  | Some "response.incomplete" -> response_event (fun value -> Response_incomplete value)
+  | Some "response.output_text.delta" ->
+      Response_output_text_delta
+        {
+          item_id = string_field "item_id" json;
+          output_index = int_field "output_index" json;
+          content_index = int_field "content_index" json;
+          delta = Option.value (string_field "delta" json) ~default:"";
+        }
+  | Some "response.output_text.done" ->
+      Response_output_text_done
+        {
+          item_id = string_field "item_id" json;
+          output_index = int_field "output_index" json;
+          content_index = int_field "content_index" json;
+          text = Option.value (string_field "text" json) ~default:"";
+        }
+  | Some "response.reasoning_summary_text.delta" ->
+      Response_reasoning_summary_text_delta
+        {
+          item_id = string_field "item_id" json;
+          output_index = int_field "output_index" json;
+          summary_index = int_field "summary_index" json;
+          delta = Option.value (string_field "delta" json) ~default:"";
+        }
+  | Some "response.function_call_arguments.delta" ->
+      Response_function_call_arguments_delta
+        {
+          item_id = string_field "item_id" json;
+          output_index = int_field "output_index" json;
+          delta = Option.value (string_field "delta" json) ~default:"";
+        }
+  | Some "response.function_call_arguments.done" ->
+      Response_function_call_arguments_done
+        {
+          item_id = string_field "item_id" json;
+          output_index = int_field "output_index" json;
+          arguments = Option.value (string_field "arguments" json) ~default:"";
+        }
+  | Some "response.refusal.delta" ->
+      Response_refusal_delta (Option.value (string_field "delta" json) ~default:"")
+  | Some "error" -> Response_error (api_error_of_json json)
+  | _ -> Response_raw_event { event_type; raw = json }
+
+let responses_stream_events_of_chunks chunks =
+  let rec feed state acc = function
+    | [] ->
+        let events = Chatoyant_runtime.Sse.finish state in
+        decode (List.rev (List.rev_append events acc)) []
+    | chunk :: rest ->
+        let state, events = Chatoyant_runtime.Sse.feed state chunk in
+        feed state (List.rev_append events acc) rest
+  and decode sse_events acc =
+    match sse_events with
+    | [] -> Ok (List.rev acc)
+    | event :: rest ->
+        if Chatoyant_runtime.Sse.is_done event then decode rest acc
+        else
+          match Chatoyant_runtime.Json.parse (Chatoyant_runtime.Sse.data_string event) with
+          | Error message -> Error message
+          | Ok json -> decode rest (responses_stream_event_of_json json :: acc)
+  in
+  feed Chatoyant_runtime.Sse.empty [] chunks
+
+let raw_event_of_response_event = function
+  | Response_created response
+  | Response_in_progress response
+  | Response_completed response
+  | Response_failed response
+  | Response_incomplete response ->
+      response.responses_raw
+  | Response_output_text_delta { item_id; output_index; content_index; delta } ->
+      [
+        ("type", string "response.output_text.delta");
+        ("delta", string delta);
+      ]
+      |> add_opt "item_id" string item_id
+      |> add_opt "output_index" int output_index
+      |> add_opt "content_index" int content_index
+      |> List.rev |> fun fields -> Chatoyant_runtime.Json.Object fields
+  | Response_output_text_done { item_id; output_index; content_index; text } ->
+      [
+        ("type", string "response.output_text.done");
+        ("text", string text);
+      ]
+      |> add_opt "item_id" string item_id
+      |> add_opt "output_index" int output_index
+      |> add_opt "content_index" int content_index
+      |> List.rev |> fun fields -> Chatoyant_runtime.Json.Object fields
+  | Response_reasoning_summary_text_delta { item_id; output_index; summary_index; delta } ->
+      [
+        ("type", string "response.reasoning_summary_text.delta");
+        ("delta", string delta);
+      ]
+      |> add_opt "item_id" string item_id
+      |> add_opt "output_index" int output_index
+      |> add_opt "summary_index" int summary_index
+      |> List.rev |> fun fields -> Chatoyant_runtime.Json.Object fields
+  | Response_function_call_arguments_delta { item_id; output_index; delta } ->
+      [
+        ("type", string "response.function_call_arguments.delta");
+        ("delta", string delta);
+      ]
+      |> add_opt "item_id" string item_id
+      |> add_opt "output_index" int output_index
+      |> List.rev |> fun fields -> Chatoyant_runtime.Json.Object fields
+  | Response_function_call_arguments_done { item_id; output_index; arguments } ->
+      [
+        ("type", string "response.function_call_arguments.done");
+        ("arguments", string arguments);
+      ]
+      |> add_opt "item_id" string item_id
+      |> add_opt "output_index" int output_index
+      |> List.rev |> fun fields -> Chatoyant_runtime.Json.Object fields
+  | Response_refusal_delta delta ->
+      Chatoyant_runtime.Json.Object
+        [ ("type", string "response.refusal.delta"); ("delta", string delta) ]
+  | Response_error error ->
+      Option.value error.error_raw ~default:Chatoyant_runtime.Json.Null
+  | Response_raw_event { raw; _ } -> raw
+
+let response_of_stream_chunks chunks =
+  match responses_stream_events_of_chunks chunks with
+  | Error _ as err -> err
+  | Ok events ->
+      let text, reasoning, usage, raw_events =
+        List.fold_left
+          (fun (text, reasoning, usage, raw_events) event ->
+            match event with
+            | Response_output_text_delta { delta; _ } ->
+                (text ^ delta, reasoning, usage, raw_event_of_response_event event :: raw_events)
+            | Response_output_text_done { text = done_text; _ } ->
+                (done_text, reasoning, usage, raw_event_of_response_event event :: raw_events)
+            | Response_reasoning_summary_text_delta { delta; _ } ->
+                (text, reasoning ^ delta, usage, raw_event_of_response_event event :: raw_events)
+            | Response_completed response ->
+                ( (if response.responses_output_text <> "" then response.responses_output_text else text),
+                  (if response.responses_reasoning_text <> "" then response.responses_reasoning_text
+                   else reasoning),
+                  response.responses_usage,
+                  response.responses_raw :: raw_events )
+            | Response_created response
+            | Response_in_progress response
+            | Response_failed response
+            | Response_incomplete response ->
+                (text, reasoning, usage, response.responses_raw :: raw_events)
+            | Response_raw_event { raw; _ } -> (text, reasoning, usage, raw :: raw_events)
+            | Response_function_call_arguments_delta _
+            | Response_function_call_arguments_done _
+            | Response_refusal_delta _
+            | Response_error _ ->
+                (text, reasoning, usage, raw_event_of_response_event event :: raw_events))
+          ("", "", Chatoyant_tokens.Cost.empty_usage, [])
+          events
+      in
+      Ok
+        {
+          responses_id = None;
+          responses_model = None;
+          responses_status = Completed;
+          responses_output_text = text;
+          responses_reasoning_text = reasoning;
+          responses_usage = usage;
+          responses_raw = Chatoyant_runtime.Json.Array (List.rev raw_events);
+        }
 
 let delete_response_of_json json =
   {
@@ -1082,8 +1621,33 @@ module Make_client (Http : Chatoyant_runtime.Effect.HTTP) = struct
               })
     | Ok response -> Ok response.body
 
+  let raw_audio_response request =
+    match Http.send request with
+    | Error error -> Error (map_http_error error)
+    | Ok response when response.status < 200 || response.status >= 300 ->
+        (match Chatoyant_runtime.Json.parse response.body with
+        | Ok json -> Error (api_error_of_json json)
+        | Error _ ->
+            Error
+              {
+                error_type = Some "http_error";
+                error_message = "xAI HTTP " ^ string_of_int response.status ^ ": " ^ response.body;
+                error_raw = None;
+              })
+    | Ok response ->
+        let content_type =
+          response.headers
+          |> List.find_opt (fun (name, _) -> String.lowercase_ascii name = "content-type")
+          |> Option.map snd
+        in
+        Ok { audio_body = response.body; audio_content_type = content_type }
+
   let multipart_part name ?filename ?content_type body =
     { Http.name; filename; content_type; body }
+
+  let form_part_to_multipart part =
+    multipart_part part.form_name ?filename:part.form_filename ?content_type:part.form_content_type
+      part.form_body
 
   let file_upload_parts (upload : file_upload) =
     let fields =
@@ -1105,6 +1669,10 @@ module Make_client (Http : Chatoyant_runtime.Effect.HTTP) = struct
   let create_chat config request_body =
     send chat_response_of_json (request config "/chat/completions" (Json (chat_request_json request_body)))
 
+  let retrieve_deferred_chat config ~request_id =
+    send chat_response_of_json
+      (request ~method_:"GET" config ("/chat/deferred-completion/" ^ request_id) Empty)
+
   let create_response config request_body =
     send responses_response_of_json (request config "/responses" (Json (responses_request_json request_body)))
 
@@ -1112,11 +1680,50 @@ module Make_client (Http : Chatoyant_runtime.Effect.HTTP) = struct
     send responses_response_of_json
       (request config "/responses/compact" (Json (responses_request_json request_body)))
 
+  let retrieve_deferred_response config ~request_id =
+    send responses_response_of_json
+      (request ~method_:"GET" config ("/responses/deferred-completion/" ^ request_id) Empty)
+
   let retrieve_response config ~response_id =
     send responses_response_of_json (request ~method_:"GET" config ("/responses/" ^ response_id) Empty)
 
   let delete_response config ~response_id =
     send delete_response_of_json (request ~method_:"DELETE" config ("/responses/" ^ response_id) Empty)
+
+  let synthesize_speech config request_body =
+    raw_audio_response (request config "/tts" (Json (tts_request_json request_body)))
+
+  let list_tts_voices config =
+    send voice_list_of_json (request ~method_:"GET" config "/tts/voices" Empty)
+
+  let transcribe_speech config request_body =
+    let parts = List.map form_part_to_multipart (stt_request_parts request_body) in
+    send stt_response_of_json (request config "/stt" (Multipart parts))
+
+  let create_custom_voice config request_body =
+    let parts = List.map form_part_to_multipart (custom_voice_request_parts request_body) in
+    send voice_of_json (request config "/custom-voices" (Multipart parts))
+
+  let list_custom_voices ?limit ?pagination_token config =
+    let path =
+      "/custom-voices"
+      ^ query [ ("limit", query_int limit); ("pagination_token", pagination_token) ]
+    in
+    send voice_list_of_json (request ~method_:"GET" config path Empty)
+
+  let retrieve_custom_voice config ~voice_id =
+    send voice_of_json (request ~method_:"GET" config ("/custom-voices/" ^ voice_id) Empty)
+
+  let update_custom_voice config ~voice_id request_body =
+    send voice_of_json
+      (request ~method_:"PATCH" config ("/custom-voices/" ^ voice_id)
+         (Json (custom_voice_update_json request_body)))
+
+  let download_custom_voice_audio config ~voice_id =
+    raw_audio_response (request ~method_:"GET" config ("/custom-voices/" ^ voice_id ^ "/audio") Empty)
+
+  let delete_custom_voice config ~voice_id =
+    send voice_delete_of_json (request ~method_:"DELETE" config ("/custom-voices/" ^ voice_id) Empty)
 
   let list_models config =
     send model_list_of_json (request ~method_:"GET" config "/models" Empty)
@@ -1291,6 +1898,41 @@ let openai_function_tool_of_provider_tool (tool : Provider.tool_definition) =
     tool_strict = tool.tool_strict;
   }
 
+let provider_extra_fields (options : Provider.options) =
+  let fields =
+    match options.extra with
+    | Some (Chatoyant_runtime.Json.Object fields) -> fields
+    | _ -> []
+  in
+  let add name value fields =
+    if List.mem_assoc name fields then fields else (name, value) :: fields
+  in
+  fields
+  |> (fun fields ->
+       match options.frequency_penalty with
+       | None -> fields
+       | Some value -> add "frequency_penalty" (float value) fields)
+  |> (fun fields ->
+       match options.presence_penalty with
+       | None -> fields
+       | Some value -> add "presence_penalty" (float value) fields)
+  |> (fun fields ->
+       match options.reasoning_effort with
+       | None -> fields
+       | Some value -> add "reasoning_effort" (string value) fields)
+  |> (fun fields ->
+       match options.web_search with
+       | Some true ->
+           add "search_parameters"
+             (Chatoyant_runtime.Json.Object [ ("mode", string "auto") ])
+             fields
+       | Some false -> add "search_parameters" (Chatoyant_runtime.Json.Object []) fields
+       | None -> fields)
+  |> fun fields ->
+  match options.thinking_budget with
+  | None -> fields
+  | Some value -> add "thinking_budget" (int value) fields
+
 module Make_provider
     (Http : Chatoyant_runtime.Effect.HTTP)
     (Config : sig
@@ -1311,8 +1953,8 @@ struct
         chat_stream = false;
         chat_temperature = options.temperature;
         chat_max_tokens = options.max_tokens;
-        chat_top_p = None;
-        chat_stop = [];
+        chat_top_p = options.top_p;
+        chat_stop = options.stop;
         chat_user = None;
         chat_seed = None;
         chat_logprobs = None;
@@ -1322,10 +1964,7 @@ struct
         chat_tools = List.map (fun tool -> Function (openai_function_tool_of_provider_tool tool)) options.tools;
         chat_tool_choice = Option.map (fun name -> Tool name) options.tool_choice;
         chat_parallel_tool_calls = None;
-        chat_extra =
-          (match options.extra with
-          | Some (Chatoyant_runtime.Json.Object fields) -> fields
-          | _ -> []);
+        chat_extra = provider_extra_fields options;
       }
     in
     let config =

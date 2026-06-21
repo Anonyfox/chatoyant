@@ -167,12 +167,19 @@ end
 
 module Anthropic_client = Chatoyant.Provider.Anthropic.Make_client (Fake_anthropic_http)
 
-let () =
+  let () =
   assert_equal_int 4 (Chatoyant.Tokens.Token_estimate.estimate "Hello, world!");
+  let prompt_estimate = Chatoyant.Tokens.Token_estimate.estimate_prompt ~response:"Hi" "Hello" in
+  assert_equal_int (prompt_estimate.input + prompt_estimate.output) prompt_estimate.total;
   assert_equal_int
     128_000
     (Option.get (Chatoyant.Tokens.Context_window.get "gpt-4o"));
+  assert_equal_int 131_072 (Option.get (Chatoyant.Tokens.Context_window.get "grok-3"));
   if not (Chatoyant.Tokens.Pricing.has "gpt-5.4-mini") then failwith "missing pricing";
+  if Chatoyant.Tokens.Pricing.has "gpt-99" then failwith "fallback pricing should not be explicit";
+  (match Chatoyant.Tokens.Pricing.get "gpt-99" with
+  | Some pricing when pricing.output_per_million > 0.0 -> ()
+  | _ -> failwith "expected conservative pricing fallback");
   let usage =
     {
       Chatoyant.Tokens.Cost.empty_usage with
@@ -186,6 +193,34 @@ let () =
       usage
   in
   if cost.total <= 0.0 then failwith "expected positive cost";
+  let custom_pricing =
+    Chatoyant.Tokens.Cost.pricing ~input_per_million:10.0 ~output_per_million:20.0
+      ~cache_write_per_million:12.5 ()
+  in
+  let custom_cost =
+    Chatoyant.Tokens.Cost.calculate ~pricing:(Some custom_pricing)
+      {
+        Chatoyant.Tokens.Cost.empty_usage with
+        input_tokens = 1_000_000;
+        output_tokens = 0;
+        cache_write_tokens = 250_000;
+      }
+  in
+  if custom_cost.cache_write <= 0.0 then failwith "expected cache-write cost";
+  let batch_cost =
+    Chatoyant.Tokens.Cost.calculate_batch ~pricing:(Chatoyant.Tokens.Pricing.get "gpt-4o")
+      [
+        { Chatoyant.Tokens.Cost.empty_usage with input_tokens = 100; output_tokens = 50 };
+        { Chatoyant.Tokens.Cost.empty_usage with input_tokens = 200; output_tokens = 100 };
+      ]
+  in
+  if batch_cost.total <= 0.0 then failwith "expected batch cost";
+  let image_cost =
+    Chatoyant.Tokens.Cost.calculate_image
+      ~pricing:(Chatoyant.Tokens.Pricing.get "grok-imagine-image")
+      ~count:4
+  in
+  if abs_float (image_cost -. 0.08) > 0.000001 then failwith "bad image cost";
   let messages =
     [
       { Chatoyant.Tokens.Message_budget.role = "system"; content = Some "You are helpful"; name = None };
@@ -193,8 +228,39 @@ let () =
       { role = "assistant"; content = Some "Hi"; name = None };
     ]
   in
+  assert_equal_int 0 (Chatoyant.Tokens.Message_budget.estimate_chat []);
+  let overhead = Chatoyant.Tokens.Message_budget.get_overhead () in
+  assert_equal_int 4 overhead.per_message;
+  assert_equal_int 3 overhead.conversation;
+  assert_equal_int
+    2400
+    (Chatoyant.Tokens.Message_budget.available_tokens ~context_window:4000
+       ~system_prompt_tokens:100 ~reserve_for_response:500 ~history_tokens:1000 ());
   if not (Chatoyant.Tokens.Message_budget.fits ~max_tokens:100 messages) then
     failwith "messages should fit";
+  let chunks =
+    Chatoyant.Tokens.Chunking.split_text ~max_tokens:10 ("Word " ^ String.make 200 'a')
+  in
+  if chunks = [] then failwith "expected chunks";
+  let pages = Chatoyant.Tokens.Chunking.paginate_messages ~tokens_per_page:20 messages in
+  if pages = [] then failwith "expected message pages";
+  let truncated = Chatoyant.Tokens.Chunking.truncate_content ~max_tokens:1 "Hello world" in
+  assert_contains "..." truncated;
+  let merged_options =
+    Chatoyant.Core.Options.merge
+      { Chatoyant.Core.Options.default with extra = Some (Chatoyant.Runtime.Json.Object [ ("a", Chatoyant.Runtime.Json.Float 1.0) ]) }
+      {
+        Chatoyant.Core.Options.default with
+        top_p = Some 0.9;
+        stop = [ "END" ];
+        extra = Some (Chatoyant.Runtime.Json.Object [ ("b", Chatoyant.Runtime.Json.Float 2.0) ]);
+      }
+  in
+  if merged_options.top_p <> Some 0.9 || merged_options.stop <> [ "END" ] then
+    failwith "option merge lost scalar fields";
+  let merged_extra = Chatoyant.Runtime.Json.to_string (Option.get merged_options.extra) in
+  assert_contains "\"a\":1" merged_extra;
+  assert_contains "\"b\":2" merged_extra;
   let sse_state, events =
     Chatoyant.Runtime.Sse.feed Chatoyant.Runtime.Sse.empty "data: {\"a\":"
   in
@@ -679,6 +745,7 @@ let () =
       {
         model = "claude-sonnet-4-6";
         system = Some "You are helpful";
+        system_blocks = [];
         messages =
           [
             {
@@ -699,10 +766,12 @@ let () =
               tool_name = "lookup";
               tool_description = Some "Lookup data";
               input_schema = tool_schema;
+              tool_cache_control = None;
             };
           ];
         tool_choice = Some (Chatoyant.Provider.Anthropic.Tool "lookup");
         thinking = Some (Enabled { budget_tokens = 2048 });
+        cache_control = None;
         extra = [];
       }
     |> Chatoyant.Runtime.Json.to_string
@@ -825,6 +894,7 @@ let () =
     {
       Chatoyant.Provider.Anthropic.model = "claude-sonnet-4-6";
       system = None;
+      system_blocks = [];
       messages =
         [
           {
@@ -842,6 +912,7 @@ let () =
       tools = [];
       tool_choice = None;
       thinking = None;
+      cache_control = None;
       extra = [];
     }
   in
@@ -889,6 +960,13 @@ let () =
          Chatoyant.Provider.Provider.model = "claude-sonnet-4-6";
          temperature = None;
          max_tokens = Some 128;
+         top_p = None;
+         stop = [];
+         frequency_penalty = None;
+         presence_penalty = None;
+         web_search = None;
+         thinking_budget = None;
+         reasoning_effort = None;
          timeout_ms = Some 1_000;
          tools = [];
          tool_choice = None;

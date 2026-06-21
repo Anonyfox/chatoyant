@@ -93,6 +93,7 @@ let request_fixture () =
     {
       model = "claude-sonnet-4-6";
       system = Some "You are helpful";
+      system_blocks = [];
       messages = [ { message_role = User; message_content = [ Text "Hello" ] } ];
       max_tokens = 4096;
       stream = true;
@@ -107,10 +108,12 @@ let request_fixture () =
             tool_name = "lookup";
             tool_description = Some "Lookup data";
             input_schema = tool_schema;
+            tool_cache_control = None;
           };
         ];
       tool_choice = Some (Tool "lookup");
       thinking = Some (Enabled { budget_tokens = 2048 });
+      cache_control = None;
       extra = [];
     }
 
@@ -126,6 +129,141 @@ let test_request_json () =
   assert_contains "\"thinking\"" body;
   assert_contains "\"metadata\"" body;
   assert_contains "\"stop_sequences\"" body
+
+let test_cache_control_json () =
+  let cache_5m = Chatoyant.Provider.Anthropic.ephemeral_cache_control () in
+  let cache_1h = Chatoyant.Provider.Anthropic.ephemeral_cache_control ~ttl:Ttl_1h () in
+  let request =
+    Chatoyant.Provider.Anthropic.
+      {
+        model = "claude-opus-4-8";
+        system = Some "Stable system instruction";
+        system_blocks = [ Cached_block { block = Text "Reusable policy"; cache_control = cache_5m } ];
+        messages =
+          [
+            {
+              message_role = User;
+              message_content =
+                [ Cached_block { block = Text "Large reusable context"; cache_control = cache_1h } ];
+            };
+          ];
+        max_tokens = 1024;
+        stream = false;
+        temperature = None;
+        top_p = None;
+        top_k = None;
+        stop_sequences = [];
+        metadata_user_id = None;
+        tools =
+          [
+            {
+              tool_name = "lookup";
+              tool_description = Some "Lookup data";
+              input_schema = tool_schema;
+              tool_cache_control = Some cache_5m;
+            };
+          ];
+        tool_choice = None;
+        thinking = None;
+        cache_control = Some cache_1h;
+        extra = [];
+      }
+  in
+  let body = Chatoyant.Provider.Anthropic.request_json request |> Chatoyant.Runtime.Json.to_string in
+  assert_contains "\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}" body;
+  assert_contains "\"system\":[{\"type\":\"text\",\"text\":\"Stable system instruction\"}" body;
+  assert_contains "\"cache_control\":{\"type\":\"ephemeral\"},\"type\":\"text\",\"text\":\"Reusable policy\"" body;
+  assert_contains "\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"},\"type\":\"text\",\"text\":\"Large reusable context\"" body;
+  assert_contains "\"name\":\"lookup\"" body;
+  let decoded =
+    Chatoyant.Provider.Anthropic.content_block_of_json
+      (Chatoyant.Runtime.Json.Object
+         [
+           ("type", Chatoyant.Runtime.Json.String "text");
+           ("text", Chatoyant.Runtime.Json.String "cached");
+           ( "cache_control",
+             Chatoyant.Runtime.Json.Object
+               [
+                 ("type", Chatoyant.Runtime.Json.String "ephemeral");
+                 ("ttl", Chatoyant.Runtime.Json.String "1h");
+               ] );
+         ])
+  in
+  match decoded with
+  | Chatoyant.Provider.Anthropic.Cached_block
+      { block = Text "cached"; cache_control = Ephemeral_cache (Some Ttl_1h) } ->
+      ()
+  | _ -> failwith "expected cached Anthropic content block"
+
+let test_server_tools_and_admin_helpers () =
+  let cache_control = Chatoyant.Provider.Anthropic.ephemeral_cache_control () in
+  let raw_tools =
+    [
+      Chatoyant.Provider.Anthropic.web_search_tool_json ~cache_control ~max_uses:2
+        ~allowed_domains:[ "example.com" ] ();
+      Chatoyant.Provider.Anthropic.code_execution_tool_json ~cache_control ();
+    ]
+  in
+  let body =
+    Chatoyant.Provider.Anthropic.request_json_with_raw_tools (request_fixture ()) raw_tools
+    |> Chatoyant.Runtime.Json.to_string
+  in
+  assert_contains "\"web_search_20260209\"" body;
+  assert_contains "\"code_execution_20250825\"" body;
+  assert_contains "\"allowed_domains\":[\"example.com\"]" body;
+  assert_contains "\"cache_control\":{\"type\":\"ephemeral\"}" body;
+  let response =
+    Chatoyant.Provider.Anthropic.response_of_json
+      (Chatoyant.Runtime.Json.Object
+         [
+           ("id", Chatoyant.Runtime.Json.String "msg_server_tools");
+           ("role", Chatoyant.Runtime.Json.String "assistant");
+           ("model", Chatoyant.Runtime.Json.String "claude-sonnet-4-6");
+           ( "content",
+             Chatoyant.Runtime.Json.Array
+               [
+                 Chatoyant.Runtime.Json.Object
+                   [
+                     ("type", Chatoyant.Runtime.Json.String "server_tool_use");
+                     ("id", Chatoyant.Runtime.Json.String "srvu_1");
+                     ("name", Chatoyant.Runtime.Json.String "web_search");
+                     ("input", Chatoyant.Runtime.Json.Object [ ("query", Chatoyant.Runtime.Json.String "ocaml") ]);
+                   ];
+                 Chatoyant.Runtime.Json.Object
+                   [
+                     ("type", Chatoyant.Runtime.Json.String "web_search_tool_result");
+                     ("tool_use_id", Chatoyant.Runtime.Json.String "srvu_1");
+                     ( "content",
+                       Chatoyant.Runtime.Json.Array
+                         [
+                           Chatoyant.Runtime.Json.Object
+                             [ ("title", Chatoyant.Runtime.Json.String "Result") ];
+                         ] );
+                   ];
+                 Chatoyant.Runtime.Json.Object
+                   [
+                     ("type", Chatoyant.Runtime.Json.String "code_execution_tool_result");
+                     ("tool_use_id", Chatoyant.Runtime.Json.String "srvu_2");
+                     ("content", Chatoyant.Runtime.Json.Object [ ("stdout", Chatoyant.Runtime.Json.String "4") ]);
+                   ];
+                 Chatoyant.Runtime.Json.Object
+                   [
+                     ("type", Chatoyant.Runtime.Json.String "container_upload");
+                     ("file_id", Chatoyant.Runtime.Json.String "file_123");
+                   ];
+               ] );
+           ("usage", Chatoyant.Runtime.Json.Object []);
+         ])
+  in
+  match response.response_content with
+  | [
+      Chatoyant.Provider.Anthropic.Server_tool_use { name = "web_search"; _ };
+      Chatoyant.Provider.Anthropic.Web_search_tool_result _;
+      Chatoyant.Provider.Anthropic.Code_execution_tool_result _;
+      Chatoyant.Provider.Anthropic.Container_upload { file_id = Some "file_123"; _ };
+    ] ->
+      ()
+  | _ -> failwith "unexpected Anthropic server-tool content block decode"
 
 let test_response_decode () =
   let json =
@@ -408,6 +546,33 @@ let test_client_files () =
   | Error error -> failwith error.error_message
   | Ok body -> assert_equal_string "downloaded text" body
 
+let test_client_admin_reports () =
+  let admin =
+    Client.
+      {
+        admin_api_key = "admin-key";
+        admin_base_url = default_base_url;
+        admin_timeout_ms = Some 1_000;
+      }
+  in
+  Fake_http.next_response_status := 200;
+  Fake_http.next_response_body := "{\"data\":[{\"input_tokens\":10,\"output_tokens\":2}]}";
+  (match
+     Client.get_usage_report_messages admin ~starting_at:"2026-06-01T00:00:00Z"
+       ~ending_at:"2026-06-02T00:00:00Z" ~bucket_width:"1d" ~group_by:[ "model" ] ()
+   with
+  | Error error -> failwith error.error_message
+  | Ok json ->
+      assert_contains "\"input_tokens\"" (Chatoyant.Runtime.Json.to_string json));
+  match !(Fake_http.last_request) with
+  | Some request ->
+      assert_equal_string "GET" request.method_;
+      assert_contains "/organizations/usage_report/messages" request.url;
+      assert_contains "group_by%5B%5D=model" request.url;
+      if not (List.mem ("x-api-key", "admin-key") request.headers) then
+        failwith "missing Anthropic admin API key"
+  | None -> failwith "expected Anthropic admin report request"
+
 let test_provider_adapter () =
   Fake_http.next_response_status := 200;
   Fake_http.next_response_body :=
@@ -436,6 +601,13 @@ let test_provider_adapter () =
         Chatoyant.Provider.Provider.model = "claude-sonnet-4-6";
         temperature = None;
         max_tokens = Some 128;
+        top_p = None;
+        stop = [];
+        frequency_penalty = None;
+        presence_penalty = None;
+        web_search = None;
+        thinking_budget = None;
+        reasoning_effort = None;
         timeout_ms = Some 1_000;
         tools = [];
         tool_choice = None;
@@ -447,6 +619,8 @@ let test_provider_adapter () =
 
 let () =
   test_request_json ();
+  test_cache_control_json ();
+  test_server_tools_and_admin_helpers ();
   test_response_decode ();
   test_models_and_batches_decode ();
   test_files_decode ();
@@ -455,4 +629,5 @@ let () =
   test_client_error ();
   test_client_models_and_batches ();
   test_client_files ();
+  test_client_admin_reports ();
   test_provider_adapter ()

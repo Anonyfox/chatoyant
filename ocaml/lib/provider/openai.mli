@@ -113,6 +113,36 @@ type responses_request = {
 (** Primary Responses API request body. Tools are raw JSON because OpenAI has
     first-party hosted tools as well as function tools. *)
 
+type api_object = {
+  api_object_id : string option;
+  api_object_type : string option;
+  api_object_raw : Chatoyant_runtime.Json.t;
+}
+(** Generic typed envelope for fast-moving OpenAI resources such as Evals,
+    Containers, and Administration objects. Common identity fields are decoded;
+    provider-specific fields stay losslessly available in [api_object_raw]. *)
+
+type api_list = {
+  api_list_data : api_object list;
+  api_list_first_id : string option;
+  api_list_last_id : string option;
+  api_list_has_more : bool;
+  api_list_total_count : int option;
+  api_list_raw : Chatoyant_runtime.Json.t;
+}
+
+type api_delete = {
+  api_delete_id : string option;
+  api_delete_deleted : bool;
+  api_delete_raw : Chatoyant_runtime.Json.t;
+}
+
+type response_input_token_count = {
+  response_input_tokens : int;
+  response_input_token_count_raw : Chatoyant_runtime.Json.t;
+}
+(** Result from [/responses/input_tokens]. *)
+
 type response_status =
   | Completed
   | In_progress
@@ -144,6 +174,77 @@ type api_error = {
   error_param : string option;
   error_raw : Chatoyant_runtime.Json.t option;
 }
+
+type responses_stream_event =
+  | Response_created of responses_response
+  | Response_in_progress of responses_response
+  | Response_completed of responses_response
+  | Response_failed of responses_response
+  | Response_incomplete of responses_response
+  | Response_output_text_delta of {
+      item_id : string option;
+      output_index : int option;
+      content_index : int option;
+      delta : string;
+    }
+  | Response_output_text_done of {
+      item_id : string option;
+      output_index : int option;
+      content_index : int option;
+      text : string;
+    }
+  | Response_reasoning_summary_text_delta of {
+      item_id : string option;
+      output_index : int option;
+      summary_index : int option;
+      delta : string;
+    }
+  | Response_function_call_arguments_delta of {
+      item_id : string option;
+      output_index : int option;
+      delta : string;
+    }
+  | Response_function_call_arguments_done of {
+      item_id : string option;
+      output_index : int option;
+      arguments : string;
+    }
+  | Response_refusal_delta of string
+  | Response_error of api_error
+  | Response_raw_event of {
+      event_type : string option;
+      raw : Chatoyant_runtime.Json.t;
+    }
+(** Closed coverage for the stable Responses SSE events that carry data the SDK
+    can safely normalize, plus [Response_raw_event] for newly shipped event
+    names. *)
+
+type transcription_stream_event =
+  | Transcription_text_delta of {
+      transcript_delta : string;
+      transcript_logprobs : Chatoyant_runtime.Json.t option;
+      transcript_raw : Chatoyant_runtime.Json.t;
+    }
+  | Transcription_text_done of {
+      transcript_text : string;
+      transcript_logprobs : Chatoyant_runtime.Json.t option;
+      transcript_raw : Chatoyant_runtime.Json.t;
+    }
+  | Transcription_text_segment of {
+      transcript_segment_id : string option;
+      transcript_segment_start : float option;
+      transcript_segment_end : float option;
+      transcript_segment_text : string option;
+      transcript_segment_speaker : string option;
+      transcript_raw : Chatoyant_runtime.Json.t;
+    }
+  | Transcription_error of api_error
+  | Transcription_raw_event of {
+      transcription_event_type : string option;
+      transcription_raw : Chatoyant_runtime.Json.t;
+    }
+(** Streaming transcript events emitted by [/audio/transcriptions] when
+    [stream=true], with raw fallback for newly added event variants. *)
 
 type image_response_format =
   | Url
@@ -609,8 +710,19 @@ val chat_response_of_json : Chatoyant_runtime.Json.t -> chat_response
 val generation_of_chat_response : chat_response -> Provider.generation
 val responses_response_of_json : Chatoyant_runtime.Json.t -> responses_response
 val generation_of_responses_response : responses_response -> Provider.generation
+val responses_stream_event_of_json : Chatoyant_runtime.Json.t -> responses_stream_event
+val responses_stream_events_of_chunks : string list -> (responses_stream_event list, string) result
 val response_of_stream_chunks : string list -> (responses_response, string) result
 val chat_response_of_stream_chunks : string list -> (chat_response, string) result
+val api_object_of_json : Chatoyant_runtime.Json.t -> api_object
+val api_list_of_json : Chatoyant_runtime.Json.t -> api_list
+val api_delete_of_json : Chatoyant_runtime.Json.t -> api_delete
+val response_input_token_count_of_json :
+  Chatoyant_runtime.Json.t -> response_input_token_count
+val transcription_stream_event_of_json :
+  Chatoyant_runtime.Json.t -> transcription_stream_event
+val transcription_stream_events_of_chunks :
+  string list -> (transcription_stream_event list, string) result
 val delete_response_of_json : Chatoyant_runtime.Json.t -> delete_response
 val api_error_of_json : Chatoyant_runtime.Json.t -> api_error
 val image_response_of_json : Chatoyant_runtime.Json.t -> image_response
@@ -646,12 +758,36 @@ module Make_client (Http : Chatoyant_runtime.Effect.HTTP) : sig
     timeout_ms : int option;
   }
 
+  type admin_config = {
+    admin_api_key : string;
+    admin_base_url : string;
+    admin_timeout_ms : int option;
+  }
+  (** Separate config for Administration endpoints. OpenAI admin API keys are
+      intentionally not interchangeable with normal inference keys. *)
+
   val default_base_url : string
   val create_response : config -> responses_request -> (responses_response, api_error) result
   val retrieve_response : config -> response_id:string -> (responses_response, api_error) result
   val delete_response : config -> response_id:string -> (delete_response, api_error) result
+  val list_response_input_items : config -> response_id:string -> (api_list, api_error) result
+  val count_response_input_tokens :
+    config -> responses_request -> (response_input_token_count, api_error) result
   val cancel_response : config -> response_id:string -> (responses_response, api_error) result
   val compact_response : config -> responses_request -> (responses_response, api_error) result
+  val create_conversation : config -> Chatoyant_runtime.Json.t -> (api_object, api_error) result
+  val retrieve_conversation : config -> conversation_id:string -> (api_object, api_error) result
+  val update_conversation :
+    config -> conversation_id:string -> Chatoyant_runtime.Json.t -> (api_object, api_error) result
+  val delete_conversation : config -> conversation_id:string -> (api_delete, api_error) result
+  val create_conversation_items :
+    config -> conversation_id:string -> Chatoyant_runtime.Json.t -> (api_list, api_error) result
+  val retrieve_conversation_item :
+    config -> conversation_id:string -> item_id:string -> (api_object, api_error) result
+  val delete_conversation_item :
+    config -> conversation_id:string -> item_id:string -> (api_object, api_error) result
+  val list_conversation_items :
+    config -> conversation_id:string -> (api_list, api_error) result
   val create_chat : config -> chat_request -> (chat_response, api_error) result
   val generate_image : config -> image_request -> (image_response, api_error) result
   val edit_image : config -> image_edit_request -> (image_response, api_error) result
@@ -728,6 +864,49 @@ module Make_client (Http : Chatoyant_runtime.Effect.HTTP) : sig
     config -> job_id:string -> (fine_tuning_checkpoint_list, api_error) result
   val list_models : config -> (model_list, api_error) result
   val retrieve_model : config -> model_id:string -> (model, api_error) result
+  val create_eval : config -> Chatoyant_runtime.Json.t -> (api_object, api_error) result
+  val retrieve_eval : config -> eval_id:string -> (api_object, api_error) result
+  val update_eval :
+    config -> eval_id:string -> Chatoyant_runtime.Json.t -> (api_object, api_error) result
+  val list_evals : config -> (api_list, api_error) result
+  val delete_eval : config -> eval_id:string -> (api_delete, api_error) result
+  val create_eval_run :
+    config -> eval_id:string -> Chatoyant_runtime.Json.t -> (api_object, api_error) result
+  val retrieve_eval_run :
+    config -> eval_id:string -> run_id:string -> (api_object, api_error) result
+  val list_eval_runs : config -> eval_id:string -> (api_list, api_error) result
+  val cancel_eval_run :
+    config -> eval_id:string -> run_id:string -> (api_object, api_error) result
+  val delete_eval_run :
+    config -> eval_id:string -> run_id:string -> (api_delete, api_error) result
+  val list_eval_run_output_items :
+    config -> eval_id:string -> run_id:string -> (api_list, api_error) result
+  val create_container : config -> Chatoyant_runtime.Json.t -> (api_object, api_error) result
+  val retrieve_container : config -> container_id:string -> (api_object, api_error) result
+  val list_containers : config -> (api_list, api_error) result
+  val delete_container : config -> container_id:string -> (api_delete, api_error) result
+  val create_container_file :
+    config -> container_id:string -> Chatoyant_runtime.Json.t -> (api_object, api_error) result
+  val list_container_files : config -> container_id:string -> (api_list, api_error) result
+  val retrieve_container_file :
+    config -> container_id:string -> file_id:string -> (api_object, api_error) result
+  val delete_container_file :
+    config -> container_id:string -> file_id:string -> (api_delete, api_error) result
+  val download_container_file :
+    config -> container_id:string -> file_id:string -> (string, api_error) result
+  val admin_get : admin_config -> path:string -> (api_object, api_error) result
+  val admin_list : admin_config -> path:string -> (api_list, api_error) result
+  val admin_post :
+    admin_config -> path:string -> Chatoyant_runtime.Json.t -> (api_object, api_error) result
+  val admin_patch :
+    admin_config -> path:string -> Chatoyant_runtime.Json.t -> (api_object, api_error) result
+  val admin_delete : admin_config -> path:string -> (api_delete, api_error) result
+  val list_admin_api_keys : admin_config -> (api_list, api_error) result
+  val create_admin_api_key :
+    admin_config -> Chatoyant_runtime.Json.t -> (api_object, api_error) result
+  val retrieve_admin_api_key :
+    admin_config -> key_id:string -> (api_object, api_error) result
+  val delete_admin_api_key : admin_config -> key_id:string -> (api_delete, api_error) result
 end
 
 module Make_provider

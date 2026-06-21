@@ -52,13 +52,14 @@ The OCaml implementation should be organized around explicit layers:
 
 2. `Chatoyant_schema`
    Typed schema descriptors plus a standalone draft 2020-12 JSON Schema
-   subsystem for parsing, validation, JSON Pointer/reference resolution,
-   unevaluated tracking, provider projections, and Melange/Node validation.
-   It supports deterministic preloaded resource registries, `$dynamicRef`
-   dynamic-scope behavior, dialect vocabulary toggles, and the official
-   draft2020-12 test suite through generated JS. Legacy descriptor optionality
-   remains compatibility-oriented; the upcoming typed codec layer should make
-   absent-vs-null explicit.
+  subsystem for parsing, validation, JSON Pointer/reference resolution,
+  unevaluated tracking, provider projections, and Melange/Node validation.
+  It supports deterministic preloaded resource registries, `$dynamicRef`
+  dynamic-scope behavior, dialect vocabulary toggles, and the official
+  draft2020-12 test suite through generated JS. The typed `Schema.Codec`
+  layer carries schema, encode, decode, validation, and documentation together
+  for generated code and advanced OCaml users; legacy descriptor optionality
+  remains compatibility-oriented for JavaScript parity.
 
 3. `Chatoyant_tokens`
    Pure token estimation, pricing, context windows, chunking, and cost math.
@@ -105,10 +106,14 @@ The OCaml implementation should be organized around explicit layers:
 - Melange-generated ES modules for npm-facing JavaScript.
 - The npm package is a byproduct: build/test native OCaml first, then bundle the
   Melange public root with esbuild into `dist/index.js` and copy the matching
-  declaration file to `dist/index.d.ts`.
+  declaration file to `dist/index.d.ts`; CJS is emitted beside it for Node
+  compatibility.
 - `npm test` must exercise the bundled npm package with Node's native test
   runner and TypeScript checks, including production-derived usage patterns and
   the pinned official JSON Schema suite.
+- The package root in this directory is the simulated future package root:
+  `README.md`, `LICENSE`, opam metadata, npm metadata, docs, and publish dry-run
+  contents should be polished here without disturbing the old package root.
 - The generated JavaScript must preserve good developer experience:
   ergonomic imports, useful errors, no operational clutter, and no hidden
   runtime dependencies unless deliberately introduced.

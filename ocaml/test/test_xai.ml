@@ -165,7 +165,18 @@ let test_chat_request_json () =
   assert_contains "\"json_schema\"" body;
   assert_contains "\"parallel_tool_calls\":false" body;
   assert_contains "\"search_parameters\"" body;
-  assert_contains "\"tool_choice\"" body
+  assert_contains "\"tool_choice\"" body;
+  let prioritized =
+    let open Chatoyant.Provider.Xai in
+    let request = request_fixture () in
+    {
+      request with
+      chat_extra = [ service_tier_extra Priority_tier; background_extra true ];
+    }
+    |> chat_request_json |> Chatoyant.Runtime.Json.to_string
+  in
+  assert_contains "\"service_tier\":\"priority\"" prioritized;
+  assert_contains "\"background\":true" prioritized
 
 let test_chat_response_decode () =
   let json =
@@ -314,6 +325,40 @@ let test_responses_api () =
   assert_equal_float 0.1 (Option.get response.responses_usage.actual_cost_usd)
 
 let test_stream_chunks () =
+  (match
+     Chatoyant.Provider.Xai.responses_stream_events_of_chunks
+       [
+         "data: {\"type\":\"response.output_text.delta\",\"item_id\":\"item_1\",\"output_index\":0,\"content_index\":0,\"delta\":\"Hel\"}\n\n";
+         "data: {\"type\":\"response.function_call_arguments.done\",\"item_id\":\"item_2\",\"output_index\":1,\"arguments\":\"{\\\"q\\\":\\\"ocaml\\\"}\"}\n\n";
+         "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_123\",\"status\":\"completed\",\"output_text\":\"Hello\",\"usage\":{\"input_tokens\":2,\"output_tokens\":1,\"total_tokens\":3,\"cost_in_usd_ticks\":1000000000}}}\n\n";
+       ]
+   with
+  | Error message -> failwith message
+  | Ok
+      [
+        Chatoyant.Provider.Xai.Response_output_text_delta { delta = "Hel"; _ };
+        Chatoyant.Provider.Xai.Response_function_call_arguments_done { arguments; _ };
+        Chatoyant.Provider.Xai.Response_completed response;
+      ] ->
+      assert_contains "\"q\":\"ocaml\"" arguments;
+      assert_equal_string "Hello" response.responses_output_text;
+      assert_equal_float 0.1 (Option.get response.responses_usage.actual_cost_usd)
+  | Ok _ -> failwith "unexpected xAI response stream event sequence");
+  (match
+     Chatoyant.Provider.Xai.response_of_stream_chunks
+       [
+         "data: {\"type\":\"response.output_text.delta\",\"delta\":\"Hel\"}\n\n";
+         "data: {\"type\":\"response.reasoning_summary_text.delta\",\"delta\":\"Because\"}\n\n";
+         "data: {\"type\":\"response.output_text.delta\",\"delta\":\"lo\"}\n\n";
+         "data: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"output_text\":\"Hello\",\"usage\":{\"input_tokens\":2,\"output_tokens\":1,\"total_tokens\":3,\"cost_in_usd_ticks\":1000000000}}}\n\n";
+       ]
+   with
+  | Error message -> failwith message
+  | Ok response ->
+      assert_equal_string "Hello" response.responses_output_text;
+      assert_equal_string "Because" response.responses_reasoning_text;
+      assert_equal_int 3 response.responses_usage.total_tokens;
+      assert_equal_float 0.1 (Option.get response.responses_usage.actual_cost_usd));
   let response =
     Chatoyant.Provider.Xai.stream_response_of_chunks
       [
@@ -435,6 +480,118 @@ let test_image_and_video_response_decode () =
   assert_equal_string "https://example.com/video.mp4" (Option.get video_status.video_url);
   assert_equal_int 6 (Option.get video_status.video_duration)
 
+let test_voice_and_audio_requests () =
+  let tts_body =
+    Chatoyant.Provider.Xai.
+      {
+        tts_text = "Hello [laugh]";
+        tts_voice_id = Some "eve";
+        tts_language = "en";
+        tts_output_format =
+          Some
+            {
+              output_codec = Some "mp3";
+              output_sample_rate = Some 44100;
+              output_bit_rate = Some 192000;
+            };
+        tts_speed = Some 1.2;
+        tts_optimize_streaming_latency = Some 1;
+        tts_text_normalization = Some true;
+        tts_with_timestamps = Some false;
+        tts_extra = [];
+      }
+    |> Chatoyant.Provider.Xai.tts_request_json
+    |> Chatoyant.Runtime.Json.to_string
+  in
+  assert_contains "\"text\":\"Hello [laugh]\"" tts_body;
+  assert_contains "\"voice_id\":\"eve\"" tts_body;
+  assert_contains "\"codec\":\"mp3\"" tts_body;
+  let stt_parts =
+    Chatoyant.Provider.Xai.stt_request_parts
+      {
+        stt_file =
+          Some
+            {
+              upload_filename = "audio.mp3";
+              upload_content_type = Some "audio/mpeg";
+              upload_body = "MP3";
+            };
+        stt_url = None;
+        stt_audio_format = None;
+        stt_sample_rate = None;
+        stt_language = Some "en";
+        stt_format = Some true;
+        stt_multichannel = Some false;
+        stt_channels = None;
+        stt_diarize = Some true;
+        stt_keyterms = [ "Understand The Universe"; "Grok" ];
+        stt_filler_words = Some true;
+        stt_extra = [ ("trace_id", "trace_123") ];
+      }
+  in
+  assert_equal_string "file" (List.hd (List.rev stt_parts)).form_name;
+  assert_equal_string "audio.mp3" (Option.get (List.hd (List.rev stt_parts)).form_filename);
+  let custom_parts =
+    Chatoyant.Provider.Xai.custom_voice_request_parts
+      {
+        custom_voice_file =
+          {
+            upload_filename = "reference.wav";
+            upload_content_type = Some "audio/wav";
+            upload_body = "WAV";
+          };
+        custom_voice_name = Some "Friendly Narrator";
+        custom_voice_description = Some "Warm";
+        custom_voice_gender = Some "female";
+        custom_voice_accent = Some "American";
+        custom_voice_age = Some "young";
+        custom_voice_language = Some "en";
+        custom_voice_use_case = Some "narration";
+        custom_voice_tone = Some "warm";
+        custom_voice_extra = [];
+      }
+  in
+  assert_equal_string "file" (List.hd (List.rev custom_parts)).form_name;
+  let stt =
+    Chatoyant.Provider.Xai.stt_response_of_json
+      (Chatoyant.Runtime.Json.Object
+         [
+           ("text", Chatoyant.Runtime.Json.String "The balance is $100.");
+           ("language", Chatoyant.Runtime.Json.String "English");
+           ("duration", Chatoyant.Runtime.Json.Float 3.45);
+           ( "words",
+             Chatoyant.Runtime.Json.Array
+               [
+                 Chatoyant.Runtime.Json.Object
+                   [
+                     ("text", Chatoyant.Runtime.Json.String "The");
+                     ("start", Chatoyant.Runtime.Json.Float 0.24);
+                     ("end", Chatoyant.Runtime.Json.Float 0.48);
+                     ("speaker", Chatoyant.Runtime.Json.Float 1.0);
+                   ];
+               ] );
+         ])
+  in
+  assert_equal_string "The balance is $100." (Option.get stt.stt_text);
+  assert_equal_int 1 (List.length stt.stt_words);
+  assert_equal_int 1 (Option.get (List.hd stt.stt_words).word_speaker);
+  let voices =
+    Chatoyant.Provider.Xai.voice_list_of_json
+      (Chatoyant.Runtime.Json.Object
+         [
+           ( "voices",
+             Chatoyant.Runtime.Json.Array
+               [
+                 Chatoyant.Runtime.Json.Object
+                   [
+                     ("voice_id", Chatoyant.Runtime.Json.String "eve");
+                     ("name", Chatoyant.Runtime.Json.String "Eve");
+                   ];
+               ] );
+         ])
+  in
+  assert_equal_string "eve" (Option.get (List.hd voices.voices).voice_id)
+
 let test_batches () =
   let create_body =
     Chatoyant.Provider.Xai.batch_create_request_json { batch_name = "nightly evals" }
@@ -532,6 +689,13 @@ let test_client_and_provider () =
         Chatoyant.Provider.Provider.model = "grok-4-1-fast-non-reasoning";
         temperature = None;
         max_tokens = Some 64;
+        top_p = None;
+        stop = [];
+        frequency_penalty = None;
+        presence_penalty = None;
+        web_search = None;
+        thinking_budget = None;
+        reasoning_effort = None;
         timeout_ms = Some 1_000;
         tools = [];
         tool_choice = None;
@@ -599,6 +763,20 @@ let test_client_responses_and_models () =
   (match Client.retrieve_response config ~response_id:"resp_123" with
   | Error error -> failwith error.error_message
   | Ok response -> assert_equal_string "Hello from Responses" response.responses_output_text);
+  (match Client.retrieve_deferred_response config ~request_id:"req_123" with
+  | Error error -> failwith error.error_message
+  | Ok response -> assert_equal_string "Hello from Responses" response.responses_output_text);
+  (match !(Fake_http.last_request) with
+  | Some request -> assert_contains "/responses/deferred-completion/req_123" request.url
+  | None -> failwith "expected xAI deferred response request");
+  Fake_http.next_response_body :=
+    "{\"id\":\"chatcmpl_xai\",\"object\":\"chat.completion\",\"model\":\"grok-4-1-fast-non-reasoning\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"deferred chat\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":1,\"completion_tokens\":1,\"total_tokens\":2}}";
+  (match Client.retrieve_deferred_chat config ~request_id:"chat_req_123" with
+  | Error error -> failwith error.error_message
+  | Ok response -> assert_equal_string "deferred chat" response.response_content);
+  (match !(Fake_http.last_request) with
+  | Some request -> assert_contains "/chat/deferred-completion/chat_req_123" request.url
+  | None -> failwith "expected xAI deferred chat request");
   Fake_http.next_response_body := "{\"id\":\"resp_123\",\"object\":\"response\",\"deleted\":true}";
   (match Client.delete_response config ~response_id:"resp_123" with
   | Error error -> failwith error.error_message
@@ -612,6 +790,137 @@ let test_client_responses_and_models () =
       assert_equal_int 1 (List.length list.models);
       assert_equal_string "grok-4.20-0309-non-reasoning"
         (Option.get (List.hd list.models).model_id)
+
+let test_client_voice_endpoints () =
+  let config =
+    Client.{ api_key = "test-key"; base_url = default_base_url; timeout_ms = Some 1_000 }
+  in
+  Fake_http.next_response_status := 200;
+  Fake_http.next_response_body := "AUDIO";
+  (match
+     Client.synthesize_speech config
+       {
+         tts_text = "Hello";
+         tts_voice_id = Some "eve";
+         tts_language = "en";
+         tts_output_format = None;
+         tts_speed = None;
+         tts_optimize_streaming_latency = None;
+         tts_text_normalization = None;
+         tts_with_timestamps = None;
+         tts_extra = [];
+       }
+   with
+  | Error error -> failwith error.error_message
+  | Ok audio -> assert_equal_string "AUDIO" audio.audio_body);
+  (match !(Fake_http.last_request) with
+  | Some request ->
+      assert_contains "/tts" request.url;
+      (match request.body with
+      | Fake_http.Json body -> assert_contains "\"voice_id\":\"eve\"" (Chatoyant.Runtime.Json.to_string body)
+      | _ -> failwith "expected xAI TTS JSON request")
+  | None -> failwith "expected xAI TTS request");
+  Fake_http.next_response_body :=
+    "{\"voices\":[{\"voice_id\":\"eve\",\"name\":\"Eve\"},{\"voice_id\":\"ara\",\"name\":\"Ara\"}]}";
+  (match Client.list_tts_voices config with
+  | Error error -> failwith error.error_message
+  | Ok voices -> assert_equal_int 2 (List.length voices.voices));
+  Fake_http.next_response_body :=
+    "{\"text\":\"Hello world\",\"language\":\"English\",\"duration\":1.25,\"words\":[{\"text\":\"Hello\",\"start\":0.0,\"end\":0.5}]}";
+  (match
+     Client.transcribe_speech config
+       {
+         stt_file =
+           Some
+             {
+               upload_filename = "audio.mp3";
+               upload_content_type = Some "audio/mpeg";
+               upload_body = "MP3";
+             };
+         stt_url = None;
+         stt_audio_format = None;
+         stt_sample_rate = None;
+         stt_language = Some "en";
+         stt_format = Some true;
+         stt_multichannel = None;
+         stt_channels = None;
+         stt_diarize = None;
+         stt_keyterms = [ "Grok" ];
+         stt_filler_words = None;
+         stt_extra = [];
+       }
+   with
+  | Error error -> failwith error.error_message
+  | Ok stt -> assert_equal_string "Hello world" (Option.get stt.stt_text));
+  (match !(Fake_http.last_request) with
+  | Some request -> (
+      assert_contains "/stt" request.url;
+      match request.body with
+      | Fake_http.Multipart parts ->
+          assert_equal_string "file" (List.hd (List.rev parts)).name;
+          assert_equal_string "audio.mp3" (Option.get (List.hd (List.rev parts)).filename)
+      | _ -> failwith "expected xAI STT multipart request")
+  | None -> failwith "expected xAI STT request");
+  Fake_http.next_response_body :=
+    "{\"voice_id\":\"nlbqfwie\",\"name\":\"Friendly Narrator\",\"description\":\"Warm\",\"gender\":\"female\",\"language\":\"en\",\"tone\":\"warm\",\"created_at\":\"2026-04-26T18:56:34Z\"}";
+  (match
+     Client.create_custom_voice config
+       {
+         custom_voice_file =
+           {
+             upload_filename = "reference.wav";
+             upload_content_type = Some "audio/wav";
+             upload_body = "WAV";
+           };
+         custom_voice_name = Some "Friendly Narrator";
+         custom_voice_description = Some "Warm";
+         custom_voice_gender = Some "female";
+         custom_voice_accent = None;
+         custom_voice_age = None;
+         custom_voice_language = Some "en";
+         custom_voice_use_case = Some "narration";
+         custom_voice_tone = Some "warm";
+         custom_voice_extra = [];
+       }
+   with
+  | Error error -> failwith error.error_message
+  | Ok voice -> assert_equal_string "nlbqfwie" (Option.get voice.voice_id));
+  (match !(Fake_http.last_request) with
+  | Some request -> assert_contains "/custom-voices" request.url
+  | None -> failwith "expected xAI custom voice create request");
+  Fake_http.next_response_body :=
+    "{\"voices\":[{\"voice_id\":\"nlbqfwie\",\"name\":\"Friendly Narrator\"}],\"pagination_token\":\"next\"}";
+  (match Client.list_custom_voices ~limit:50 config with
+  | Error error -> failwith error.error_message
+  | Ok voices -> assert_equal_string "next" (Option.get voices.voices_pagination_token));
+  Fake_http.next_response_body :=
+    "{\"voice_id\":\"nlbqfwie\",\"name\":\"Friendly Narrator\",\"tone\":\"calm\"}";
+  (match
+     Client.update_custom_voice config ~voice_id:"nlbqfwie"
+       {
+         custom_voice_update_name = None;
+         custom_voice_update_description = Some "Updated";
+         custom_voice_update_gender = None;
+         custom_voice_update_accent = None;
+         custom_voice_update_age = None;
+         custom_voice_update_language = None;
+         custom_voice_update_use_case = None;
+         custom_voice_update_tone = Some "calm";
+         custom_voice_update_extra = [];
+       }
+   with
+  | Error error -> failwith error.error_message
+  | Ok voice -> assert_equal_string "calm" (Option.get voice.voice_tone));
+  Fake_http.next_response_body := "WAV";
+  (match Client.download_custom_voice_audio config ~voice_id:"nlbqfwie" with
+  | Error error -> failwith error.error_message
+  | Ok audio -> assert_equal_string "WAV" audio.audio_body);
+  Fake_http.next_response_body := "{\"voice_id\":\"nlbqfwie\",\"deleted\":true}";
+  match Client.delete_custom_voice config ~voice_id:"nlbqfwie" with
+  | Error error -> failwith error.error_message
+  | Ok deleted ->
+      assert_equal_string "nlbqfwie" (Option.get deleted.deleted_voice_id);
+      if not deleted.voice_deleted then failwith "expected custom voice delete"
 
 let test_files_and_collections_json () =
   let collection_body =
@@ -771,10 +1080,12 @@ let () =
   test_stream_chunks ();
   test_image_and_video_requests ();
   test_image_and_video_response_decode ();
+  test_voice_and_audio_requests ();
   test_batches ();
   test_client_and_provider ();
   test_client_batches ();
   test_client_responses_and_models ();
+  test_client_voice_endpoints ();
   test_files_and_collections_json ();
   test_client_files_and_downloads ();
   test_client_collections ()

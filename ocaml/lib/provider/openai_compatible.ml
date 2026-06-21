@@ -16,6 +16,12 @@ type config = {
 }
 
 type chat_response = Openai.chat_response
+type responses_request = Openai.responses_request
+type responses_response = Openai.responses_response
+type image_request = Openai.image_request
+type image_response = Openai.image_response
+type embedding_request = Openai.embedding_request
+type embedding_response = Openai.embedding_response
 
 let local_config ?(api_key = "local") ?(headers = []) ?timeout_ms ~base_url () =
   { api_key; base_url; timeout_ms; headers; profile = Conservative_local; kind = Local }
@@ -59,6 +65,10 @@ let normalize_chat_request config request =
 let chat_request_json config request =
   request |> normalize_chat_request config |> Openai.chat_request_json
 
+let responses_request_json _config request = Openai.responses_request_json request
+let image_request_json _config request = Openai.image_request_json request
+let embedding_request_json _config request = Openai.embedding_request_json request
+
 let usage_of_json config json =
   match Chatoyant_runtime.Json.field "usage" json with
   | None -> Chatoyant_tokens.Cost.empty_usage
@@ -70,6 +80,9 @@ let usage_of_json config json =
 let chat_response_of_json config json =
   let response = Openai.chat_response_of_json json in
   { response with Openai.chat_response_usage = usage_of_json config json }
+
+let responses_response_of_json _config json =
+  Openai.responses_response_of_json json
 
 let generation_of_chat_response = Openai.generation_of_chat_response
 
@@ -188,6 +201,9 @@ let chat_response_of_stream_chunks config chunks =
       chat_response_raw = Chatoyant_runtime.Json.Null;
     }
 
+let response_of_stream_chunks _config chunks =
+  Openai.response_of_stream_chunks chunks
+
 module Make_client (Http : Chatoyant_runtime.Effect.HTTP) = struct
   let endpoint config path =
     let base =
@@ -255,6 +271,18 @@ module Make_client (Http : Chatoyant_runtime.Effect.HTTP) = struct
     send (chat_response_of_json config)
       (request config "/chat/completions" (Json (chat_request_json config request_body)))
 
+  let create_response config request_body =
+    send (responses_response_of_json config)
+      (request config "/responses" (Json (responses_request_json config request_body)))
+
+  let generate_image config request_body =
+    send Openai.image_response_of_json
+      (request config "/images/generations" (Json (image_request_json config request_body)))
+
+  let create_embedding config request_body =
+    send Openai.embedding_response_of_json
+      (request config "/embeddings" (Json (embedding_request_json config request_body)))
+
   let list_models config =
     send Openai.model_list_of_json (request ~method_:"GET" config "/models" Empty)
 
@@ -276,7 +304,7 @@ let compatible_message_of_provider_message (message : Provider.message) =
     message_name = message.name;
     message_tool_call_id = message.tool_call_id;
     message_tool_calls = message.tool_calls;
-  }
+      }
 
 let openai_function_tool_of_provider_tool (tool : Provider.tool_definition) =
   {
@@ -285,6 +313,39 @@ let openai_function_tool_of_provider_tool (tool : Provider.tool_definition) =
     tool_parameters = tool.tool_parameters;
     tool_strict = tool.tool_strict;
   }
+
+let extra_fields (options : Provider.options) =
+  let fields =
+    match options.extra with
+    | Some (Chatoyant_runtime.Json.Object fields) -> fields
+    | _ -> []
+  in
+  let add name value fields =
+    if List.mem_assoc name fields then fields else (name, value) :: fields
+  in
+  fields
+  |> (fun fields ->
+       match options.frequency_penalty with
+       | None -> fields
+       | Some value -> add "frequency_penalty" (Chatoyant_runtime.Json.Float value) fields)
+  |> (fun fields ->
+       match options.presence_penalty with
+       | None -> fields
+       | Some value -> add "presence_penalty" (Chatoyant_runtime.Json.Float value) fields)
+  |> (fun fields ->
+       match options.reasoning_effort with
+       | None -> fields
+       | Some value -> add "reasoning_effort" (Chatoyant_runtime.Json.String value) fields)
+  |> (fun fields ->
+       match options.thinking_budget with
+       | None -> fields
+       | Some value ->
+           add "thinking_budget" (Chatoyant_runtime.Json.Float (Float.of_int value)) fields)
+  |> fun fields ->
+  match options.web_search with
+  | Some true -> add "web_search" (Chatoyant_runtime.Json.Bool true) fields
+  | Some false -> add "web_search" (Chatoyant_runtime.Json.Bool false) fields
+  | None -> fields
 
 module Make_provider
     (Http : Chatoyant_runtime.Effect.HTTP)
@@ -305,8 +366,8 @@ struct
         chat_stream = false;
         chat_temperature = options.temperature;
         chat_max_tokens = options.max_tokens;
-        chat_top_p = None;
-        chat_stop = [];
+        chat_top_p = options.top_p;
+        chat_stop = options.stop;
         chat_user = None;
         chat_seed = None;
         chat_logprobs = None;
@@ -316,10 +377,7 @@ struct
         chat_tool_choice = Option.map (fun name -> Openai.Function_tool name) options.tool_choice;
         chat_parallel_tool_calls = None;
         chat_response_format = None;
-        chat_extra =
-          (match options.extra with
-          | Some (Chatoyant_runtime.Json.Object fields) -> fields
-          | _ -> []);
+        chat_extra = extra_fields options;
       }
     in
     match Client.create_chat Config.config request with

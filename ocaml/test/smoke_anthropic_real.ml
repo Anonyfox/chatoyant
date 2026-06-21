@@ -115,6 +115,7 @@ let () =
       {
         model = "claude-haiku-4-5-20251001";
         system = None;
+        system_blocks = [];
         messages =
           [
             {
@@ -133,6 +134,7 @@ let () =
         tools = [];
         tool_choice = None;
         thinking = None;
+        cache_control = None;
         extra = [];
       }
   in

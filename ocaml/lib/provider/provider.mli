@@ -49,6 +49,13 @@ type options = {
   model : string;
   temperature : float option;
   max_tokens : int option;
+  top_p : float option;
+  stop : string list;
+  frequency_penalty : float option;
+  presence_penalty : float option;
+  web_search : bool option;
+  thinking_budget : int option;
+  reasoning_effort : string option;
   timeout_ms : int option;
   tools : tool_definition list;
   tool_choice : string option;

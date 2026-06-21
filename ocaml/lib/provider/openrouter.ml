@@ -34,6 +34,28 @@ type model_count = {
   model_count_raw : Chatoyant_runtime.Json.t;
 }
 
+type model_endpoint = {
+  model_endpoint_name : string option;
+  model_endpoint_provider_name : string option;
+  model_endpoint_context_length : int option;
+  model_endpoint_max_completion_tokens : int option;
+  model_endpoint_quantization : string option;
+  model_endpoint_status : string option;
+  model_endpoint_supported_parameters : string list;
+  model_endpoint_pricing : Chatoyant_runtime.Json.t option;
+  model_endpoint_raw : Chatoyant_runtime.Json.t;
+}
+
+type model_endpoint_list = {
+  model_endpoint_model_id : string option;
+  model_endpoint_model_name : string option;
+  model_endpoint_model_description : string option;
+  model_endpoint_model_created : int option;
+  model_endpoint_model_architecture : Chatoyant_runtime.Json.t option;
+  model_endpoints : model_endpoint list;
+  model_endpoint_list_raw : Chatoyant_runtime.Json.t;
+}
+
 type rerank_document =
   | Rerank_text of string
   | Rerank_object of Chatoyant_runtime.Json.t
@@ -111,6 +133,23 @@ type video_model_list = {
   video_models_raw : Chatoyant_runtime.Json.t;
 }
 
+type management_resource = {
+  management_id : string option;
+  management_name : string option;
+  management_raw : Chatoyant_runtime.Json.t;
+}
+
+type management_list = {
+  management_data : management_resource list;
+  management_raw : Chatoyant_runtime.Json.t;
+}
+
+type management_delete = {
+  management_delete_id : string option;
+  management_deleted : bool;
+  management_delete_raw : Chatoyant_runtime.Json.t;
+}
+
 let base_url = "https://openrouter.ai/api/v1"
 
 let default_config =
@@ -133,6 +172,7 @@ let int value = Chatoyant_runtime.Json.Float (Float.of_int value)
 let string_field name json = Option.bind (field name json) Chatoyant_runtime.Json.as_string
 let float_field name json = Option.bind (field name json) Chatoyant_runtime.Json.as_float
 let int_field name json = Option.bind (field name json) Chatoyant_runtime.Json.as_int
+let bool_field name json = Option.bind (field name json) Chatoyant_runtime.Json.as_bool
 
 let add_opt name encode value fields =
   match value with
@@ -224,6 +264,48 @@ let model_count_of_json json =
     model_count_raw = json;
   }
 
+let string_list_field name json =
+  match field name json with
+  | Some (Chatoyant_runtime.Json.Array values) ->
+      List.filter_map Chatoyant_runtime.Json.as_string values
+  | _ -> []
+
+let model_endpoint_of_json json =
+  {
+    model_endpoint_name = string_field "name" json;
+    model_endpoint_provider_name =
+      (match string_field "provider_name" json with
+      | Some _ as value -> value
+      | None -> string_field "provider" json);
+    model_endpoint_context_length = int_field "context_length" json;
+    model_endpoint_max_completion_tokens = int_field "max_completion_tokens" json;
+    model_endpoint_quantization = string_field "quantization" json;
+    model_endpoint_status = string_field "status" json;
+    model_endpoint_supported_parameters = string_list_field "supported_parameters" json;
+    model_endpoint_pricing = field "pricing" json;
+    model_endpoint_raw = json;
+  }
+
+let model_endpoint_list_of_json json =
+  let data = Option.value (field "data" json) ~default:json in
+  let endpoint_values =
+    match field "endpoints" data with
+    | Some (Chatoyant_runtime.Json.Array values) -> values
+    | _ -> (
+        match data with
+        | Chatoyant_runtime.Json.Array values -> values
+        | _ -> [])
+  in
+  {
+    model_endpoint_model_id = string_field "id" data;
+    model_endpoint_model_name = string_field "name" data;
+    model_endpoint_model_description = string_field "description" data;
+    model_endpoint_model_created = int_field "created" data;
+    model_endpoint_model_architecture = field "architecture" data;
+    model_endpoints = List.map model_endpoint_of_json endpoint_values;
+    model_endpoint_list_raw = json;
+  }
+
 let rerank_result_of_json json =
   {
     rerank_index = int_field "index" json;
@@ -255,12 +337,6 @@ let video_status_of_string = function
   | "failed" | "error" -> Video_failed
   | "cancelled" | "canceled" -> Video_cancelled
   | value -> Video_unknown_status value
-
-let string_list_field name json =
-  match field name json with
-  | Some (Chatoyant_runtime.Json.Array values) ->
-      List.filter_map Chatoyant_runtime.Json.as_string values
-  | _ -> []
 
 let video_job_of_json json =
   {
@@ -294,6 +370,38 @@ let video_model_list_of_json json =
     video_models_raw = json;
   }
 
+let management_resource_of_json json =
+  let data = Option.value (field "data" json) ~default:json in
+  {
+    management_id =
+      (match string_field "id" data with
+      | Some _ as value -> value
+      | None -> string_field "hash" data);
+    management_name = string_field "name" data;
+    management_raw = data;
+  }
+
+let management_list_of_json json =
+  let values =
+    match field "data" json with
+    | Some (Chatoyant_runtime.Json.Array values) -> values
+    | _ -> (
+        match field "items" json with
+        | Some (Chatoyant_runtime.Json.Array values) -> values
+        | _ -> [])
+  in
+  { management_data = List.map management_resource_of_json values; management_raw = json }
+
+let management_delete_of_json json =
+  {
+    management_delete_id =
+      (match string_field "id" json with
+      | Some _ as value -> value
+      | None -> string_field "hash" json);
+    management_deleted = Option.value (bool_field "deleted" json) ~default:false;
+    management_delete_raw = json;
+  }
+
 let compatible_config api_key timeout_ms http_referer title headers =
   Openai_compatible.openrouter_config ?timeout_ms ?http_referer ?title ~headers ~api_key ()
 
@@ -308,17 +416,31 @@ module Make_client (Http : Chatoyant_runtime.Effect.HTTP) = struct
     headers : (string * string) list;
   }
 
+  type management_config = {
+    management_api_key : string;
+    management_base_url : string;
+    management_timeout_ms : int option;
+  }
+
+  let default_management_base_url = base_url
+
   let to_compatible config =
     compatible_config config.api_key config.timeout_ms config.http_referer config.title config.headers
 
-  let endpoint config path =
-    let compatible = to_compatible config in
+  let endpoint_of_base base_url path =
     let base =
-      if String.ends_with ~suffix:"/" compatible.base_url then
-        String.sub compatible.base_url 0 (String.length compatible.base_url - 1)
-      else compatible.base_url
+      if String.ends_with ~suffix:"/" base_url then
+        String.sub base_url 0 (String.length base_url - 1)
+      else base_url
     in
     base ^ path
+
+  let endpoint config path =
+    let compatible = to_compatible config in
+    endpoint_of_base compatible.base_url path
+
+  let management_endpoint config path =
+    endpoint_of_base config.management_base_url path
 
   let request ?(method_ = "POST") config path body =
     {
@@ -327,6 +449,19 @@ module Make_client (Http : Chatoyant_runtime.Effect.HTTP) = struct
       headers = Openai_compatible.authorization_headers (to_compatible config);
       body;
       timeout_ms = config.timeout_ms;
+    }
+
+  let management_request ?(method_ = "GET") config path body =
+    {
+      Http.method_;
+      url = management_endpoint config path;
+      headers =
+        [
+          ("Authorization", "Bearer " ^ config.management_api_key);
+          ("Content-Type", "application/json");
+        ];
+      body;
+      timeout_ms = config.management_timeout_ms;
     }
 
   let parse_response decode response =
@@ -401,6 +536,33 @@ module Make_client (Http : Chatoyant_runtime.Effect.HTTP) = struct
     | [] -> ""
     | _ -> "?" ^ String.concat "&" values
 
+  let pct_encode_path_segment text =
+    let is_unreserved = function
+      | 'A' .. 'Z' | 'a' .. 'z' | '0' .. '9' | '-' | '_' | '.' | '~' -> true
+      | _ -> false
+    in
+    let buffer = Buffer.create (String.length text) in
+    String.iter
+      (fun ch ->
+        if is_unreserved ch then Buffer.add_char buffer ch
+        else Buffer.add_string buffer (Printf.sprintf "%%%02X" (Char.code ch)))
+      text;
+    Buffer.contents buffer
+
+  let model_endpoints_path ~author ~slug =
+    "/models/" ^ pct_encode_path_segment author ^ "/" ^ pct_encode_path_segment slug ^ "/endpoints"
+
+  let invalid_model_id model_id =
+    Error
+      {
+        Openai.error_type = Some "invalid_request_error";
+        error_message =
+          "OpenRouter model_id must be in author/slug form for endpoint metadata: " ^ model_id;
+        error_code = None;
+        error_param = Some "model_id";
+        error_raw = None;
+      }
+
   let create_chat config request =
     Client.create_chat (to_compatible config) request
 
@@ -421,6 +583,18 @@ module Make_client (Http : Chatoyant_runtime.Effect.HTTP) = struct
 
   let retrieve_model config ~model_id =
     Client.retrieve_model (to_compatible config) ~model_id
+
+  let list_model_endpoints config ~author ~slug =
+    send model_endpoint_list_of_json
+      (request ~method_:"GET" config (model_endpoints_path ~author ~slug) Empty)
+
+  let list_model_endpoints_by_id config ~model_id =
+    match String.split_on_char '/' model_id with
+    | author :: slug_parts when author <> "" && slug_parts <> [] ->
+        let slug = String.concat "/" slug_parts in
+        if slug = "" then invalid_model_id model_id
+        else list_model_endpoints config ~author ~slug
+    | _ -> invalid_model_id model_id
 
   let get_credits config =
     send credits_of_json (request ~method_:"GET" config "/credits" Empty)
@@ -450,6 +624,51 @@ module Make_client (Http : Chatoyant_runtime.Effect.HTTP) = struct
 
   let list_video_models config =
     send video_model_list_of_json (request ~method_:"GET" config "/videos/models" Empty)
+
+  let management_get config ~path =
+    send management_resource_of_json (management_request config path Empty)
+
+  let management_list config ~path =
+    send management_list_of_json (management_request config path Empty)
+
+  let management_post config ~path body =
+    send management_resource_of_json (management_request ~method_:"POST" config path (Json body))
+
+  let management_patch config ~path body =
+    send management_resource_of_json (management_request ~method_:"PATCH" config path (Json body))
+
+  let management_delete config ~path =
+    send management_delete_of_json (management_request ~method_:"DELETE" config path Empty)
+
+  let list_keys config =
+    management_list config ~path:"/keys"
+
+  let get_current_key config =
+    management_get config ~path:"/key"
+
+  let create_key config body =
+    management_post config ~path:"/keys" body
+
+  let update_key config ~key_hash body =
+    management_patch config ~path:("/keys/" ^ key_hash) body
+
+  let delete_key config ~key_hash =
+    management_delete config ~path:("/keys/" ^ key_hash)
+
+  let list_guardrails config =
+    management_list config ~path:"/guardrails"
+
+  let create_guardrail config body =
+    management_post config ~path:"/guardrails" body
+
+  let get_guardrail config ~guardrail_id =
+    management_get config ~path:("/guardrails/" ^ guardrail_id)
+
+  let update_guardrail config ~guardrail_id body =
+    management_patch config ~path:("/guardrails/" ^ guardrail_id) body
+
+  let delete_guardrail config ~guardrail_id =
+    management_delete config ~path:("/guardrails/" ^ guardrail_id)
 end
 
 module Make_provider

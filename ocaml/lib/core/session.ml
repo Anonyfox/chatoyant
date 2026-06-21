@@ -8,12 +8,18 @@ type t = {
 
 let field = Chatoyant_runtime.Json.field
 let string value = Chatoyant_runtime.Json.String value
+let bool value = Chatoyant_runtime.Json.Bool value
 let string_field name json = Option.bind (field name json) Chatoyant_runtime.Json.as_string
 
 let add_opt name value fields =
   match value with
   | None -> fields
   | Some value -> (name, value) :: fields
+
+let add_non_empty name values fields =
+  match values with
+  | [] -> fields
+  | _ -> (name, Chatoyant_runtime.Json.Array (List.map string values)) :: fields
 
 let messages_of_json json =
   match field "messages" json with
@@ -33,6 +39,7 @@ let options_to_json (options : Options.t) =
   let float value = Chatoyant_runtime.Json.Float value in
   [
     ("retries", int options.retries);
+    ("max_tool_iterations", int options.max_tool_iterations);
   ]
   |> add_opt "provider"
        (Option.map
@@ -40,13 +47,30 @@ let options_to_json (options : Options.t) =
           options.provider)
   |> add_opt "model" (Option.map string options.model)
   |> add_opt "timeout_ms" (Option.map int options.timeout_ms)
+  |> add_opt "local_base_url" (Option.map string options.local_base_url)
+  |> add_opt "local_api_key" (Option.map string options.local_api_key)
+  |> add_opt "local_timeout_ms" (Option.map int options.local_timeout_ms)
   |> add_opt "temperature" (Option.map float options.temperature)
   |> add_opt "max_tokens" (Option.map int options.max_tokens)
+  |> add_opt "top_p" (Option.map float options.top_p)
+  |> add_non_empty "stop" options.stop
+  |> add_opt "frequency_penalty" (Option.map float options.frequency_penalty)
+  |> add_opt "presence_penalty" (Option.map float options.presence_penalty)
+  |> add_opt "web_search" (Option.map bool options.web_search)
+  |> add_opt "thinking_budget" (Option.map int options.thinking_budget)
+  |> add_opt "tool_timeout_ms" (Option.map int options.tool_timeout_ms)
   |> add_opt "extra" options.extra
   |> List.rev |> fun fields -> Chatoyant_runtime.Json.Object fields
 
 let int_field name json = Option.bind (field name json) Chatoyant_runtime.Json.as_int
 let float_field name json = Option.bind (field name json) Chatoyant_runtime.Json.as_float
+let bool_field name json = Option.bind (field name json) Chatoyant_runtime.Json.as_bool
+
+let string_list_field name json =
+  match field name json with
+  | Some (Chatoyant_runtime.Json.Array values) ->
+      List.filter_map Chatoyant_runtime.Json.as_string values
+  | _ -> []
 
 let options_of_json json =
   let provider =
@@ -57,9 +81,22 @@ let options_of_json json =
     provider;
     model = string_field "model" json;
     timeout_ms = int_field "timeout_ms" json;
+    local_base_url = string_field "local_base_url" json;
+    local_api_key = string_field "local_api_key" json;
+    local_timeout_ms = int_field "local_timeout_ms" json;
     retries = Option.value (int_field "retries" json) ~default:Options.default.retries;
     temperature = float_field "temperature" json;
     max_tokens = int_field "max_tokens" json;
+    top_p = float_field "top_p" json;
+    stop = string_list_field "stop" json;
+    frequency_penalty = float_field "frequency_penalty" json;
+    presence_penalty = float_field "presence_penalty" json;
+    web_search = bool_field "web_search" json;
+    thinking_budget = int_field "thinking_budget" json;
+    max_tool_iterations =
+      Option.value (int_field "max_tool_iterations" json)
+        ~default:Options.default.max_tool_iterations;
+    tool_timeout_ms = int_field "tool_timeout_ms" json;
     extra = field "extra" json;
   }
 

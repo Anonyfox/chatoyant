@@ -2,8 +2,21 @@ type role =
   | User
   | Assistant
 
+type cache_ttl =
+  | Ttl_5m
+  | Ttl_1h
+  | Cache_ttl of string
+
+type cache_control =
+  | Ephemeral_cache of cache_ttl option
+  | Raw_cache_control of Chatoyant_runtime.Json.t
+
 type content_block =
   | Text of string
+  | Cached_block of {
+      block : content_block;
+      cache_control : cache_control;
+    }
   | Thinking of string
   | Redacted_thinking of string
   | Tool_use of {
@@ -16,6 +29,31 @@ type content_block =
       content : string;
       is_error : bool option;
     }
+  | Server_tool_use of {
+      id : string;
+      name : string;
+      input : Chatoyant_runtime.Json.t;
+      raw : Chatoyant_runtime.Json.t;
+    }
+  | Web_search_tool_result of {
+      tool_use_id : string;
+      content : Chatoyant_runtime.Json.t;
+      raw : Chatoyant_runtime.Json.t;
+    }
+  | Web_fetch_tool_result of {
+      tool_use_id : string;
+      content : Chatoyant_runtime.Json.t;
+      raw : Chatoyant_runtime.Json.t;
+    }
+  | Code_execution_tool_result of {
+      tool_use_id : string;
+      content : Chatoyant_runtime.Json.t;
+      raw : Chatoyant_runtime.Json.t;
+    }
+  | Container_upload of {
+      file_id : string option;
+      raw : Chatoyant_runtime.Json.t;
+    }
   | Raw_block of Chatoyant_runtime.Json.t
 
 type message = {
@@ -27,6 +65,7 @@ type tool = {
   tool_name : string;
   tool_description : string option;
   input_schema : Chatoyant_runtime.Json.t;
+  tool_cache_control : cache_control option;
 }
 
 type tool_choice =
@@ -43,6 +82,7 @@ type request = {
   model : string;
   messages : message list;
   system : string option;
+  system_blocks : content_block list;
   max_tokens : int;
   stream : bool;
   temperature : float option;
@@ -53,6 +93,7 @@ type request = {
   tools : tool list;
   tool_choice : tool_choice option;
   thinking : thinking option;
+  cache_control : cache_control option;
   extra : (string * Chatoyant_runtime.Json.t) list;
 }
 
@@ -245,6 +286,20 @@ let role_to_string = function
   | User -> "user"
   | Assistant -> "assistant"
 
+let cache_ttl_to_string = function
+  | Ttl_5m -> "5m"
+  | Ttl_1h -> "1h"
+  | Cache_ttl ttl -> ttl
+
+let cache_control_json = function
+  | Ephemeral_cache ttl ->
+      [ ("type", string "ephemeral") ]
+      |> add_opt "ttl" (fun value -> string (cache_ttl_to_string value)) ttl
+      |> List.rev |> fun fields -> Chatoyant_runtime.Json.Object fields
+  | Raw_cache_control json -> json
+
+let ephemeral_cache_control ?ttl () = Ephemeral_cache ttl
+
 let role_of_string = function
   | "user" -> Some User
   | "assistant" -> Some Assistant
@@ -268,8 +323,17 @@ let stop_reason_to_string = function
   | Refusal -> "refusal"
   | Unknown_stop value -> value
 
-let content_block_json = function
+let rec content_block_json = function
   | Text text -> Chatoyant_runtime.Json.Object [ ("type", string "text"); ("text", string text) ]
+  | Cached_block { block; cache_control } -> (
+      match content_block_json block with
+      | Chatoyant_runtime.Json.Object fields ->
+          Chatoyant_runtime.Json.Object
+            (("cache_control", cache_control_json cache_control)
+             :: List.filter (fun (name, _) -> name <> "cache_control") fields)
+      | json ->
+          Chatoyant_runtime.Json.Object
+            [ ("type", string "raw"); ("value", json); ("cache_control", cache_control_json cache_control) ])
   | Thinking thinking ->
       Chatoyant_runtime.Json.Object [ ("type", string "thinking"); ("thinking", string thinking) ]
   | Redacted_thinking data ->
@@ -291,6 +355,12 @@ let content_block_json = function
       ]
       |> add_opt "is_error" bool is_error
       |> List.rev |> fun fields -> Chatoyant_runtime.Json.Object fields
+  | Server_tool_use { raw; _ }
+  | Web_search_tool_result { raw; _ }
+  | Web_fetch_tool_result { raw; _ }
+  | Code_execution_tool_result { raw; _ }
+  | Container_upload { raw; _ } ->
+      raw
   | Raw_block json -> json
 
 let message_json message =
@@ -306,6 +376,42 @@ let tool_json tool =
     ("input_schema", tool.input_schema);
   ]
   |> add_opt "description" string tool.tool_description
+  |> add_opt "cache_control" cache_control_json tool.tool_cache_control
+  |> List.rev |> fun fields -> Chatoyant_runtime.Json.Object fields
+
+let web_search_tool_json ?(name = "web_search") ?cache_control ?max_uses ?allowed_domains
+    ?blocked_domains ?user_location () =
+  [
+    ("type", string "web_search_20260209");
+    ("name", string name);
+  ]
+  |> add_opt "cache_control" cache_control_json cache_control
+  |> add_opt "max_uses" int max_uses
+  |> add_opt
+       "allowed_domains"
+       (fun values -> Chatoyant_runtime.Json.Array (List.map string values))
+       allowed_domains
+  |> add_opt
+       "blocked_domains"
+       (fun values -> Chatoyant_runtime.Json.Array (List.map string values))
+       blocked_domains
+  |> add_opt "user_location" (fun value -> value) user_location
+  |> List.rev |> fun fields -> Chatoyant_runtime.Json.Object fields
+
+let web_fetch_tool_json ?(name = "web_fetch") ?cache_control () =
+  [
+    ("type", string "web_fetch_20260209");
+    ("name", string name);
+  ]
+  |> add_opt "cache_control" cache_control_json cache_control
+  |> List.rev |> fun fields -> Chatoyant_runtime.Json.Object fields
+
+let code_execution_tool_json ?(name = "code_execution") ?cache_control () =
+  [
+    ("type", string "code_execution_20250825");
+    ("name", string name);
+  ]
+  |> add_opt "cache_control" cache_control_json cache_control
   |> List.rev |> fun fields -> Chatoyant_runtime.Json.Object fields
 
 let thinking_json thinking =
@@ -324,6 +430,18 @@ let tool_choice_json = function
 let metadata_json user_id =
   Chatoyant_runtime.Json.Object [ ("user_id", string user_id) ]
 
+let system_json request =
+  match request.system, request.system_blocks with
+  | None, [] -> None
+  | Some text, [] -> Some (string text)
+  | system_text, blocks ->
+      let blocks =
+        match system_text with
+        | None -> blocks
+        | Some text -> Text text :: blocks
+      in
+      Some (Chatoyant_runtime.Json.Array (List.map content_block_json blocks))
+
 let request_json request =
   [
     ("model", string request.model);
@@ -331,7 +449,7 @@ let request_json request =
     ("max_tokens", int request.max_tokens);
     ("stream", bool request.stream);
   ]
-  |> add_opt "system" string request.system
+  |> add_opt "system" (fun value -> value) (system_json request)
   |> add_opt "temperature" float request.temperature
   |> add_opt "top_p" float request.top_p
   |> add_opt "top_k" int request.top_k
@@ -340,8 +458,20 @@ let request_json request =
   |> add_non_empty "tools" tool_json request.tools
   |> add_opt "tool_choice" tool_choice_json request.tool_choice
   |> add_opt "thinking" thinking_json request.thinking
+  |> add_opt "cache_control" cache_control_json request.cache_control
   |> List.rev_append request.extra
   |> List.rev |> fun fields -> Chatoyant_runtime.Json.Object fields
+
+let request_json_with_raw_tools request raw_tools =
+  let json = request_json { request with tools = [] } in
+  let fields =
+    match Chatoyant_runtime.Json.as_object json with
+    | Some fields -> fields
+    | None -> []
+  in
+  Chatoyant_runtime.Json.Object
+    (("tools", Chatoyant_runtime.Json.Array raw_tools)
+     :: List.filter (fun (name, _) -> name <> "tools") fields)
 
 let authorization_headers ~api_key =
   [
@@ -358,8 +488,19 @@ let bool_field name json = Option.bind (field name json) Chatoyant_runtime.Json.
 
 let usage_of_json = Usage.anthropic
 
-let content_block_of_json json =
+let cache_ttl_of_string = function
+  | "5m" -> Ttl_5m
+  | "1h" -> Ttl_1h
+  | value -> Cache_ttl value
+
+let cache_control_of_json json =
   match string_field "type" json with
+  | Some "ephemeral" -> Ephemeral_cache (Option.map cache_ttl_of_string (string_field "ttl" json))
+  | _ -> Raw_cache_control json
+
+let content_block_of_json json =
+  let block =
+    match string_field "type" json with
   | Some "text" -> Text (Option.value (string_field "text" json) ~default:"")
   | Some "thinking" -> Thinking (Option.value (string_field "thinking" json) ~default:"")
   | Some "redacted_thinking" ->
@@ -378,7 +519,42 @@ let content_block_of_json json =
           content = Option.value (string_field "content" json) ~default:"";
           is_error = bool_field "is_error" json;
         }
+  | Some "server_tool_use" ->
+      Server_tool_use
+        {
+          id = Option.value (string_field "id" json) ~default:"";
+          name = Option.value (string_field "name" json) ~default:"";
+          input = Option.value (field "input" json) ~default:Chatoyant_runtime.Json.Null;
+          raw = json;
+        }
+  | Some "web_search_tool_result" ->
+      Web_search_tool_result
+        {
+          tool_use_id = Option.value (string_field "tool_use_id" json) ~default:"";
+          content = Option.value (field "content" json) ~default:Chatoyant_runtime.Json.Null;
+          raw = json;
+        }
+  | Some "web_fetch_tool_result" ->
+      Web_fetch_tool_result
+        {
+          tool_use_id = Option.value (string_field "tool_use_id" json) ~default:"";
+          content = Option.value (field "content" json) ~default:Chatoyant_runtime.Json.Null;
+          raw = json;
+        }
+  | Some kind when String.contains kind '_' && String.ends_with ~suffix:"tool_result" kind ->
+      Code_execution_tool_result
+        {
+          tool_use_id = Option.value (string_field "tool_use_id" json) ~default:"";
+          content = Option.value (field "content" json) ~default:Chatoyant_runtime.Json.Null;
+          raw = json;
+        }
+  | Some "container_upload" ->
+      Container_upload { file_id = string_field "file_id" json; raw = json }
   | _ -> Raw_block json
+  in
+  match field "cache_control" json with
+  | Some cache_control -> Cached_block { block; cache_control = cache_control_of_json cache_control }
+  | None -> block
 
 let response_of_json json =
   let content =
@@ -784,15 +960,24 @@ module Make_client (Http : Chatoyant_runtime.Effect.HTTP) = struct
     beta_headers : string list;
   }
 
+  type admin_config = {
+    admin_api_key : string;
+    admin_base_url : string;
+    admin_timeout_ms : int option;
+  }
+
   let default_base_url = "https://api.anthropic.com/v1"
 
-  let build_url config endpoint =
+  let build_url_from_base base_url endpoint =
     let base =
-      if String.ends_with ~suffix:"/" config.base_url then
-        String.sub config.base_url 0 (String.length config.base_url - 1)
-      else config.base_url
+      if String.ends_with ~suffix:"/" base_url then
+        String.sub base_url 0 (String.length base_url - 1)
+      else base_url
     in
     base ^ endpoint
+
+  let build_url config endpoint = build_url_from_base config.base_url endpoint
+  let build_admin_url config endpoint = build_url_from_base config.admin_base_url endpoint
 
   let files_beta = "files-api-2025-04-14"
 
@@ -866,9 +1051,24 @@ module Make_client (Http : Chatoyant_runtime.Effect.HTTP) = struct
       timeout_ms = config.timeout_ms;
     }
 
+  let admin_request ?(method_ = "GET") config endpoint body =
+    {
+      Http.method_;
+      url = build_admin_url config endpoint;
+      headers = authorization_headers ~api_key:config.admin_api_key;
+      body;
+      timeout_ms = config.admin_timeout_ms;
+    }
+
   let create_message config request_body =
     let request =
       request config "/messages" (Json (request_json request_body))
+    in
+    send response_of_json request
+
+  let create_message_with_raw_tools config ~raw_tools request_body =
+    let request =
+      request config "/messages" (Json (request_json_with_raw_tools request_body raw_tools))
     in
     send response_of_json request
 
@@ -926,6 +1126,56 @@ module Make_client (Http : Chatoyant_runtime.Effect.HTTP) = struct
     send_text (fun body -> Ok body)
       (request ~method_:"GET" ~extra_betas:[ files_beta ] config
          ("/files/" ^ file_id ^ "/content") Empty)
+
+  let admin_get_json config ~path =
+    send (fun json -> json) (admin_request config path Empty)
+
+  let usage_report_path name ?starting_at ?ending_at ?bucket_width ?group_by () =
+    let pct_encode text =
+      let buffer = Buffer.create (String.length text) in
+      String.iter
+        (fun ch ->
+          match ch with
+          | 'A' .. 'Z' | 'a' .. 'z' | '0' .. '9' | '-' | '_' | '.' | '~' ->
+              Buffer.add_char buffer ch
+          | _ -> Buffer.add_string buffer (Printf.sprintf "%%%02X" (Char.code ch)))
+        text;
+      Buffer.contents buffer
+    in
+    let add_string_param name value params =
+      match value with
+      | None -> params
+      | Some value -> (name, value) :: params
+    in
+    let params =
+      []
+      |> add_string_param "starting_at" starting_at
+      |> add_string_param "ending_at" ending_at
+      |> add_string_param "bucket_width" bucket_width
+      |> fun params ->
+      match group_by with
+      | None -> params
+      | Some values ->
+          List.rev_append (List.map (fun value -> ("group_by[]", value)) values) params
+    in
+    let query_param (name, value) =
+      pct_encode name ^ "=" ^ pct_encode value
+    in
+    match params with
+    | [] -> name
+    | params -> name ^ "?" ^ String.concat "&" (List.map query_param params)
+
+  let get_usage_report_messages config ?starting_at ?ending_at ?bucket_width ?group_by () =
+    admin_get_json config
+      ~path:
+        (usage_report_path "/organizations/usage_report/messages" ?starting_at ?ending_at
+           ?bucket_width ?group_by ())
+
+  let get_cost_report config ?starting_at ?ending_at ?bucket_width ?group_by () =
+    admin_get_json config
+      ~path:
+        (usage_report_path "/organizations/cost_report" ?starting_at ?ending_at ?bucket_width
+           ?group_by ())
 end
 
 let anthropic_message_of_provider_message (message : Provider.message) =
@@ -960,7 +1210,21 @@ let anthropic_tool_of_provider_tool (tool : Provider.tool_definition) =
     tool_name = tool.tool_name;
     tool_description = tool.tool_description;
     input_schema = tool.tool_parameters;
+    tool_cache_control = None;
   }
+
+let provider_thinking (options : Provider.options) =
+  match options.thinking_budget with
+  | Some budget_tokens -> Some (Enabled { budget_tokens })
+  | None -> (
+      match options.reasoning_effort with
+      | Some "none" -> Some Disabled
+      | _ -> None)
+
+let provider_extra_fields (options : Provider.options) =
+  match options.extra with
+  | Some (Chatoyant_runtime.Json.Object fields) -> fields
+  | _ -> []
 
 module Make_provider
     (Http : Chatoyant_runtime.Effect.HTTP)
@@ -990,20 +1254,19 @@ struct
         model = options.model;
         messages = List.map anthropic_message_of_provider_message non_system;
         system;
+        system_blocks = [];
         max_tokens = Option.value options.max_tokens ~default:4096;
         stream = false;
         temperature = options.temperature;
-        top_p = None;
+        top_p = options.top_p;
         top_k = None;
-        stop_sequences = [];
+        stop_sequences = options.stop;
         metadata_user_id = None;
         tools = List.map anthropic_tool_of_provider_tool options.tools;
         tool_choice = Option.map (fun name -> Tool name) options.tool_choice;
-        thinking = None;
-        extra =
-          (match options.extra with
-          | Some (Chatoyant_runtime.Json.Object fields) -> fields
-          | _ -> []);
+        thinking = provider_thinking options;
+        cache_control = None;
+        extra = provider_extra_fields options;
       }
     in
     let config =

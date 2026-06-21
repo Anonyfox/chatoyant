@@ -474,6 +474,10 @@ lib: [
   "_build/install/default/lib/chatoyant/tokens/chatoyant_tokens__.cmt" {"tokens/chatoyant_tokens__.cmt"}
   "_build/install/default/lib/chatoyant/tokens/chatoyant_tokens__.cmx" {"tokens/chatoyant_tokens__.cmx"}
   "_build/install/default/lib/chatoyant/tokens/chatoyant_tokens__.ml" {"tokens/chatoyant_tokens__.ml"}
+  "_build/install/default/lib/chatoyant/tokens/chatoyant_tokens__Chunking.cmi" {"tokens/chatoyant_tokens__Chunking.cmi"}
+  "_build/install/default/lib/chatoyant/tokens/chatoyant_tokens__Chunking.cmt" {"tokens/chatoyant_tokens__Chunking.cmt"}
+  "_build/install/default/lib/chatoyant/tokens/chatoyant_tokens__Chunking.cmti" {"tokens/chatoyant_tokens__Chunking.cmti"}
+  "_build/install/default/lib/chatoyant/tokens/chatoyant_tokens__Chunking.cmx" {"tokens/chatoyant_tokens__Chunking.cmx"}
   "_build/install/default/lib/chatoyant/tokens/chatoyant_tokens__Context_window.cmi" {"tokens/chatoyant_tokens__Context_window.cmi"}
   "_build/install/default/lib/chatoyant/tokens/chatoyant_tokens__Context_window.cmt" {"tokens/chatoyant_tokens__Context_window.cmt"}
   "_build/install/default/lib/chatoyant/tokens/chatoyant_tokens__Context_window.cmti" {"tokens/chatoyant_tokens__Context_window.cmti"}
@@ -494,6 +498,8 @@ lib: [
   "_build/install/default/lib/chatoyant/tokens/chatoyant_tokens__Token_estimate.cmt" {"tokens/chatoyant_tokens__Token_estimate.cmt"}
   "_build/install/default/lib/chatoyant/tokens/chatoyant_tokens__Token_estimate.cmti" {"tokens/chatoyant_tokens__Token_estimate.cmti"}
   "_build/install/default/lib/chatoyant/tokens/chatoyant_tokens__Token_estimate.cmx" {"tokens/chatoyant_tokens__Token_estimate.cmx"}
+  "_build/install/default/lib/chatoyant/tokens/chunking.ml" {"tokens/chunking.ml"}
+  "_build/install/default/lib/chatoyant/tokens/chunking.mli" {"tokens/chunking.mli"}
   "_build/install/default/lib/chatoyant/tokens/context_window.ml" {"tokens/context_window.ml"}
   "_build/install/default/lib/chatoyant/tokens/context_window.mli" {"tokens/context_window.mli"}
   "_build/install/default/lib/chatoyant/tokens/cost.ml" {"tokens/cost.ml"}
@@ -505,6 +511,10 @@ lib: [
   "_build/install/default/lib/chatoyant/tokens/melange/chatoyant_tokens__.cmi" {"tokens/melange/chatoyant_tokens__.cmi"}
   "_build/install/default/lib/chatoyant/tokens/melange/chatoyant_tokens__.cmj" {"tokens/melange/chatoyant_tokens__.cmj"}
   "_build/install/default/lib/chatoyant/tokens/melange/chatoyant_tokens__.cmt" {"tokens/melange/chatoyant_tokens__.cmt"}
+  "_build/install/default/lib/chatoyant/tokens/melange/chatoyant_tokens__Chunking.cmi" {"tokens/melange/chatoyant_tokens__Chunking.cmi"}
+  "_build/install/default/lib/chatoyant/tokens/melange/chatoyant_tokens__Chunking.cmj" {"tokens/melange/chatoyant_tokens__Chunking.cmj"}
+  "_build/install/default/lib/chatoyant/tokens/melange/chatoyant_tokens__Chunking.cmt" {"tokens/melange/chatoyant_tokens__Chunking.cmt"}
+  "_build/install/default/lib/chatoyant/tokens/melange/chatoyant_tokens__Chunking.cmti" {"tokens/melange/chatoyant_tokens__Chunking.cmti"}
   "_build/install/default/lib/chatoyant/tokens/melange/chatoyant_tokens__Context_window.cmi" {"tokens/melange/chatoyant_tokens__Context_window.cmi"}
   "_build/install/default/lib/chatoyant/tokens/melange/chatoyant_tokens__Context_window.cmj" {"tokens/melange/chatoyant_tokens__Context_window.cmj"}
   "_build/install/default/lib/chatoyant/tokens/melange/chatoyant_tokens__Context_window.cmt" {"tokens/melange/chatoyant_tokens__Context_window.cmt"}
@@ -542,4 +552,8 @@ libexec: [
   "_build/install/default/lib/chatoyant/runtime/chatoyant_runtime.cmxs" {"runtime/chatoyant_runtime.cmxs"}
   "_build/install/default/lib/chatoyant/schema/chatoyant_schema.cmxs" {"schema/chatoyant_schema.cmxs"}
   "_build/install/default/lib/chatoyant/tokens/chatoyant_tokens.cmxs" {"tokens/chatoyant_tokens.cmxs"}
+]
+doc: [
+  "_build/install/default/doc/chatoyant/LICENSE"
+  "_build/install/default/doc/chatoyant/README.md"
 ]

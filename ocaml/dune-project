@@ -9,13 +9,15 @@
 
 (package
  (name chatoyant)
- (synopsis "Typesafe OCaml and Melange LLM provider SDK")
+ (synopsis "OCaml-first LLM SDK with Melange-generated JavaScript")
  (description
-  "OCaml-first implementation of Chatoyant, with native OCaml libraries and a bundled ESM npm package generated through Melange.")
+  "Chatoyant is an OCaml-first SDK for LLM providers. It exposes an Eio native API, typed JSON Schema and tool definitions, raw provider clients for OpenAI/Anthropic/xAI/OpenRouter/local inference, and a Melange-generated JavaScript package.")
  (license MIT)
- (homepage "https://github.com/Anonyfox/chatoyant")
+ (tags
+  (llm ai openai anthropic xai openrouter json-schema eio melange typesafe))
+ (homepage "https://github.com/Anonyfox/chatoyant/tree/main/ocaml")
  (bug_reports "https://github.com/Anonyfox/chatoyant/issues")
- (documentation "https://github.com/Anonyfox/chatoyant")
+ (documentation "https://github.com/Anonyfox/chatoyant/tree/main/ocaml#readme")
  (depends
   (ocaml (>= 5.1))
   (dune (>= 3.23))

@@ -10,8 +10,15 @@ type content_kind =
   | Cjk
   | Mixed
 
+type prompt_estimate = {
+  input : int;
+  output : int;
+  total : int;
+}
+
 val chars_per_token : content_kind -> float
 val classify : string -> content_kind
 val estimate : string -> int
+val estimate_prompt : ?response:string -> string -> prompt_estimate
 val estimate_many : string list -> int
 val estimate_with_ratio : chars_per_token:float -> string -> int

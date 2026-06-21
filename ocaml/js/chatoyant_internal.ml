@@ -3069,6 +3069,7 @@ let anthropic_request_json () =
     {
       model = "claude-sonnet-4-6";
       system = Some "You are helpful";
+      system_blocks = [];
       messages = [ { message_role = User; message_content = [ Text "Hello" ] } ];
       max_tokens = 4096;
       stream = false;
@@ -3083,10 +3084,12 @@ let anthropic_request_json () =
             tool_name = "lookup";
             tool_description = Some "Lookup data";
             input_schema = tool_schema;
+            tool_cache_control = None;
           };
         ];
       tool_choice = Some (Tool "lookup");
       thinking = Some (Enabled { budget_tokens = 2048 });
+      cache_control = None;
       extra = [];
     }
   |> Chatoyant_js_base.Provider.Anthropic.request_json
@@ -3097,6 +3100,7 @@ let anthropic_smoke_request_json prompt =
     {
       model = "claude-haiku-4-5-20251001";
       system = None;
+      system_blocks = [];
       messages = [ { message_role = User; message_content = [ Text prompt ] } ];
       max_tokens = 32;
       stream = false;
@@ -3108,6 +3112,7 @@ let anthropic_smoke_request_json prompt =
       tools = [];
       tool_choice = None;
       thinking = None;
+      cache_control = None;
       extra = [];
     }
   |> Chatoyant_js_base.Provider.Anthropic.request_json
@@ -3134,6 +3139,7 @@ let anthropic_batch_request_json () =
       {
         model = "claude-haiku-4-5-20251001";
         system = None;
+        system_blocks = [];
         messages = [ { message_role = User; message_content = [ Text "Hello" ] } ];
         max_tokens = 32;
         stream = false;
@@ -3145,6 +3151,7 @@ let anthropic_batch_request_json () =
         tools = [];
         tool_choice = None;
         thinking = None;
+        cache_control = None;
         extra = [];
       }
   in

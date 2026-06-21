@@ -101,6 +101,32 @@ type responses_request = {
   responses_extra : (string * Chatoyant_runtime.Json.t) list;
 }
 
+type api_object = {
+  api_object_id : string option;
+  api_object_type : string option;
+  api_object_raw : Chatoyant_runtime.Json.t;
+}
+
+type api_list = {
+  api_list_data : api_object list;
+  api_list_first_id : string option;
+  api_list_last_id : string option;
+  api_list_has_more : bool;
+  api_list_total_count : int option;
+  api_list_raw : Chatoyant_runtime.Json.t;
+}
+
+type api_delete = {
+  api_delete_id : string option;
+  api_delete_deleted : bool;
+  api_delete_raw : Chatoyant_runtime.Json.t;
+}
+
+type response_input_token_count = {
+  response_input_tokens : int;
+  response_input_token_count_raw : Chatoyant_runtime.Json.t;
+}
+
 type response_status =
   | Completed
   | In_progress
@@ -132,6 +158,72 @@ type api_error = {
   error_param : string option;
   error_raw : Chatoyant_runtime.Json.t option;
 }
+
+type responses_stream_event =
+  | Response_created of responses_response
+  | Response_in_progress of responses_response
+  | Response_completed of responses_response
+  | Response_failed of responses_response
+  | Response_incomplete of responses_response
+  | Response_output_text_delta of {
+      item_id : string option;
+      output_index : int option;
+      content_index : int option;
+      delta : string;
+    }
+  | Response_output_text_done of {
+      item_id : string option;
+      output_index : int option;
+      content_index : int option;
+      text : string;
+    }
+  | Response_reasoning_summary_text_delta of {
+      item_id : string option;
+      output_index : int option;
+      summary_index : int option;
+      delta : string;
+    }
+  | Response_function_call_arguments_delta of {
+      item_id : string option;
+      output_index : int option;
+      delta : string;
+    }
+  | Response_function_call_arguments_done of {
+      item_id : string option;
+      output_index : int option;
+      arguments : string;
+    }
+  | Response_refusal_delta of string
+  | Response_error of api_error
+  | Response_raw_event of {
+      event_type : string option;
+      raw : Chatoyant_runtime.Json.t;
+    }
+
+type transcription_stream_event =
+  | Transcription_text_delta of {
+      transcript_delta : string;
+      transcript_logprobs : Chatoyant_runtime.Json.t option;
+      transcript_raw : Chatoyant_runtime.Json.t;
+    }
+  | Transcription_text_done of {
+      transcript_text : string;
+      transcript_logprobs : Chatoyant_runtime.Json.t option;
+      transcript_raw : Chatoyant_runtime.Json.t;
+    }
+  | Transcription_text_segment of {
+      transcript_segment_id : string option;
+      transcript_segment_start : float option;
+      transcript_segment_end : float option;
+      transcript_segment_text : string option;
+      transcript_segment_speaker : string option;
+      transcript_raw : Chatoyant_runtime.Json.t;
+    }
+  | Transcription_error of api_error
+  | Transcription_raw_event of {
+      transcription_event_type : string option;
+      transcription_raw : Chatoyant_runtime.Json.t;
+    }
 
 type image_response_format =
   | Url
@@ -735,6 +827,13 @@ let responses_request_json request =
        | field -> field)
   |> fun fields -> Chatoyant_runtime.Json.Object fields
 
+let response_input_token_count_request_json request =
+  match responses_request_json request with
+  | Chatoyant_runtime.Json.Object fields ->
+      Chatoyant_runtime.Json.Object
+        (List.filter (fun (name, _) -> name <> "stream") fields)
+  | json -> json
+
 let image_response_format_json = function
   | Url -> string "url"
   | Base64_json -> string "b64_json"
@@ -935,6 +1034,40 @@ let authorization_headers ~api_key =
 let string_field name json = Option.bind (field name json) Chatoyant_runtime.Json.as_string
 let bool_field name json = Option.bind (field name json) Chatoyant_runtime.Json.as_bool
 let int_field name json = Option.bind (field name json) Chatoyant_runtime.Json.as_int
+let float_field name json = Option.bind (field name json) Chatoyant_runtime.Json.as_float
+
+let api_object_of_json json =
+  {
+    api_object_id = string_field "id" json;
+    api_object_type = string_field "object" json;
+    api_object_raw = json;
+  }
+
+let api_list_of_json json =
+  {
+    api_list_data =
+      (match field "data" json with
+      | Some (Chatoyant_runtime.Json.Array values) -> List.map api_object_of_json values
+      | _ -> []);
+    api_list_first_id = string_field "first_id" json;
+    api_list_last_id = string_field "last_id" json;
+    api_list_has_more = Option.value (bool_field "has_more" json) ~default:false;
+    api_list_total_count = int_field "total_count" json;
+    api_list_raw = json;
+  }
+
+let api_delete_of_json json =
+  {
+    api_delete_id = string_field "id" json;
+    api_delete_deleted = Option.value (bool_field "deleted" json) ~default:false;
+    api_delete_raw = json;
+  }
+
+let response_input_token_count_of_json json =
+  {
+    response_input_tokens = Option.value (int_field "input_tokens" json) ~default:0;
+    response_input_token_count_raw = json;
+  }
 
 let api_error_of_json json =
   let error = Option.value (field "error" json) ~default:json in
@@ -1133,72 +1266,233 @@ let generation_of_responses_response response =
     raw = Some response.responses_raw;
   }
 
-let response_of_stream_chunks chunks =
-  let rec feed state text reasoning usage raw_events = function
+let responses_stream_event_of_json json =
+  let event_type = string_field "type" json in
+  let response_event constructor =
+    match field "response" json with
+    | Some response -> constructor (responses_response_of_json response)
+    | None -> Response_raw_event { event_type; raw = json }
+  in
+  match event_type with
+  | Some "response.created" -> response_event (fun value -> Response_created value)
+  | Some "response.in_progress" -> response_event (fun value -> Response_in_progress value)
+  | Some "response.completed" -> response_event (fun value -> Response_completed value)
+  | Some "response.failed" -> response_event (fun value -> Response_failed value)
+  | Some "response.incomplete" -> response_event (fun value -> Response_incomplete value)
+  | Some "response.output_text.delta" ->
+      Response_output_text_delta
+        {
+          item_id = string_field "item_id" json;
+          output_index = int_field "output_index" json;
+          content_index = int_field "content_index" json;
+          delta = Option.value (string_field "delta" json) ~default:"";
+        }
+  | Some "response.output_text.done" ->
+      Response_output_text_done
+        {
+          item_id = string_field "item_id" json;
+          output_index = int_field "output_index" json;
+          content_index = int_field "content_index" json;
+          text = Option.value (string_field "text" json) ~default:"";
+        }
+  | Some "response.reasoning_summary_text.delta" ->
+      Response_reasoning_summary_text_delta
+        {
+          item_id = string_field "item_id" json;
+          output_index = int_field "output_index" json;
+          summary_index = int_field "summary_index" json;
+          delta = Option.value (string_field "delta" json) ~default:"";
+        }
+  | Some "response.function_call_arguments.delta" ->
+      Response_function_call_arguments_delta
+        {
+          item_id = string_field "item_id" json;
+          output_index = int_field "output_index" json;
+          delta = Option.value (string_field "delta" json) ~default:"";
+        }
+  | Some "response.function_call_arguments.done" ->
+      Response_function_call_arguments_done
+        {
+          item_id = string_field "item_id" json;
+          output_index = int_field "output_index" json;
+          arguments = Option.value (string_field "arguments" json) ~default:"";
+        }
+  | Some "response.refusal.delta" ->
+      Response_refusal_delta (Option.value (string_field "delta" json) ~default:"")
+  | Some "error" -> Response_error (api_error_of_json json)
+  | _ -> Response_raw_event { event_type; raw = json }
+
+let responses_stream_events_of_chunks chunks =
+  let rec feed state acc = function
     | [] ->
         let events = Chatoyant_runtime.Sse.finish state in
-        decode (List.rev_append events []) text reasoning usage raw_events
+        decode (List.rev (List.rev_append events acc)) []
     | chunk :: rest ->
         let state, events = Chatoyant_runtime.Sse.feed state chunk in
-        let text, reasoning, usage, raw_events = decode events text reasoning usage raw_events in
-        feed state text reasoning usage raw_events rest
-  and decode events text reasoning usage raw_events =
-    match events with
-    | [] -> (text, reasoning, usage, raw_events)
+        feed state (List.rev_append events acc) rest
+  and decode sse_events acc =
+    match sse_events with
+    | [] -> Ok (List.rev acc)
     | event :: rest ->
-        if Chatoyant_runtime.Sse.is_done event then decode rest text reasoning usage raw_events
+        if Chatoyant_runtime.Sse.is_done event then decode rest acc
         else
           match Chatoyant_runtime.Json.parse (Chatoyant_runtime.Sse.data_string event) with
-          | Error _ -> decode rest text reasoning usage raw_events
-          | Ok json ->
-              let kind = string_field "type" json in
-              let text =
-                match kind with
-                | Some "response.output_text.delta" ->
-                    text ^ Option.value (string_field "delta" json) ~default:""
-                | Some "response.completed" -> (
-                    match field "response" json with
-                    | Some response ->
-                        let decoded = responses_response_of_json response in
-                        if decoded.responses_output_text <> "" then decoded.responses_output_text else text
-                    | None -> text)
-                | _ -> text
-              in
-              let reasoning =
-                match kind with
-                | Some "response.reasoning_summary_text.delta" ->
-                    reasoning ^ Option.value (string_field "delta" json) ~default:""
-                | Some "response.completed" -> (
-                    match field "response" json with
-                    | Some response ->
-                        let decoded = responses_response_of_json response in
-                        if decoded.responses_reasoning_text <> "" then decoded.responses_reasoning_text else reasoning
-                    | None -> reasoning)
-                | _ -> reasoning
-              in
-              let usage =
-                match kind with
-                | Some "response.completed" -> (
-                    match field "response" json with
-                    | Some response -> (responses_response_of_json response).responses_usage
-                    | None -> usage)
-                | _ -> usage
-              in
-              decode rest text reasoning usage (json :: raw_events)
+          | Error message -> Error message
+          | Ok json -> decode rest (responses_stream_event_of_json json :: acc)
   in
-  let text, reasoning, usage, raw_events =
-    feed Chatoyant_runtime.Sse.empty "" "" Chatoyant_tokens.Cost.empty_usage [] chunks
+  feed Chatoyant_runtime.Sse.empty [] chunks
+
+let transcription_stream_event_of_json json =
+  let event_type = string_field "type" json in
+  match event_type with
+  | Some "transcript.text.delta" ->
+      Transcription_text_delta
+        {
+          transcript_delta = Option.value (string_field "delta" json) ~default:"";
+          transcript_logprobs = field "logprobs" json;
+          transcript_raw = json;
+        }
+  | Some "transcript.text.done" ->
+      Transcription_text_done
+        {
+          transcript_text = Option.value (string_field "text" json) ~default:"";
+          transcript_logprobs = field "logprobs" json;
+          transcript_raw = json;
+        }
+  | Some "transcript.text.segment" ->
+      Transcription_text_segment
+        {
+          transcript_segment_id = string_field "id" json;
+          transcript_segment_start = float_field "start" json;
+          transcript_segment_end = float_field "end" json;
+          transcript_segment_text = string_field "text" json;
+          transcript_segment_speaker = string_field "speaker" json;
+          transcript_raw = json;
+        }
+  | Some "error" -> Transcription_error (api_error_of_json json)
+  | _ -> Transcription_raw_event { transcription_event_type = event_type; transcription_raw = json }
+
+let transcription_stream_events_of_chunks chunks =
+  let rec feed state acc = function
+    | [] ->
+        let events = Chatoyant_runtime.Sse.finish state in
+        decode (List.rev (List.rev_append events acc)) []
+    | chunk :: rest ->
+        let state, events = Chatoyant_runtime.Sse.feed state chunk in
+        feed state (List.rev_append events acc) rest
+  and decode sse_events acc =
+    match sse_events with
+    | [] -> Ok (List.rev acc)
+    | event :: rest ->
+        if Chatoyant_runtime.Sse.is_done event then decode rest acc
+        else
+          match Chatoyant_runtime.Json.parse (Chatoyant_runtime.Sse.data_string event) with
+          | Error message -> Error message
+          | Ok json -> decode rest (transcription_stream_event_of_json json :: acc)
   in
-  Ok
-    {
-      responses_id = None;
-      responses_model = None;
-      responses_status = Completed;
-      responses_output_text = text;
-      responses_reasoning_text = reasoning;
-      responses_usage = usage;
-      responses_raw = Chatoyant_runtime.Json.Array (List.rev raw_events);
-    }
+  feed Chatoyant_runtime.Sse.empty [] chunks
+
+let raw_event_of_response_event = function
+  | Response_created response
+  | Response_in_progress response
+  | Response_completed response
+  | Response_failed response
+  | Response_incomplete response ->
+      response.responses_raw
+  | Response_output_text_delta { item_id; output_index; content_index; delta } ->
+      [
+        ("type", string "response.output_text.delta");
+        ("delta", string delta);
+      ]
+      |> add_opt "item_id" string item_id
+      |> add_opt "output_index" int output_index
+      |> add_opt "content_index" int content_index
+      |> List.rev |> fun fields -> Chatoyant_runtime.Json.Object fields
+  | Response_output_text_done { item_id; output_index; content_index; text } ->
+      [
+        ("type", string "response.output_text.done");
+        ("text", string text);
+      ]
+      |> add_opt "item_id" string item_id
+      |> add_opt "output_index" int output_index
+      |> add_opt "content_index" int content_index
+      |> List.rev |> fun fields -> Chatoyant_runtime.Json.Object fields
+  | Response_reasoning_summary_text_delta { item_id; output_index; summary_index; delta } ->
+      [
+        ("type", string "response.reasoning_summary_text.delta");
+        ("delta", string delta);
+      ]
+      |> add_opt "item_id" string item_id
+      |> add_opt "output_index" int output_index
+      |> add_opt "summary_index" int summary_index
+      |> List.rev |> fun fields -> Chatoyant_runtime.Json.Object fields
+  | Response_function_call_arguments_delta { item_id; output_index; delta } ->
+      [
+        ("type", string "response.function_call_arguments.delta");
+        ("delta", string delta);
+      ]
+      |> add_opt "item_id" string item_id
+      |> add_opt "output_index" int output_index
+      |> List.rev |> fun fields -> Chatoyant_runtime.Json.Object fields
+  | Response_function_call_arguments_done { item_id; output_index; arguments } ->
+      [
+        ("type", string "response.function_call_arguments.done");
+        ("arguments", string arguments);
+      ]
+      |> add_opt "item_id" string item_id
+      |> add_opt "output_index" int output_index
+      |> List.rev |> fun fields -> Chatoyant_runtime.Json.Object fields
+  | Response_refusal_delta delta ->
+      Chatoyant_runtime.Json.Object
+        [ ("type", string "response.refusal.delta"); ("delta", string delta) ]
+  | Response_error error ->
+      Option.value error.error_raw ~default:Chatoyant_runtime.Json.Null
+  | Response_raw_event { raw; _ } -> raw
+
+let response_of_stream_chunks chunks =
+  match responses_stream_events_of_chunks chunks with
+  | Error _ as err -> err
+  | Ok events ->
+      let text, reasoning, usage, raw_events =
+        List.fold_left
+          (fun (text, reasoning, usage, raw_events) event ->
+            match event with
+            | Response_output_text_delta { delta; _ } ->
+                (text ^ delta, reasoning, usage, raw_event_of_response_event event :: raw_events)
+            | Response_output_text_done { text = done_text; _ } ->
+                (done_text, reasoning, usage, raw_event_of_response_event event :: raw_events)
+            | Response_reasoning_summary_text_delta { delta; _ } ->
+                (text, reasoning ^ delta, usage, raw_event_of_response_event event :: raw_events)
+            | Response_completed response ->
+                ( (if response.responses_output_text <> "" then response.responses_output_text else text),
+                  (if response.responses_reasoning_text <> "" then response.responses_reasoning_text
+                   else reasoning),
+                  response.responses_usage,
+                  response.responses_raw :: raw_events )
+            | Response_created response
+            | Response_in_progress response
+            | Response_failed response
+            | Response_incomplete response ->
+                (text, reasoning, usage, response.responses_raw :: raw_events)
+            | Response_raw_event { raw; _ } -> (text, reasoning, usage, raw :: raw_events)
+            | Response_function_call_arguments_delta _
+            | Response_function_call_arguments_done _
+            | Response_refusal_delta _
+            | Response_error _ ->
+                (text, reasoning, usage, raw_event_of_response_event event :: raw_events))
+          ("", "", Chatoyant_tokens.Cost.empty_usage, [])
+          events
+      in
+      Ok
+        {
+          responses_id = None;
+          responses_model = None;
+          responses_status = Completed;
+          responses_output_text = text;
+          responses_reasoning_text = reasoning;
+          responses_usage = usage;
+          responses_raw = Chatoyant_runtime.Json.Array (List.rev raw_events);
+        }
 
 let chat_response_of_stream_chunks chunks =
   let rec feed state acc = function
@@ -1579,15 +1873,24 @@ module Make_client (Http : Chatoyant_runtime.Effect.HTTP) = struct
     timeout_ms : int option;
   }
 
+  type admin_config = {
+    admin_api_key : string;
+    admin_base_url : string;
+    admin_timeout_ms : int option;
+  }
+
   let default_base_url = "https://api.openai.com/v1"
 
-  let endpoint config path =
+  let endpoint_of_base base_url path =
     let base =
-      if String.ends_with ~suffix:"/" config.base_url then
-        String.sub config.base_url 0 (String.length config.base_url - 1)
-      else config.base_url
+      if String.ends_with ~suffix:"/" base_url then
+        String.sub base_url 0 (String.length base_url - 1)
+      else base_url
     in
     base ^ path
+
+  let endpoint config path = endpoint_of_base config.base_url path
+  let admin_endpoint config path = endpoint_of_base config.admin_base_url path
 
   let request ?(method_ = "POST") config path body =
     let headers =
@@ -1603,6 +1906,15 @@ module Make_client (Http : Chatoyant_runtime.Effect.HTTP) = struct
       headers;
       body;
       timeout_ms = config.timeout_ms;
+    }
+
+  let admin_request ?(method_ = "GET") config path body =
+    {
+      Http.method_;
+      url = admin_endpoint config path;
+      headers = authorization_headers ~api_key:config.admin_api_key;
+      body;
+      timeout_ms = config.admin_timeout_ms;
     }
 
   let parse_response decode response =
@@ -1659,12 +1971,56 @@ module Make_client (Http : Chatoyant_runtime.Effect.HTTP) = struct
   let delete_response config ~response_id =
     send delete_response_of_json (request ~method_:"DELETE" config ("/responses/" ^ response_id) Empty)
 
+  let list_response_input_items config ~response_id =
+    send api_list_of_json
+      (request ~method_:"GET" config ("/responses/" ^ response_id ^ "/input_items") Empty)
+
+  let count_response_input_tokens config request_body =
+    send response_input_token_count_of_json
+      (request config "/responses/input_tokens"
+         (Json (response_input_token_count_request_json request_body)))
+
   let cancel_response config ~response_id =
     send responses_response_of_json (request config ("/responses/" ^ response_id ^ "/cancel") Empty)
 
   let compact_response config request_body =
     send responses_response_of_json
       (request config "/responses/compact" (Json (responses_request_json request_body)))
+
+  let create_conversation config body =
+    send api_object_of_json (request config "/conversations" (Json body))
+
+  let retrieve_conversation config ~conversation_id =
+    send api_object_of_json
+      (request ~method_:"GET" config ("/conversations/" ^ conversation_id) Empty)
+
+  let update_conversation config ~conversation_id body =
+    send api_object_of_json
+      (request config ("/conversations/" ^ conversation_id) (Json body))
+
+  let delete_conversation config ~conversation_id =
+    send api_delete_of_json
+      (request ~method_:"DELETE" config ("/conversations/" ^ conversation_id) Empty)
+
+  let create_conversation_items config ~conversation_id body =
+    send api_list_of_json
+      (request config ("/conversations/" ^ conversation_id ^ "/items") (Json body))
+
+  let retrieve_conversation_item config ~conversation_id ~item_id =
+    send api_object_of_json
+      (request ~method_:"GET" config
+         ("/conversations/" ^ conversation_id ^ "/items/" ^ item_id)
+         Empty)
+
+  let delete_conversation_item config ~conversation_id ~item_id =
+    send api_object_of_json
+      (request ~method_:"DELETE" config
+         ("/conversations/" ^ conversation_id ^ "/items/" ^ item_id)
+         Empty)
+
+  let list_conversation_items config ~conversation_id =
+    send api_list_of_json
+      (request ~method_:"GET" config ("/conversations/" ^ conversation_id ^ "/items") Empty)
 
   let create_chat config request_body =
     send chat_response_of_json (request config "/chat/completions" (Json (chat_request_json request_body)))
@@ -1982,6 +2338,128 @@ module Make_client (Http : Chatoyant_runtime.Effect.HTTP) = struct
 
   let retrieve_model config ~model_id =
     send model_of_json (request ~method_:"GET" config ("/models/" ^ model_id) Empty)
+
+  let create_eval config body =
+    send api_object_of_json (request config "/evals" (Json body))
+
+  let retrieve_eval config ~eval_id =
+    send api_object_of_json (request ~method_:"GET" config ("/evals/" ^ eval_id) Empty)
+
+  let update_eval config ~eval_id body =
+    send api_object_of_json (request ~method_:"POST" config ("/evals/" ^ eval_id) (Json body))
+
+  let list_evals config =
+    send api_list_of_json (request ~method_:"GET" config "/evals" Empty)
+
+  let delete_eval config ~eval_id =
+    send api_delete_of_json (request ~method_:"DELETE" config ("/evals/" ^ eval_id) Empty)
+
+  let create_eval_run config ~eval_id body =
+    send api_object_of_json (request config ("/evals/" ^ eval_id ^ "/runs") (Json body))
+
+  let retrieve_eval_run config ~eval_id ~run_id =
+    send api_object_of_json
+      (request ~method_:"GET" config ("/evals/" ^ eval_id ^ "/runs/" ^ run_id) Empty)
+
+  let list_eval_runs config ~eval_id =
+    send api_list_of_json (request ~method_:"GET" config ("/evals/" ^ eval_id ^ "/runs") Empty)
+
+  let cancel_eval_run config ~eval_id ~run_id =
+    send api_object_of_json
+      (request config ("/evals/" ^ eval_id ^ "/runs/" ^ run_id ^ "/cancel") Empty)
+
+  let delete_eval_run config ~eval_id ~run_id =
+    send api_delete_of_json
+      (request ~method_:"DELETE" config ("/evals/" ^ eval_id ^ "/runs/" ^ run_id) Empty)
+
+  let list_eval_run_output_items config ~eval_id ~run_id =
+    send api_list_of_json
+      (request ~method_:"GET" config
+         ("/evals/" ^ eval_id ^ "/runs/" ^ run_id ^ "/output_items")
+         Empty)
+
+  let create_container config body =
+    send api_object_of_json (request config "/containers" (Json body))
+
+  let retrieve_container config ~container_id =
+    send api_object_of_json
+      (request ~method_:"GET" config ("/containers/" ^ container_id) Empty)
+
+  let list_containers config =
+    send api_list_of_json (request ~method_:"GET" config "/containers" Empty)
+
+  let delete_container config ~container_id =
+    send api_delete_of_json
+      (request ~method_:"DELETE" config ("/containers/" ^ container_id) Empty)
+
+  let create_container_file config ~container_id body =
+    send api_object_of_json
+      (request config ("/containers/" ^ container_id ^ "/files") (Json body))
+
+  let list_container_files config ~container_id =
+    send api_list_of_json
+      (request ~method_:"GET" config ("/containers/" ^ container_id ^ "/files") Empty)
+
+  let retrieve_container_file config ~container_id ~file_id =
+    send api_object_of_json
+      (request ~method_:"GET" config
+         ("/containers/" ^ container_id ^ "/files/" ^ file_id)
+         Empty)
+
+  let delete_container_file config ~container_id ~file_id =
+    send api_delete_of_json
+      (request ~method_:"DELETE" config
+         ("/containers/" ^ container_id ^ "/files/" ^ file_id)
+         Empty)
+
+  let download_container_file config ~container_id ~file_id =
+    let request =
+      request ~method_:"GET" config
+        ("/containers/" ^ container_id ^ "/files/" ^ file_id ^ "/content")
+        Empty
+    in
+    match Http.send request with
+    | Error error -> Error (map_http_error error)
+    | Ok response when response.status < 200 || response.status >= 300 ->
+        (match Chatoyant_runtime.Json.parse response.body with
+        | Ok json -> Error (api_error_of_json json)
+        | Error _ ->
+            Error
+              {
+                error_type = Some "http_error";
+                error_message = "OpenAI HTTP " ^ string_of_int response.status ^ ": " ^ response.body;
+                error_code = None;
+                error_param = None;
+                error_raw = None;
+              })
+    | Ok response -> Ok response.body
+
+  let admin_get config ~path =
+    send api_object_of_json (admin_request config path Empty)
+
+  let admin_list config ~path =
+    send api_list_of_json (admin_request config path Empty)
+
+  let admin_post config ~path body =
+    send api_object_of_json (admin_request ~method_:"POST" config path (Json body))
+
+  let admin_patch config ~path body =
+    send api_object_of_json (admin_request ~method_:"PATCH" config path (Json body))
+
+  let admin_delete config ~path =
+    send api_delete_of_json (admin_request ~method_:"DELETE" config path Empty)
+
+  let list_admin_api_keys config =
+    admin_list config ~path:"/organization/admin_api_keys"
+
+  let create_admin_api_key config body =
+    admin_post config ~path:"/organization/admin_api_keys" body
+
+  let retrieve_admin_api_key config ~key_id =
+    admin_get config ~path:("/organization/admin_api_keys/" ^ key_id)
+
+  let delete_admin_api_key config ~key_id =
+    admin_delete config ~path:("/organization/admin_api_keys/" ^ key_id)
 end
 
 let openai_message_of_provider_message (message : Provider.message) =
@@ -2051,6 +2529,39 @@ let responses_input_items_of_provider_message (message : Provider.message) =
       in
       [ message_item role (match message.content with Some text -> string text | None -> Chatoyant_runtime.Json.Null) ]
 
+let provider_extra_fields (options : Provider.options) =
+  let fields =
+    match options.extra with
+    | Some (Chatoyant_runtime.Json.Object fields) -> fields
+    | _ -> []
+  in
+  let add name value fields =
+    if List.mem_assoc name fields then fields else (name, value) :: fields
+  in
+  fields
+  |> (fun fields ->
+       match options.frequency_penalty with
+       | None -> fields
+       | Some value -> add "frequency_penalty" (float value) fields)
+  |> (fun fields ->
+       match options.presence_penalty with
+       | None -> fields
+       | Some value -> add "presence_penalty" (float value) fields)
+  |> (fun fields ->
+       match options.stop with
+       | [] -> fields
+       | values -> add "stop" (Chatoyant_runtime.Json.Array (List.map string values)) fields)
+  |> fun fields ->
+  match options.web_search with
+  | Some true -> add "web_search" (bool true) fields
+  | Some false -> add "web_search" (bool false) fields
+  | None -> fields
+
+let provider_reasoning_json (options : Provider.options) =
+  Option.map
+    (fun effort -> Chatoyant_runtime.Json.Object [ ("effort", string effort) ])
+    options.reasoning_effort
+
 module Make_provider
     (Http : Chatoyant_runtime.Effect.HTTP)
     (Config : sig
@@ -2075,19 +2586,16 @@ struct
         responses_store = Some false;
         responses_stream = false;
         responses_temperature = options.temperature;
-        responses_top_p = None;
+        responses_top_p = options.top_p;
         responses_max_output_tokens = options.max_tokens;
-        responses_reasoning = None;
+        responses_reasoning = provider_reasoning_json options;
         responses_tools = List.map responses_tool_of_provider_tool options.tools;
         responses_tool_choice = Option.map (fun name -> Function_tool name) options.tool_choice;
         responses_text_format = None;
         responses_parallel_tool_calls = None;
         responses_truncation = None;
         responses_metadata = [];
-        responses_extra =
-          (match options.extra with
-          | Some (Chatoyant_runtime.Json.Object fields) -> fields
-          | _ -> []);
+        responses_extra = provider_extra_fields options;
       }
     in
     let config =

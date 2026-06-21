@@ -39,6 +39,28 @@ type model_count = {
   model_count_raw : Chatoyant_runtime.Json.t;
 }
 
+type model_endpoint = {
+  model_endpoint_name : string option;
+  model_endpoint_provider_name : string option;
+  model_endpoint_context_length : int option;
+  model_endpoint_max_completion_tokens : int option;
+  model_endpoint_quantization : string option;
+  model_endpoint_status : string option;
+  model_endpoint_supported_parameters : string list;
+  model_endpoint_pricing : Chatoyant_runtime.Json.t option;
+  model_endpoint_raw : Chatoyant_runtime.Json.t;
+}
+
+type model_endpoint_list = {
+  model_endpoint_model_id : string option;
+  model_endpoint_model_name : string option;
+  model_endpoint_model_description : string option;
+  model_endpoint_model_created : int option;
+  model_endpoint_model_architecture : Chatoyant_runtime.Json.t option;
+  model_endpoints : model_endpoint list;
+  model_endpoint_list_raw : Chatoyant_runtime.Json.t;
+}
+
 type rerank_document =
   | Rerank_text of string
   | Rerank_object of Chatoyant_runtime.Json.t
@@ -116,6 +138,23 @@ type video_model_list = {
   video_models_raw : Chatoyant_runtime.Json.t;
 }
 
+type management_resource = {
+  management_id : string option;
+  management_name : string option;
+  management_raw : Chatoyant_runtime.Json.t;
+}
+
+type management_list = {
+  management_data : management_resource list;
+  management_raw : Chatoyant_runtime.Json.t;
+}
+
+type management_delete = {
+  management_delete_id : string option;
+  management_deleted : bool;
+  management_delete_raw : Chatoyant_runtime.Json.t;
+}
+
 val base_url : string
 val chat_request_json : request -> Chatoyant_runtime.Json.t
 val rerank_request_json : rerank_request -> Chatoyant_runtime.Json.t
@@ -127,9 +166,13 @@ val credits_of_json : Chatoyant_runtime.Json.t -> credits
 val provider_list_of_json : Chatoyant_runtime.Json.t -> provider_list
 val generation_of_json : Chatoyant_runtime.Json.t -> generation
 val model_count_of_json : Chatoyant_runtime.Json.t -> model_count
+val model_endpoint_list_of_json : Chatoyant_runtime.Json.t -> model_endpoint_list
 val rerank_response_of_json : Chatoyant_runtime.Json.t -> rerank_response
 val video_job_of_json : Chatoyant_runtime.Json.t -> video_job
 val video_model_list_of_json : Chatoyant_runtime.Json.t -> video_model_list
+val management_resource_of_json : Chatoyant_runtime.Json.t -> management_resource
+val management_list_of_json : Chatoyant_runtime.Json.t -> management_list
+val management_delete_of_json : Chatoyant_runtime.Json.t -> management_delete
 
 module Make_client (Http : Chatoyant_runtime.Effect.HTTP) : sig
   type config = {
@@ -140,12 +183,22 @@ module Make_client (Http : Chatoyant_runtime.Effect.HTTP) : sig
     headers : (string * string) list;
   }
 
+  type management_config = {
+    management_api_key : string;
+    management_base_url : string;
+    management_timeout_ms : int option;
+  }
+
   val create_chat : config -> request -> (response, Openai.api_error) result
   val create_response : config -> responses_request -> (responses_response, Openai.api_error) result
   val list_models : config -> (Openai.model_list, Openai.api_error) result
   val list_user_models : config -> (Openai.model_list, Openai.api_error) result
   val count_models : ?output_modalities:string -> config -> (model_count, Openai.api_error) result
   val retrieve_model : config -> model_id:string -> (Openai.model, Openai.api_error) result
+  val list_model_endpoints :
+    config -> author:string -> slug:string -> (model_endpoint_list, Openai.api_error) result
+  val list_model_endpoints_by_id :
+    config -> model_id:string -> (model_endpoint_list, Openai.api_error) result
   val get_credits : config -> (credits, Openai.api_error) result
   val list_providers : config -> (provider_list, Openai.api_error) result
   val retrieve_generation : config -> generation_id:string -> (generation, Openai.api_error) result
@@ -154,6 +207,45 @@ module Make_client (Http : Chatoyant_runtime.Effect.HTTP) : sig
   val get_video : config -> job_id:string -> (video_job, Openai.api_error) result
   val download_video : ?index:int -> config -> job_id:string -> (string, Openai.api_error) result
   val list_video_models : config -> (video_model_list, Openai.api_error) result
+  val default_management_base_url : string
+  val management_get :
+    management_config -> path:string -> (management_resource, Openai.api_error) result
+  val management_list :
+    management_config -> path:string -> (management_list, Openai.api_error) result
+  val management_post :
+    management_config ->
+    path:string ->
+    Chatoyant_runtime.Json.t ->
+    (management_resource, Openai.api_error) result
+  val management_patch :
+    management_config ->
+    path:string ->
+    Chatoyant_runtime.Json.t ->
+    (management_resource, Openai.api_error) result
+  val management_delete :
+    management_config -> path:string -> (management_delete, Openai.api_error) result
+  val list_keys : management_config -> (management_list, Openai.api_error) result
+  val get_current_key : management_config -> (management_resource, Openai.api_error) result
+  val create_key :
+    management_config -> Chatoyant_runtime.Json.t -> (management_resource, Openai.api_error) result
+  val update_key :
+    management_config ->
+    key_hash:string ->
+    Chatoyant_runtime.Json.t ->
+    (management_resource, Openai.api_error) result
+  val delete_key : management_config -> key_hash:string -> (management_delete, Openai.api_error) result
+  val list_guardrails : management_config -> (management_list, Openai.api_error) result
+  val create_guardrail :
+    management_config -> Chatoyant_runtime.Json.t -> (management_resource, Openai.api_error) result
+  val get_guardrail :
+    management_config -> guardrail_id:string -> (management_resource, Openai.api_error) result
+  val update_guardrail :
+    management_config ->
+    guardrail_id:string ->
+    Chatoyant_runtime.Json.t ->
+    (management_resource, Openai.api_error) result
+  val delete_guardrail :
+    management_config -> guardrail_id:string -> (management_delete, Openai.api_error) result
 end
 
 module Make_provider
