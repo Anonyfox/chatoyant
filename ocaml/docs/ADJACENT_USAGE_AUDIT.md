@@ -276,33 +276,21 @@ Required parity:
   downstream migrates.
 - `calculateVideoCost` is used by Cosmolytic's xAI video generator.
 
-## Test Buckets To Build
+## Regression Coverage
 
-The first executable bucket is `test/node_adjacent_usage_patterns.mjs`. It
-currently covers root `Chat`, `Message`, `Tool`, `createTool`, `genText`, JS
-callback tool loops, persisted tool-call/result message shapes, `fork`, JSON
-roundtrip, and SSE streaming.
+The adjacent usage map is executable now:
 
-Remaining buckets:
-
-1. `usage-root-chat.test.mjs`
-   - `new Chat`, fluent messages, `generate`, `stream`, `lastResult`,
-     `toJSON/fromJSON`, `fork`.
-
-2. `usage-schema-gendata.test.mjs`
-   - class-based schema fields, nested object/array/enum, `Schema.toObject`,
-     `genData`, `Chat.generateData`.
-
-3. `usage-tools.test.mjs`
-   - `createTool`, schema constructors and raw `{}` parameters, JS callbacks,
-     `maxIterations`, persisted tool-call/tool-result messages.
-
-4. `usage-provider-subpaths.test.mjs`
-   - OpenAI/OpenRouter client factories, model list helpers, provider detection.
-
-5. `usage-tokens.test.mjs`
-   - `chatoyant/tokens` and legacy `chatoyant/dist/tokens` imports.
-
-6. `usage-real-smokes.test.mjs` (opt-in)
-   - one low-cost live call per provider through the exact active downstream
-     patterns.
+- `test/node_adjacent_usage_patterns.mjs` covers root `Chat`, `Message`,
+  `Tool`, `createTool`, `genText`, JS callback tool loops, persisted
+  tool-call/result message shapes, `fork`, JSON roundtrip, and SSE streaming.
+- `test/js/root-surface.test.mjs` snapshots the curated root-only export list
+  so subpath-era helpers do not disappear or leak accidentally.
+- `test/js/schema-tool.test.mjs` covers class-based schema fields, nested
+  object/array/enum shapes, `Schema.toObject`, `createTool`, validation, and
+  structured tool metadata.
+- `test/js/chat-provider.test.mjs` covers the npm-facing `Chat` class,
+  provider-backed generation, streaming, state inspection, and JSON restore.
+- `test/typed/usage_patterns.ts` is compiled by `tsc` against `dist/index.d.ts`
+  so known downstream TypeScript shapes keep receiving declaration feedback.
+- Provider real smokes stay opt-in through `*_API_KEY` environment variables;
+  local inference smoke uses `LOCAL_BASE_URL` and `LOCAL_MODEL`.

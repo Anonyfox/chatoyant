@@ -1,8 +1,8 @@
 # Provider Feature Matrix
 
 This file is the current-docs target for raw provider parity. It is intentionally
-more exhaustive than `PARITY.md`: every row should eventually be either
-implemented, intentionally opt-in, or intentionally outside the SDK surface.
+more exhaustive than `PARITY.md`: every row is implemented, intentionally
+opt-in, or intentionally outside the SDK surface.
 
 Sources reread on 2026-06-21:
 

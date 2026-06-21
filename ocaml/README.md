@@ -1,9 +1,9 @@
 # Chatoyant
 
 OCaml-first LLM SDK with an Eio native runtime and a Melange-generated npm
-package. This directory is the parallel rewrite of the existing Chatoyant
-package; the production TypeScript implementation at the repository root
-remains untouched until parity is proven.
+package. This directory is the publishable OCaml implementation and npm package
+root; the production TypeScript implementation at the repository root remains
+available as comparison material until the final repository swap.
 
 ## Highlights
 

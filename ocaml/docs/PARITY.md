@@ -1,7 +1,7 @@
 # Parity Map
 
-This file tracks the current TypeScript surface and the planned OCaml parity
-target. Each area should eventually be classified as:
+This file tracks the current TypeScript surface against the OCaml replacement
+target. Each area is classified as:
 
 - `parity`: behavior intentionally matches TypeScript.
 - `updated`: behavior intentionally follows newer official provider docs.

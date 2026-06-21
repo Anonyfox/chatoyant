@@ -111,9 +111,9 @@ The OCaml implementation should be organized around explicit layers:
 - `npm test` must exercise the bundled npm package with Node's native test
   runner and TypeScript checks, including production-derived usage patterns and
   the pinned official JSON Schema suite.
-- The package root in this directory is the simulated future package root:
+- The package root in this directory is treated as publishable now:
   `README.md`, `LICENSE`, opam metadata, npm metadata, docs, and publish dry-run
-  contents should be polished here without disturbing the old package root.
+  contents are maintained here without disturbing the old package root.
 - The generated JavaScript must preserve good developer experience:
   ergonomic imports, useful errors, no operational clutter, and no hidden
   runtime dependencies unless deliberately introduced.

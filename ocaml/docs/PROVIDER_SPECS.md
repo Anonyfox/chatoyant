@@ -92,8 +92,6 @@ Audit notes:
   decoded incrementally without pretending every chunk is complete JSON.
 - Extended thinking, cache control, server tools, and content block variants
   need closed typed representations plus unknown-block fallback.
-- Initial OCaml scaffold includes Messages request body construction for text,
-  tool use, tool result, tools, thinking, system prompt, and sampling fields.
 - Anthropic is the first end-to-end provider mirror:
   - typed Messages request construction, including tools, tool choice, thinking,
     stop sequences, metadata, top-p/top-k, beta headers through client config,
