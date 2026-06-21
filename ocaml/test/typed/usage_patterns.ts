@@ -32,6 +32,7 @@ import {
   type GenerateWithToolsOptions,
   type InferSchemaInput,
   type ProviderId,
+  type VideoPollingOptions,
 } from "chatoyant";
 
 function assertType<T>(_value: T): void {}
@@ -103,6 +104,9 @@ const richGenerationOptions: GenerateWithToolsOptions = {
   requestOptions: { custom: true },
 };
 assertType<GenerateWithToolsOptions>(richGenerationOptions);
+
+const videoPollingOptions: VideoPollingOptions = { pollIntervalMs: 0, maxAttempts: 2 };
+assertType<VideoPollingOptions>(videoPollingOptions);
 
 const dataPromise = chat.generateData(SearchArgs, { __chatoyantTestFake: true });
 assertType<Promise<SearchArgsType>>(dataPromise);
@@ -184,7 +188,7 @@ assertType<Promise<string>>(XAI.editImageUrl("image.png", "sketch", { apiKey: "t
 assertType<Promise<unknown>>(XAI.editMultipleImages(["a.png", "b.png"], "merge", { apiKey: "test" }));
 assertType<Promise<unknown>>(XAI.startVideoGeneration("scene", { apiKey: "test", duration: 10 }));
 assertType<Promise<unknown>>(XAI.getVideoStatus("video_1", { apiKey: "test" }));
-assertType<Promise<string>>(XAI.generateVideoUrl("scene", { apiKey: "test", duration: 5 }));
+assertType<Promise<string>>(XAI.generateVideoUrl("scene", { apiKey: "test", duration: 5 }, videoPollingOptions));
 assertType<Promise<unknown>>(Providers.create("openai", { model: "gpt-4o" }).chat([{ role: "user", content: "hi" }]));
 assertType<typeof Providers.XAI.Client>(Chatoyant.Providers.XAI.Client);
 assertType<typeof Providers.OpenRouter.create>(Chatoyant.OpenRouter.create);

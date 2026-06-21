@@ -349,6 +349,15 @@ export interface GenerationOptions {
   aspect_ratio?: string;
   resolution?: string;
   duration?: number;
+  image?: unknown;
+  imageUrl?: string;
+  image_url?: string;
+  video?: unknown;
+  videoUrl?: string;
+  video_url?: string;
+  poll?: boolean;
+  pollIntervalMs?: number;
+  maxAttempts?: number;
   responseFormat?: string;
   response_format?: string;
   requestOptions?: Record<string, unknown>;
@@ -366,6 +375,16 @@ export type GenerateWithToolsOptions = GenerationOptions;
 /** Constructor config for `Chat` and provider clients. */
 export interface ChatConfig extends GenerationOptions {
   defaults?: GenerationOptions;
+}
+
+/** Polling controls for asynchronous media generation helpers. */
+export interface VideoPollingOptions {
+  /** Set false to return the initial provider job instead of polling. */
+  poll?: boolean;
+  /** Delay between status checks. Defaults to 2000 ms. */
+  pollIntervalMs?: number;
+  /** Maximum number of status checks before timing out. Defaults to 60. */
+  maxAttempts?: number;
 }
 
 /** Runtime context passed to tool callbacks. */
@@ -658,9 +677,9 @@ export interface ProviderClient {
   editMultipleImages(images: unknown[], prompt: string, options?: GenerationOptions): Promise<unknown>;
   startVideoGeneration(prompt: string, options?: GenerationOptions): Promise<unknown>;
   getVideoStatus(id: string, options?: GenerationOptions): Promise<unknown>;
-  generateVideo(prompt: string, options?: GenerationOptions): Promise<unknown>;
-  generateVideoUrl(prompt: string, options?: GenerationOptions): Promise<string>;
-  generateVideoFromImage(image: unknown, prompt: string, options?: GenerationOptions): Promise<unknown>;
+  generateVideo(prompt: string, options?: GenerationOptions, pollingOptions?: VideoPollingOptions): Promise<unknown>;
+  generateVideoUrl(prompt: string, options?: GenerationOptions, pollingOptions?: VideoPollingOptions): Promise<string>;
+  generateVideoFromImage(image: unknown, prompt: string, options?: GenerationOptions, pollingOptions?: VideoPollingOptions): Promise<unknown>;
   editVideo(video: unknown, prompt: string, options?: GenerationOptions): Promise<unknown>;
 }
 
@@ -825,9 +844,9 @@ export interface XAINamespace extends ProviderFunctionNamespace {
   editMultipleImages(images: unknown[], prompt: string, options?: GenerationOptions): Promise<unknown>;
   startVideoGeneration(prompt: string, options?: GenerationOptions): Promise<unknown>;
   getVideoStatus(id: string, options?: GenerationOptions): Promise<unknown>;
-  generateVideo(prompt: string, options?: GenerationOptions): Promise<unknown>;
-  generateVideoUrl(prompt: string, options?: GenerationOptions): Promise<string>;
-  generateVideoFromImage(image: unknown, prompt: string, options?: GenerationOptions): Promise<unknown>;
+  generateVideo(prompt: string, options?: GenerationOptions, pollingOptions?: VideoPollingOptions): Promise<unknown>;
+  generateVideoUrl(prompt: string, options?: GenerationOptions, pollingOptions?: VideoPollingOptions): Promise<string>;
+  generateVideoFromImage(image: unknown, prompt: string, options?: GenerationOptions, pollingOptions?: VideoPollingOptions): Promise<unknown>;
   editVideo(video: unknown, prompt: string, options?: GenerationOptions): Promise<unknown>;
   listLanguageModels(options?: GenerationOptions): Promise<unknown>;
   listImageGenerationModels(options?: GenerationOptions): Promise<unknown>;

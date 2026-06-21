@@ -230,6 +230,10 @@ const url = await XAI.generateVideoUrl("Ocean waves at sunrise", {
 });
 ```
 
+`generateVideo`, `generateVideoUrl`, and `generateVideoFromImage` poll status
+automatically by default. Use `startVideoGeneration` plus `getVideoStatus` when
+you want to manage a long-running job yourself.
+
 Media cost helpers live in the root token surface:
 
 ```ts

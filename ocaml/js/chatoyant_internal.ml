@@ -1300,6 +1300,10 @@ async function providerStartVideoGeneration(provider, prompt, options = {}) {
     json: {
       model: options.model || options.defaultVideoModel || "grok-imagine-video",
       prompt,
+      image: options.image,
+      image_url: options.imageUrl || options.image_url,
+      video: options.video,
+      video_url: options.videoUrl || options.video_url,
       duration: options.duration,
       aspect_ratio: options.aspectRatio || options.aspect_ratio,
       resolution: options.resolution,
@@ -1312,13 +1316,51 @@ async function providerGetVideoStatus(provider, id, options = {}) {
   return providerRequestGet(provider, `/video/generations/${encodeURIComponent(id)}`, options);
 }
 
-async function providerGenerateVideo(provider, prompt, options = {}) {
-  return providerStartVideoGeneration(provider, prompt, options);
+function videoRequestId(json) {
+  return json?.requestId || json?.request_id || json?.id;
 }
 
-async function providerGenerateVideoUrl(provider, prompt, options = {}) {
-  const json = await providerGenerateVideo(provider, prompt, options);
-  return json?.url || json?.data?.[0]?.url || "";
+function videoIsDone(json) {
+  const status = String(json?.status || "").toLowerCase();
+  return status === "done" || status === "completed" || status === "succeeded" || Boolean(json?.url || json?.video?.url);
+}
+
+function videoIsFailed(json) {
+  const status = String(json?.status || "").toLowerCase();
+  return status === "failed" || status === "error" || status === "cancelled" || status === "canceled";
+}
+
+function videoUrl(json) {
+  return json?.url || json?.video?.url || json?.data?.[0]?.url || "";
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function providerGenerateVideo(provider, prompt, options = {}, pollingOptions = {}) {
+  const started = await providerStartVideoGeneration(provider, prompt, options);
+  if (videoIsDone(started) || options.poll === false || pollingOptions.poll === false) return started;
+
+  const requestId = videoRequestId(started);
+  if (!requestId) return started;
+
+  const maxAttempts = pollingOptions.maxAttempts ?? options.maxAttempts ?? 60;
+  const pollIntervalMs = pollingOptions.pollIntervalMs ?? options.pollIntervalMs ?? 2000;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const status = await providerGetVideoStatus(provider, requestId, options);
+    if (videoIsDone(status)) return status;
+    if (videoIsFailed(status)) {
+      throw new ProviderError(status?.error?.message || status?.message || `Video generation failed: ${status.status}`, provider);
+    }
+    if (attempt + 1 < maxAttempts) await sleep(pollIntervalMs);
+  }
+  throw new ProviderError(`Video generation timed out after ${maxAttempts} polling attempts`, provider);
+}
+
+async function providerGenerateVideoUrl(provider, prompt, options = {}, pollingOptions = {}) {
+  const json = await providerGenerateVideo(provider, prompt, options, pollingOptions);
+  return videoUrl(json);
 }
 
 function makeOpenAIStrict(schema) {
@@ -1741,9 +1783,9 @@ class Chat {
 
   _resolvePreset(model, provider = "openai") {
     const presets = {
-      openai: { fast: "gpt-4o-mini", cheap: "gpt-4o-mini", best: "gpt-4o", balanced: "gpt-4o", reasoning: "o4-mini" },
-      anthropic: { fast: "claude-haiku-4-5-20251001", cheap: "claude-haiku-4-5-20251001", best: "claude-sonnet-4-6", balanced: "claude-sonnet-4-6", reasoning: "claude-sonnet-4-6" },
-      xai: { fast: "grok-4-1-fast-non-reasoning", cheap: "grok-4-1-fast-non-reasoning", best: "grok-4", balanced: "grok-4", reasoning: "grok-4" },
+      openai: { fast: "gpt-4o-mini", cheap: "gpt-5.4-mini", best: "gpt-5.4", balanced: "gpt-5.4-mini", reasoning: "gpt-5.4-pro" },
+      anthropic: { fast: "claude-haiku-4-5", cheap: "claude-haiku-4-5", best: "claude-opus-4-6", balanced: "claude-sonnet-4-6", reasoning: "claude-opus-4-6" },
+      xai: { fast: "grok-4-1-fast-non-reasoning", cheap: "grok-4-1-fast-non-reasoning", best: "grok-4.20-0309-reasoning", balanced: "grok-4-1-fast-reasoning", reasoning: "grok-4.20-0309-reasoning" },
     };
     return presets[provider]?.[model] || presets.openai[model] || model;
   }
@@ -2567,26 +2609,16 @@ function makeProviderClientClass(provider) {
       return providerGetVideoStatus(provider, id, { ...this.getRequestOptions(), ...options });
     }
 
-    async generateVideo(prompt, options = {}) {
-      return providerGenerateVideo(provider, prompt, { ...this.getVideoOptions(options), ...options });
+    async generateVideo(prompt, options = {}, pollingOptions = {}) {
+      return providerGenerateVideo(provider, prompt, { ...this.getVideoOptions(options), ...options }, pollingOptions);
     }
 
-    async generateVideoUrl(prompt, options = {}) {
-      return providerGenerateVideoUrl(provider, prompt, { ...this.getVideoOptions(options), ...options });
+    async generateVideoUrl(prompt, options = {}, pollingOptions = {}) {
+      return providerGenerateVideoUrl(provider, prompt, { ...this.getVideoOptions(options), ...options }, pollingOptions);
     }
 
-    async generateVideoFromImage(image, prompt, options = {}) {
-      return providerRequest(provider, "/video/generations", {
-        ...this.getVideoOptions(options),
-        json: {
-          image,
-          prompt,
-          duration: options.duration,
-          aspect_ratio: options.aspectRatio || options.aspect_ratio,
-          resolution: options.resolution,
-          ...options.requestOptions,
-        },
-      });
+    async generateVideoFromImage(image, prompt, options = {}, pollingOptions = {}) {
+      return this.generateVideo(prompt, { ...options, image }, pollingOptions);
     }
 
     async editVideo(video, prompt, options = {}) {
@@ -2773,9 +2805,9 @@ Object.freeze({
   editMultipleImages: (images, prompt, options = {}) => createXAIClient(options).editMultipleImages(images, prompt, options),
   startVideoGeneration: (prompt, options = {}) => providerStartVideoGeneration("xai", prompt, options),
   getVideoStatus: (id, options = {}) => providerGetVideoStatus("xai", id, options),
-  generateVideo: (prompt, options = {}) => providerGenerateVideo("xai", prompt, options),
-  generateVideoUrl: (prompt, options = {}) => providerGenerateVideoUrl("xai", prompt, options),
-  generateVideoFromImage: (image, prompt, options = {}) => createXAIClient(options).generateVideoFromImage(image, prompt, options),
+  generateVideo: (prompt, options = {}, pollingOptions = {}) => providerGenerateVideo("xai", prompt, options, pollingOptions),
+  generateVideoUrl: (prompt, options = {}, pollingOptions = {}) => providerGenerateVideoUrl("xai", prompt, options, pollingOptions),
+  generateVideoFromImage: (image, prompt, options = {}, pollingOptions = {}) => createXAIClient(options).generateVideoFromImage(image, prompt, options, pollingOptions),
   editVideo: (video, prompt, options = {}) => createXAIClient(options).editVideo(video, prompt, options),
   listModels: (options = {}) => providerListModels("xai", options),
   listLanguageModels: (options = {}) => providerListModels("xai", options),

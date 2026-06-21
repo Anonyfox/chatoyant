@@ -61,6 +61,11 @@ describe("publish package surface", () => {
       if (previous === undefined) delete process.env.LOCAL_BASE_URL;
       else process.env.LOCAL_BASE_URL = previous;
     }
+
+    assert.equal(new Chat({ model: "best" }).model, "gpt-5.4");
+    assert.equal(new Chat({ model: "cheap" }).model, "gpt-5.4-mini");
+    assert.equal(new Chat({ model: "balanced", provider: "anthropic" }).model, "claude-sonnet-4-6");
+    assert.equal(new Chat({ model: "balanced", provider: "xai" }).model, "grok-4-1-fast-reasoning");
   });
 
   it("resolves one-shot provider presets before sending provider requests", async () => {
@@ -69,7 +74,7 @@ describe("publish package surface", () => {
       assert.equal(String(url), "https://api.anthropic.com/v1/messages");
       assert.equal(init.headers["x-api-key"], "anthropic-key");
       const body = JSON.parse(init.body);
-      assert.equal(body.model, "claude-haiku-4-5-20251001");
+      assert.equal(body.model, "claude-haiku-4-5");
       assert.equal(body.temperature, 0);
       assert.equal(body.top_p, 0.9);
       assert.deepEqual(body.stop_sequences, ["END"]);
@@ -181,7 +186,7 @@ describe("publish package surface", () => {
         });
       }
       if (String(url).endsWith("/video/generations")) {
-        return new Response(JSON.stringify({ id: "video_1", url: "https://example.com/video.mp4" }), {
+        return new Response(JSON.stringify({ id: "video_1", status: "pending" }), {
           headers: { "content-type": "application/json" },
         });
       }
@@ -211,7 +216,7 @@ describe("publish package surface", () => {
           duration: 10,
           aspectRatio: "16:9",
           resolution: "720p",
-        }),
+        }, { pollIntervalMs: 0, maxAttempts: 2 }),
         "https://example.com/video.mp4",
       );
       assert.equal((await XAI.getVideoStatus("video_1", { apiKey: "xai-key" })).status, "done");
@@ -225,6 +230,7 @@ describe("publish package surface", () => {
     assert.equal(seen[1].body.resolution, "1024x1024");
     assert.equal(seen[2].body.duration, 10);
     assert.equal(seen[2].body.aspect_ratio, "16:9");
+    assert.equal(seen[3].url, "https://api.x.ai/v1/video/generations/video_1");
     assert.equal(calculateImageCost({ model: "grok-imagine-image", count: 4 }), 0.08);
   });
 
