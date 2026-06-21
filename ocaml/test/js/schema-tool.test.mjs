@@ -27,6 +27,10 @@ describe("Schema and JsonSchema", () => {
     assert.equal(Schema.validate(SearchArgs, { q: "hello", limit: 100 }), false);
     assert.equal(Schema.validate(SearchArgs, { q: "hello", extra: true }), false);
     assert.deepEqual(Schema.parse(SearchArgs, { q: "hello", tags: ["a"] }), { q: "hello", tags: ["a"] });
+
+    const instance = Schema.create(SearchArgs);
+    assert.equal(Schema.parse(instance, { q: "legacy", limit: 2 }), instance);
+    assert.deepEqual(Schema.toObject(instance), { q: "legacy", limit: 2 });
   });
 
   it("validates raw schemas and reports detailed errors", () => {

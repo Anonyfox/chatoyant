@@ -1,14 +1,23 @@
 import assert from "node:assert/strict";
+import { createRequire } from "node:module";
 import { describe, it } from "node:test";
 import {
   Chat,
   Chatoyant,
   Message,
   OpenAI,
+  ProviderError,
   Providers,
   Schema,
+  Tokens,
   Tool,
+  XAI,
+  calculateCost,
+  calculateVideoCost,
   createTool,
+  detectProviderByModel,
+  estimateTokens,
+  getModelsForProvider,
   genText,
 } from "chatoyant";
 
@@ -123,5 +132,58 @@ describe("known adjacent production usage patterns", () => {
     assert.equal(await direct.chatSimple([Message.user("hi")]), "fake js");
     assert.equal(await viaProviders.chatSimple([Message.user("hi")]), "fake js");
     assert.equal(await viaAggregate.chatSimple([Message.user("hi")]), "fake js");
+  });
+
+  it("moves former token and provider detection subpaths to the root cleanly", () => {
+    assert.equal(estimateTokens("hello world") > 0, true);
+    assert.equal(Tokens.estimateTokens, estimateTokens);
+    assert.equal(calculateCost({ model: "gpt-4o", inputTokens: 1000, outputTokens: 500 }).total > 0, true);
+    assert.equal(calculateVideoCost({ model: "grok-imagine-video", durationSeconds: 15 }), 0.75);
+    assert.equal(Tokens.calculateVideoCost({ model: "grok-imagine-video", durationSeconds: 2 }), 0.1);
+
+    assert.equal(detectProviderByModel("gpt-4o"), "openai");
+    assert.equal(detectProviderByModel("anthropic/claude-sonnet-4-6"), "openrouter");
+    assert.equal(getModelsForProvider("openai").includes("gpt-4o"), true);
+    assert.equal(Providers.getModelsForProvider("xai").includes("grok-4"), true);
+    assert.equal(ProviderError.missingApiKey("openai") instanceof ProviderError, true);
+  });
+
+  it("supports provider namespace replacements for old provider subpath helpers", async () => {
+    const originalFetch = globalThis.fetch;
+    const seen = [];
+    globalThis.fetch = async (url, init = {}) => {
+      seen.push({ url: String(url), init });
+      if (String(url).endsWith("/models")) {
+        return new Response(JSON.stringify({ data: [{ id: "test-model-a" }, { id: "test-model-b" }] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    };
+
+    try {
+      assert.deepEqual(await OpenAI.listModelIds({ apiKey: "openai-key" }), ["test-model-a", "test-model-b"]);
+      assert.deepEqual((await XAI.getLanguageModelList({ apiKey: "xai-key" })).map((m) => m.id), [
+        "test-model-a",
+        "test-model-b",
+      ]);
+      const response = await OpenAI.requestRaw("/models", { apiKey: "openai-key" });
+      assert.equal(response instanceof Response, true);
+      assert.equal(seen.some((call) => call.init.headers.Authorization === "Bearer openai-key"), true);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("keeps the root package require-able for CJS consumers", () => {
+    const require = createRequire(import.meta.url);
+    const pkg = require("../../dist/index.cjs");
+    assert.equal(typeof pkg.Chat, "function");
+    assert.equal(typeof pkg.estimateTokens, "function");
+    assert.equal(typeof pkg.OpenAI.listModelIds, "function");
   });
 });

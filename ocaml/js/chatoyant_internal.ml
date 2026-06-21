@@ -319,9 +319,23 @@ class Message {
   isUser() { return this.role === "user"; }
   isAssistant() { return this.role === "assistant"; }
   isTool() { return this.role === "tool"; }
+  hasToolCalls() { return Array.isArray(this.toolCalls) && this.toolCalls.length > 0; }
 }
 |}]
   [@@mel.as "Message"]
+
+let schema_error : js_function =
+  [%mel.raw
+    {|
+class SchemaError extends Error {
+  constructor(message, details) {
+    super(message);
+    this.name = "SchemaError";
+    this.details = details;
+  }
+}
+|}]
+  [@@mel.as "SchemaError"]
 
 let json_schema_class : js_function =
   [%mel.raw
@@ -404,7 +418,13 @@ class Schema {
     const detailed = Schema.validateDetailed(schemaLike, data, options);
     if (!detailed.valid) {
       const first = detailed.errors?.[0];
-      throw new TypeError(first?.message || "JSON value does not match schema");
+      throw new SchemaError(first?.message || "JSON value does not match schema", detailed.errors || []);
+    }
+    if (schemaLike instanceof Schema && data && typeof data === "object" && !Array.isArray(data)) {
+      for (const [key, value] of Object.entries(data)) {
+        schemaLike[key] = value;
+      }
+      return schemaLike;
     }
     return data;
   }
@@ -429,7 +449,7 @@ class Schema {
     if (value instanceof Schema) {
       const out = {};
       for (const [key, field] of Object.entries(value)) {
-        if (typeof field !== "function") out[key] = field;
+        if (typeof field !== "function" && !Schema._isField(field)) out[key] = field;
       }
       return out;
     }
@@ -629,6 +649,884 @@ let create_tool : js_function =
 let merge_options : js_function =
   [%mel.raw {| function mergeOptions(defaults = {}, overrides = {}) { return { ...(defaults || {}), ...(overrides || {}) }; } |}]
   [@@mel.as "mergeOptions"]
+
+let provider_error : js_function =
+  [%mel.raw
+    {|
+class ProviderError extends Error {
+  constructor(message, providerId, envKey) {
+    super(message);
+    this.name = "ProviderError";
+    this.providerId = providerId;
+    this.envKey = envKey;
+  }
+
+  static missingApiKey(providerId) {
+    if (providerId === "local") {
+      return new ProviderError("Local provider is not active (missing LOCAL_BASE_URL environment variable)", "local", "LOCAL_BASE_URL");
+    }
+    const meta = PROVIDERS[providerId];
+    const envInfo = meta?.envKeyLegacy ? `${meta.envKey} (or legacy ${meta.envKeyLegacy})` : meta?.envKey;
+    return new ProviderError(`${meta?.name || providerId} is not active (missing ${envInfo} environment variable)`, providerId, meta?.envKey);
+  }
+
+  static unknownProvider(model) {
+    return new ProviderError(`Could not detect provider for model "${model}". Known signatures: gpt, o1, o3, o4, chatgpt, claude, grok`);
+  }
+}
+|}]
+  [@@mel.as "ProviderError"]
+
+let compatibility_surface : js_value =
+  [%mel.raw
+    {|
+(() => {
+const PROVIDERS = Object.freeze({
+  openai: {
+    name: "OpenAI",
+    signatures: ["gpt", "o1", "o3", "o4", "chatgpt"],
+    envKey: "OPENAI_API_KEY",
+    envKeyLegacy: "API_KEY_OPENAI",
+    baseUrl: "https://api.openai.com/v1",
+  },
+  anthropic: {
+    name: "Anthropic",
+    signatures: ["claude"],
+    envKey: "ANTHROPIC_API_KEY",
+    envKeyLegacy: "API_KEY_ANTHROPIC",
+    baseUrl: "https://api.anthropic.com/v1",
+  },
+  xai: {
+    name: "xAI",
+    signatures: ["grok"],
+    envKey: "XAI_API_KEY",
+    envKeyLegacy: "API_KEY_XAI",
+    baseUrl: "https://api.x.ai/v1",
+  },
+  local: {
+    name: "Local",
+    signatures: [],
+    envKey: "LOCAL_API_KEY",
+    baseUrl: "",
+  },
+  openrouter: {
+    name: "OpenRouter",
+    signatures: [],
+    envKey: "OPENROUTER_API_KEY",
+    envKeyLegacy: "API_KEY_OPENROUTER",
+    baseUrl: "https://openrouter.ai/api/v1",
+  },
+});
+const PROVIDER_IDS = Object.freeze(Object.keys(PROVIDERS));
+
+const OPENAI_MODELS = Object.freeze([
+  "gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano", "gpt-5.4-pro",
+  "gpt-5.2", "gpt-5.2-pro", "gpt-5.2-codex",
+  "gpt-5.1", "gpt-5.1-codex", "gpt-5.1-codex-max", "gpt-5.1-codex-mini",
+  "gpt-5", "gpt-5-pro", "gpt-5-mini", "gpt-5-nano", "gpt-5-codex",
+  "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano",
+  "gpt-4o", "gpt-4o-mini", "gpt-4o-mini-tts", "gpt-4o-transcribe", "gpt-4o-mini-transcribe",
+  "gpt-4-turbo", "gpt-4-turbo-preview", "gpt-4", "gpt-4-32k",
+  "gpt-3.5-turbo", "gpt-3.5-turbo-16k",
+  "o1", "o1-preview", "o1-mini", "o1-pro",
+  "o3", "o3-mini", "o3-pro", "o3-deep-research",
+  "o4-mini", "o4-mini-deep-research",
+  "gpt-oss-120b", "gpt-oss-20b", "gpt-image-1", "gpt-image-1-mini", "chatgpt-4o-latest",
+]);
+const ANTHROPIC_MODELS = Object.freeze([
+  "claude-opus-4-6", "claude-sonnet-4-6",
+  "claude-opus-4-5-20251101", "claude-opus-4-5",
+  "claude-sonnet-4-5-20250929", "claude-sonnet-4-5",
+  "claude-haiku-4-5-20251001", "claude-haiku-4-5",
+  "claude-opus-4-1-20250805", "claude-opus-4-1",
+  "claude-sonnet-4-20250514", "claude-sonnet-4-0",
+  "claude-opus-4-20250514", "claude-opus-4-0",
+  "claude-3-5-sonnet-20241022", "claude-3-5-sonnet-20240620", "claude-3-5-haiku-20241022",
+  "claude-3-opus-20240229", "claude-3-haiku-20240307",
+]);
+const XAI_MODELS = Object.freeze([
+  "grok-4.20-0309-reasoning", "grok-4.20-0309-non-reasoning", "grok-4.20-multi-agent-0309",
+  "grok-4-1-fast-reasoning", "grok-4-1-fast-non-reasoning",
+  "grok-4-fast-reasoning", "grok-4-fast-non-reasoning", "grok-4-0709", "grok-4",
+  "grok-3", "grok-3-mini", "grok-2-vision-1212", "grok-2-image-1212",
+  "grok-code-fast-1", "grok-imagine-image", "grok-imagine-image-pro", "grok-imagine-video",
+]);
+const MODELS_BY_PROVIDER = Object.freeze({
+  openai: OPENAI_MODELS,
+  anthropic: ANTHROPIC_MODELS,
+  xai: XAI_MODELS,
+  local: Object.freeze([]),
+  openrouter: Object.freeze([]),
+});
+
+const PRICING = Object.freeze({
+  "gpt-5.4": { input: 2.5, output: 15, cached: 0.25 },
+  "gpt-5.4-mini": { input: 0.75, output: 4.5, cached: 0.075 },
+  "gpt-5": { input: 1.25, output: 10, cached: 0.125 },
+  "gpt-5-mini": { input: 0.25, output: 2, cached: 0.025 },
+  "gpt-4.1": { input: 2, output: 8, cached: 0.5 },
+  "gpt-4.1-mini": { input: 0.4, output: 1.6, cached: 0.1 },
+  "gpt-4o": { input: 2.5, output: 10, cached: 1.25 },
+  "gpt-4o-mini": { input: 0.15, output: 0.6, cached: 0.075 },
+  "o3": { input: 2, output: 8, cached: 0.5 },
+  "o4-mini": { input: 1.1, output: 4.4, cached: 0.275 },
+  "claude-opus-4-6": { input: 5, output: 25, cached: 0.5, cacheWrite5m: 6.25 },
+  "claude-sonnet-4-6": { input: 3, output: 15, cached: 0.3, cacheWrite5m: 3.75 },
+  "claude-sonnet-4-5": { input: 3, output: 15, cached: 0.3, cacheWrite5m: 3.75 },
+  "claude-haiku-4-5": { input: 1, output: 5, cached: 0.1, cacheWrite5m: 1.25 },
+  "grok-4": { input: 3, output: 15, cached: 0.75 },
+  "grok-4-1-fast-reasoning": { input: 0.2, output: 1.5, cached: 0.05 },
+  "grok-4-1-fast-non-reasoning": { input: 0.2, output: 0.5, cached: 0.05 },
+  "grok-imagine-image": { input: 0, output: 0, perImage: 0.02 },
+  "grok-imagine-image-pro": { input: 0, output: 0, perImage: 0.07 },
+  "grok-imagine-video": { input: 0, output: 0, perSecond: 0.05 },
+});
+
+const CONTEXT_WINDOWS = Object.freeze({
+  "gpt-5.4": 1050000, "gpt-5.4-mini": 400000, "gpt-5": 400000, "gpt-5-mini": 400000,
+  "gpt-4.1": 1047576, "gpt-4.1-mini": 1047576,
+  "gpt-4o": 128000, "gpt-4o-mini": 128000,
+  "o3": 200000, "o4-mini": 200000,
+  "claude-opus-4-6": 1000000, "claude-sonnet-4-6": 1000000,
+  "claude-sonnet-4-5": 200000, "claude-haiku-4-5": 200000,
+  "grok-4": 256000, "grok-4-1-fast-reasoning": 2000000, "grok-4-1-fast-non-reasoning": 2000000,
+});
+
+const TOKEN_RATIOS = Object.freeze({ english: 4, code: 3.5, cjk: 1.5, mixed: 3.8 });
+
+function envValue(name) {
+  return globalThis.process?.env?.[name];
+}
+
+function resolveEnvValue(providerId) {
+  if (providerId === "local") {
+    const baseUrl = envValue("LOCAL_BASE_URL");
+    return typeof baseUrl === "string" && baseUrl.length > 0 ? baseUrl : undefined;
+  }
+  const meta = PROVIDERS[providerId];
+  const primary = meta && envValue(meta.envKey);
+  if (typeof primary === "string" && primary.length > 0) return primary;
+  const legacy = meta?.envKeyLegacy && envValue(meta.envKeyLegacy);
+  return typeof legacy === "string" && legacy.length > 0 ? legacy : undefined;
+}
+
+function isProviderActive(providerId) {
+  return resolveEnvValue(providerId) !== undefined;
+}
+
+function activeProviders() {
+  return PROVIDER_IDS.filter(isProviderActive);
+}
+
+function detectProviderByModel(model) {
+  const text = String(model || "");
+  if (text.includes("/")) return "openrouter";
+  const lower = text.toLowerCase();
+  for (const id of PROVIDER_IDS) {
+    for (const signature of PROVIDERS[id].signatures) {
+      if (lower.includes(signature)) return id;
+    }
+  }
+  return null;
+}
+
+function assertProviderActive(providerId) {
+  if (!isProviderActive(providerId)) throw ProviderError.missingApiKey(providerId);
+}
+
+function getApiKey(providerId) {
+  if (providerId === "local") {
+    assertProviderActive("local");
+    return envValue("LOCAL_API_KEY") || "local";
+  }
+  assertProviderActive(providerId);
+  return resolveEnvValue(providerId);
+}
+
+function getBaseUrl(providerId) {
+  if (providerId === "local") return envValue("LOCAL_BASE_URL") || "";
+  return PROVIDERS[providerId]?.baseUrl || "";
+}
+
+function resolveProvider(model) {
+  const providerId = detectProviderByModel(model);
+  if (providerId) {
+    assertProviderActive(providerId);
+    return providerId;
+  }
+  if (isProviderActive("local")) return "local";
+  throw ProviderError.unknownProvider(String(model || ""));
+}
+
+function getModelsForProvider(providerId) {
+  return MODELS_BY_PROVIDER[providerId] || [];
+}
+
+function getAllKnownModels() {
+  return Object.freeze([...OPENAI_MODELS, ...ANTHROPIC_MODELS, ...XAI_MODELS]);
+}
+
+function isKnownModel(model) {
+  return getAllKnownModels().includes(model);
+}
+
+function estimateTokens(text) {
+  const value = String(text || "");
+  if (!value) return 0;
+  const hasCjk = /[\u3400-\u4dbf\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]/.test(value);
+  const looksCode = [/[{}[\]();]/, /^\s*(function|const|let|var|class|import|export|def|fn|pub)\s/m, /[=!<>]{2,}/, /\s{2,}[a-zA-Z_]\w*\s*[=(]/].filter((pattern) => pattern.test(value)).length >= 2;
+  const ratio = hasCjk ? TOKEN_RATIOS.cjk : looksCode ? TOKEN_RATIOS.code : TOKEN_RATIOS.english;
+  return Math.ceil(value.length / ratio);
+}
+
+function estimateTokensWithRatio(text, charsPerToken) {
+  if (!text || charsPerToken <= 0) return 0;
+  return Math.ceil(String(text).length / charsPerToken);
+}
+
+function estimateTokensMany(texts) {
+  return (texts || []).reduce((sum, text) => sum + estimateTokens(text), 0);
+}
+
+function estimatePromptTokens(prompt, response) {
+  const input = estimateTokens(prompt);
+  const output = response ? estimateTokens(response) : 0;
+  return { input, output, total: input + output };
+}
+
+function providerForTokenBudget(provider) {
+  return provider === "anthropic" || provider === "xai" ? provider : "openai";
+}
+
+function getMessageOverhead(provider = "openai") {
+  return providerForTokenBudget(provider) === "anthropic"
+    ? { perMessage: 3, conversation: 3 }
+    : { perMessage: 4, conversation: 3 };
+}
+
+function estimateMessageTokens(message, provider = "openai") {
+  const overhead = getMessageOverhead(provider).perMessage;
+  return overhead + estimateTokens(message?.content || "") + (message?.name ? estimateTokens(message.name) + 1 : 0);
+}
+
+function estimateChatTokens(messages, provider = "openai") {
+  if (!messages?.length) return 0;
+  return getMessageOverhead(provider).conversation + messages.reduce((sum, message) => sum + estimateMessageTokens(message, provider), 0);
+}
+
+function estimateSystemPromptTokens(systemPrompt, provider = "openai") {
+  return estimateMessageTokens({ role: "system", content: systemPrompt }, provider);
+}
+
+function calculateAvailableTokens(params) {
+  return Math.max(0, (params.contextWindow || 0) - (params.systemPromptTokens || 0) - (params.reserveForResponse || 0) - (params.historyTokens || 0));
+}
+
+function messagesFitBudget(messages, maxTokens, provider = "openai") {
+  return estimateChatTokens(messages, provider) <= maxTokens;
+}
+
+function getPricing(model) {
+  return PRICING[model];
+}
+
+function hasPricing(model) {
+  return Boolean(getPricing(model));
+}
+
+function getCostPerToken(model) {
+  const pricing = getPricing(model);
+  if (!pricing) return undefined;
+  return {
+    input: pricing.input / 1000000,
+    output: pricing.output / 1000000,
+    cached: (pricing.cached || 0) / 1000000,
+    cacheWrite: (pricing.cacheWrite5m || 0) / 1000000,
+  };
+}
+
+function calculateCostCustom(params) {
+  const pricing = params.pricing;
+  if (params.actualCostUsd && params.actualCostUsd > 0) {
+    return { input: 0, output: 0, cached: 0, cacheWrite: 0, actualUsd: params.actualCostUsd, total: params.actualCostUsd };
+  }
+  const billableInput = Math.max(0, (params.inputTokens || 0) - (params.cachedTokens || 0) - (params.cacheWriteTokens || 0));
+  const input = (billableInput / 1000000) * (pricing.input || 0);
+  const output = ((params.outputTokens || 0) / 1000000) * (pricing.output || 0);
+  const cached = ((params.cachedTokens || 0) / 1000000) * (pricing.cached || 0);
+  const cacheWrite = ((params.cacheWriteTokens || 0) / 1000000) * (pricing.cacheWrite5m || pricing.cacheWrite || 0);
+  return { input, output, cached, cacheWrite, actualUsd: 0, total: input + output + cached + cacheWrite };
+}
+
+function calculateCost(params) {
+  const pricing = getPricing(params.model);
+  if (!pricing) return { input: 0, output: 0, cached: 0, cacheWrite: 0, actualUsd: params.actualCostUsd || 0, total: params.actualCostUsd || 0 };
+  return calculateCostCustom({ ...params, pricing });
+}
+
+function estimateCost(params) {
+  const inputTokens = params.inputTokens ?? (params.inputText ? estimateTokens(params.inputText) : 0);
+  return calculateCost({ model: params.model, inputTokens, outputTokens: params.expectedOutputTokens || 0 });
+}
+
+function calculateBatchCost(requests, model) {
+  const total = (requests || []).reduce((acc, item) => ({
+    inputTokens: acc.inputTokens + (item.inputTokens || 0),
+    outputTokens: acc.outputTokens + (item.outputTokens || 0),
+    cachedTokens: acc.cachedTokens + (item.cachedTokens || 0),
+    cacheWriteTokens: acc.cacheWriteTokens + (item.cacheWriteTokens || 0),
+  }), { inputTokens: 0, outputTokens: 0, cachedTokens: 0, cacheWriteTokens: 0 });
+  return calculateCost({ model, ...total });
+}
+
+function calculateImageCost(params) {
+  return (getPricing(params.model)?.perImage || 0) * (params.count || 0);
+}
+
+function calculateVideoCost(params) {
+  return (getPricing(params.model)?.perSecond || 0) * (params.durationSeconds || 0);
+}
+
+function getContextWindow(model) {
+  return CONTEXT_WINDOWS[model];
+}
+
+function hasContextWindow(model) {
+  return Object.hasOwn(CONTEXT_WINDOWS, model);
+}
+
+function truncateContent(content, maxTokens, ellipsis = "...") {
+  const text = String(content || "");
+  const tokens = estimateTokens(text);
+  if (tokens <= maxTokens) return text;
+  const targetChars = Math.max(0, Math.floor(text.length * (maxTokens / tokens)) - ellipsis.length);
+  if (targetChars <= 0) return ellipsis;
+  const slice = text.slice(0, targetChars);
+  const lastSpace = slice.lastIndexOf(" ");
+  return (lastSpace > targetChars * 0.8 ? slice.slice(0, lastSpace) : slice).trim() + ellipsis;
+}
+
+function splitText(text, options) {
+  const maxTokens = options?.maxTokens || 512;
+  const overlap = options?.overlap || 0;
+  const value = String(text || "");
+  if (!value) return [];
+  if (estimateTokens(value) <= maxTokens) return [value];
+  const words = value.split(/\s+/).filter(Boolean);
+  const chunks = [];
+  let chunk = "";
+  for (const word of words) {
+    const next = chunk ? `${chunk} ${word}` : word;
+    if (estimateTokens(next) > maxTokens && chunk) {
+      chunks.push(chunk);
+      chunk = overlap > 0 ? `${truncateContent(chunk, overlap)} ${word}` : word;
+    } else {
+      chunk = next;
+    }
+  }
+  if (chunk) chunks.push(chunk);
+  return chunks;
+}
+
+function fitMessages(messages, options) {
+  const provider = options?.provider || "openai";
+  const budget = Math.max(0, (options?.maxTokens || 0) - (options?.reserveForResponse || 0));
+  if (estimateChatTokens(messages || [], provider) <= budget) return messages || [];
+  const system = messages?.[0]?.role === "system" ? messages[0] : null;
+  const rest = system ? messages.slice(1) : (messages || []);
+  const kept = [];
+  let used = system ? estimateMessageTokens(system, provider) : 0;
+  for (let index = rest.length - 1; index >= 0; index--) {
+    const cost = estimateMessageTokens(rest[index], provider);
+    if (used + cost > budget) break;
+    used += cost;
+    kept.unshift(rest[index]);
+  }
+  return system ? [system, ...kept] : kept;
+}
+
+function paginateMessages(messages, tokensPerPage, provider = "openai") {
+  const pages = [];
+  let current = [];
+  for (const message of messages || []) {
+    const candidate = [...current, message];
+    if (current.length && estimateChatTokens(candidate, provider) > tokensPerPage) {
+      pages.push(current);
+      current = [message];
+    } else {
+      current = candidate;
+    }
+  }
+  if (current.length) pages.push(current);
+  return pages;
+}
+
+function estimateChunkCount(text, options) {
+  return splitText(text, options).length;
+}
+
+const Tokens = Object.freeze({
+  CONTEXT_WINDOWS, PRICING, TOKEN_RATIOS,
+  estimateTokens, estimateTokensMany, estimateTokensWithRatio, estimatePromptTokens,
+  estimateMessageTokens, estimateChatTokens, estimateSystemPromptTokens,
+  getMessageOverhead, calculateAvailableTokens, messagesFitBudget,
+  calculateCost, calculateCostCustom, calculateBatchCost, calculateImageCost, calculateVideoCost,
+  estimateCost, getCostPerToken, getPricing, hasPricing,
+  getContextWindow, hasContextWindow,
+  splitText, truncateContent, fitMessages, paginateMessages, estimateChunkCount,
+});
+
+function normalizePath(path) {
+  const p = String(path || "");
+  return p.startsWith("/") ? p : `/${p}`;
+}
+
+function providerBaseUrl(provider, options = {}) {
+  if (options.baseUrl) return String(options.baseUrl).replace(/\/$/, "");
+  if (provider === "local" && options.localBaseUrl) return String(options.localBaseUrl).replace(/\/$/, "");
+  const baseUrl = getBaseUrl(provider);
+  if (!baseUrl && provider === "local") return "http://localhost:11434/v1";
+  return baseUrl.replace(/\/$/, "");
+}
+
+function providerApiKey(provider, options = {}) {
+  if (options.apiKey) return options.apiKey;
+  if (provider === "local") return options.localApiKey || envValue("LOCAL_API_KEY") || "local";
+  return resolveEnvValue(provider);
+}
+
+function providerHeaders(provider, options = {}) {
+  const headers = { ...(options.headers || {}) };
+  const apiKey = providerApiKey(provider, options);
+  if (provider === "anthropic") {
+    headers["x-api-key"] = apiKey;
+    headers["anthropic-version"] = options.anthropicVersion || "2023-06-01";
+  } else if (apiKey) {
+    headers.Authorization = `Bearer ${apiKey}`;
+  }
+  if (provider === "openrouter") {
+    if (options.httpReferer) headers["HTTP-Referer"] = options.httpReferer;
+    if (options.title) headers["X-Title"] = options.title;
+  }
+  return headers;
+}
+
+async function providerRequestRaw(provider, path, options = {}) {
+  const apiKey = providerApiKey(provider, options);
+  if (!apiKey && provider !== "local") throw ProviderError.missingApiKey(provider);
+  const url = `${providerBaseUrl(provider, options)}${normalizePath(path)}`;
+  const body = options.body ?? options.json;
+  const headers = providerHeaders(provider, options);
+  const isFormData = typeof FormData !== "undefined" && body instanceof FormData;
+  if (body !== undefined && !isFormData && !headers["Content-Type"]) {
+    headers["Content-Type"] = "application/json";
+  }
+  const init = {
+    method: options.method || (body === undefined ? "GET" : "POST"),
+    headers,
+    body: body === undefined ? undefined : isFormData ? body : typeof body === "string" ? body : JSON.stringify(body),
+  };
+  const response = await fetch(url, init);
+  if (!response.ok) {
+    const text = await response.text();
+    throw new ProviderError(text || `HTTP ${response.status}`, provider);
+  }
+  return response;
+}
+
+async function providerRequest(provider, path, options = {}) {
+  const response = await providerRequestRaw(provider, path, options);
+  const text = await response.text();
+  if (!text) return {};
+  try { return JSON.parse(text); } catch (_) { return text; }
+}
+
+function providerRequestGet(provider, path, options = {}) {
+  return providerRequest(provider, path, { ...options, method: "GET" });
+}
+
+async function providerListModels(provider, options = {}) {
+  const json = await providerRequestGet(provider, "/models", options);
+  return json;
+}
+
+async function providerListModelIds(provider, options = {}) {
+  const json = await providerListModels(provider, options);
+  const data = Array.isArray(json?.data) ? json.data : Array.isArray(json?.models) ? json.models : Array.isArray(json) ? json : [];
+  const ids = data.map((model) => typeof model === "string" ? model : model.id).filter(Boolean);
+  return ids.length ? ids : [...getModelsForProvider(provider)];
+}
+
+async function providerGetModel(provider, modelId, options = {}) {
+  return providerRequestGet(provider, `/models/${encodeURIComponent(modelId)}`, options);
+}
+
+async function providerModelExists(provider, modelId, options = {}) {
+  try {
+    const ids = await providerListModelIds(provider, options);
+    return ids.includes(modelId);
+  } catch (_) {
+    return getModelsForProvider(provider).includes(modelId);
+  }
+}
+
+function openAICompatibleChat(provider, messages, options = {}) {
+  return createProviderClient(provider, options).chat(messages, options);
+}
+
+async function openAICompatibleChatSimple(provider, messages, options = {}) {
+  const result = await openAICompatibleChat(provider, messages, options);
+  return result.content;
+}
+
+async function openAICompatibleChatStructured(provider, messages, schema, options = {}) {
+  const result = await openAICompatibleChat(provider, messages, {
+    ...options,
+    extra: {
+      ...(options.extra || {}),
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: schema?.name || "response",
+          description: schema?.description,
+          schema: schema?.schema || Schema.toJSON(schema),
+          strict: schema?.strict ?? true,
+        },
+      },
+    },
+  });
+  return JSON.parse(result.content || "null");
+}
+
+function openAICompatibleStream(provider, messages, options = {}) {
+  const chat = createProviderClient(provider, options)._chat(options.model);
+  chat.addMessages(messages || []);
+  return chat.stream({ ...options, provider });
+}
+
+async function openAICompatibleStreamAccumulate(provider, messages, options = {}, onChunk) {
+  let content = "";
+  for await (const chunk of openAICompatibleStream(provider, messages, options)) {
+    content += typeof chunk === "string" ? chunk : chunk?.content || "";
+    if (onChunk) onChunk(typeof chunk === "string" ? { content: chunk, chunk } : chunk);
+  }
+  return content;
+}
+
+function streamReadableFromAsyncIterable(iterable) {
+  return new ReadableStream({
+    async start(controller) {
+      try {
+        for await (const chunk of iterable) controller.enqueue(typeof chunk === "string" ? chunk : chunk?.content || "");
+        controller.close();
+      } catch (error) {
+        controller.error(error);
+      }
+    },
+  });
+}
+
+async function providerEmbed(provider, input, options = {}) {
+  return providerRequest(provider, "/embeddings", {
+    ...options,
+    json: { model: options.model || options.defaultEmbeddingModel || "text-embedding-3-small", input },
+  });
+}
+
+async function providerEmbedOne(provider, input, options = {}) {
+  const json = await providerEmbed(provider, input, options);
+  return json?.data?.[0]?.embedding || [];
+}
+
+async function providerEmbedMany(provider, inputs, options = {}) {
+  const json = await providerEmbed(provider, inputs, options);
+  return (json?.data || []).map((item) => item.embedding || []);
+}
+
+function cosineSimilarity(left, right) {
+  let dot = 0, leftNorm = 0, rightNorm = 0;
+  for (let index = 0; index < Math.min(left.length, right.length); index++) {
+    dot += left[index] * right[index];
+    leftNorm += left[index] * left[index];
+    rightNorm += right[index] * right[index];
+  }
+  return leftNorm && rightNorm ? dot / (Math.sqrt(leftNorm) * Math.sqrt(rightNorm)) : 0;
+}
+
+function findSimilar(query, corpus, options = {}) {
+  const threshold = options.threshold ?? -Infinity;
+  const limit = options.limit ?? corpus.length;
+  return corpus
+    .map((item) => ({ ...item, similarity: cosineSimilarity(query, item.embedding || item.vector || []) }))
+    .filter((item) => item.similarity >= threshold)
+    .sort((a, b) => b.similarity - a.similarity)
+    .slice(0, limit);
+}
+
+async function providerGenerateImage(provider, prompt, options = {}) {
+  return providerRequest(provider, "/images/generations", {
+    ...options,
+    json: {
+      model: options.model || options.defaultImageModel,
+      prompt,
+      n: options.n || options.count,
+      size: options.size,
+      response_format: options.responseFormat || options.response_format,
+      ...options.requestOptions,
+    },
+  });
+}
+
+async function providerGenerateImageUrl(provider, prompt, options = {}) {
+  const json = await providerGenerateImage(provider, prompt, { ...options, response_format: options.response_format || "url" });
+  return json?.data?.[0]?.url || "";
+}
+
+async function providerGenerateImageBase64(provider, prompt, options = {}) {
+  const json = await providerGenerateImage(provider, prompt, { ...options, response_format: options.response_format || "b64_json" });
+  return json?.data?.[0]?.b64_json || "";
+}
+
+async function providerGenerateImages(provider, prompt, count, options = {}) {
+  const json = await providerGenerateImage(provider, prompt, { ...options, n: count });
+  return json?.data || [];
+}
+
+async function providerStartVideoGeneration(provider, prompt, options = {}) {
+  return providerRequest(provider, "/video/generations", {
+    ...options,
+    json: { model: options.model || options.defaultVideoModel || "grok-imagine-video", prompt, ...options.requestOptions },
+  });
+}
+
+async function providerGetVideoStatus(provider, id, options = {}) {
+  return providerRequestGet(provider, `/video/generations/${encodeURIComponent(id)}`, options);
+}
+
+async function providerGenerateVideo(provider, prompt, options = {}) {
+  return providerStartVideoGeneration(provider, prompt, options);
+}
+
+async function providerGenerateVideoUrl(provider, prompt, options = {}) {
+  const json = await providerGenerateVideo(provider, prompt, options);
+  return json?.url || json?.data?.[0]?.url || "";
+}
+
+function makeOpenAIStrict(schema) {
+  const result = Array.isArray(schema) ? schema.map(makeOpenAIStrict) : schema && typeof schema === "object" ? { ...schema } : schema;
+  if (!result || typeof result !== "object" || Array.isArray(result)) return result;
+  if (result.type === "object") {
+    result.additionalProperties = false;
+    const props = result.properties || {};
+    result.properties = Object.fromEntries(Object.entries(props).map(([key, value]) => [key, makeOpenAIStrict(value)]));
+    result.required = Object.keys(props);
+  }
+  if (result.type === "array" && result.items) result.items = makeOpenAIStrict(result.items);
+  return result;
+}
+
+function needsOpenAIStrictTransform(schema) {
+  return Boolean(schema && typeof schema === "object" && schema.type === "object" && schema.additionalProperties !== false);
+}
+
+return {
+  PROVIDERS, PROVIDER_IDS, OPENAI_MODELS, ANTHROPIC_MODELS, XAI_MODELS, MODELS_BY_PROVIDER,
+  PRICING, CONTEXT_WINDOWS, TOKEN_RATIOS, Tokens,
+  isProviderActive, activeProviders, detectProviderByModel, assertProviderActive, getApiKey, getBaseUrl,
+  resolveProvider, getModelsForProvider, getAllKnownModels, isKnownModel,
+  estimateTokens, estimateTokensWithRatio, estimateTokensMany, estimatePromptTokens,
+  estimateMessageTokens, estimateChatTokens, estimateSystemPromptTokens, getMessageOverhead,
+  calculateAvailableTokens, messagesFitBudget, getPricing, hasPricing, getCostPerToken,
+  calculateCost, calculateCostCustom, estimateCost, calculateBatchCost, calculateImageCost, calculateVideoCost,
+  getContextWindow, hasContextWindow, truncateContent, splitText, fitMessages, paginateMessages, estimateChunkCount,
+  providerBaseUrl, providerApiKey, providerRequestRaw, providerRequest, providerRequestGet,
+  providerListModels, providerListModelIds, providerGetModel, providerModelExists,
+  openAICompatibleChat, openAICompatibleChatSimple, openAICompatibleChatStructured,
+  openAICompatibleStream, openAICompatibleStreamAccumulate, streamReadableFromAsyncIterable,
+  providerEmbed, providerEmbedOne, providerEmbedMany, cosineSimilarity, findSimilar,
+  providerGenerateImage, providerGenerateImageUrl, providerGenerateImageBase64, providerGenerateImages,
+  providerStartVideoGeneration, providerGetVideoStatus, providerGenerateVideo, providerGenerateVideoUrl,
+  makeOpenAIStrict, needsOpenAIStrictTransform,
+};
+})()
+|}]
+  [@@mel.as "compatibility_surface"]
+
+[@@@warning "-32"]
+
+let providers_registry : js_value = [%mel.raw {| compatibility_surface.PROVIDERS |}] [@@mel.as "PROVIDERS"]
+let provider_ids_value : js_value = [%mel.raw {| compatibility_surface.PROVIDER_IDS |}] [@@mel.as "PROVIDER_IDS"]
+let openai_models_value : js_value = [%mel.raw {| compatibility_surface.OPENAI_MODELS |}] [@@mel.as "OPENAI_MODELS"]
+let anthropic_models_value : js_value =
+  [%mel.raw {| compatibility_surface.ANTHROPIC_MODELS |}] [@@mel.as "ANTHROPIC_MODELS"]
+
+let xai_models_value : js_value = [%mel.raw {| compatibility_surface.XAI_MODELS |}] [@@mel.as "XAI_MODELS"]
+
+let models_by_provider_value : js_value =
+  [%mel.raw {| compatibility_surface.MODELS_BY_PROVIDER |}] [@@mel.as "MODELS_BY_PROVIDER"]
+
+let pricing_value : js_value = [%mel.raw {| compatibility_surface.PRICING |}] [@@mel.as "PRICING"]
+let context_windows_value : js_value = [%mel.raw {| compatibility_surface.CONTEXT_WINDOWS |}] [@@mel.as "CONTEXT_WINDOWS"]
+let token_ratios_value : js_value = [%mel.raw {| compatibility_surface.TOKEN_RATIOS |}] [@@mel.as "TOKEN_RATIOS"]
+let is_provider_active_fn : js_function = [%mel.raw {| compatibility_surface.isProviderActive |}] [@@mel.as "isProviderActive"]
+let active_providers_fn : js_function = [%mel.raw {| compatibility_surface.activeProviders |}] [@@mel.as "activeProviders"]
+let detect_provider_by_model_fn : js_function =
+  [%mel.raw {| compatibility_surface.detectProviderByModel |}] [@@mel.as "detectProviderByModel"]
+
+let assert_provider_active_fn : js_function =
+  [%mel.raw {| compatibility_surface.assertProviderActive |}] [@@mel.as "assertProviderActive"]
+
+let get_api_key_fn : js_function = [%mel.raw {| compatibility_surface.getApiKey |}] [@@mel.as "getApiKey"]
+let get_base_url_fn : js_function = [%mel.raw {| compatibility_surface.getBaseUrl |}] [@@mel.as "getBaseUrl"]
+let resolve_provider_fn : js_function = [%mel.raw {| compatibility_surface.resolveProvider |}] [@@mel.as "resolveProvider"]
+let get_models_for_provider_fn : js_function =
+  [%mel.raw {| compatibility_surface.getModelsForProvider |}] [@@mel.as "getModelsForProvider"]
+
+let get_all_known_models_fn : js_function =
+  [%mel.raw {| compatibility_surface.getAllKnownModels |}] [@@mel.as "getAllKnownModels"]
+
+let is_known_model_fn : js_function = [%mel.raw {| compatibility_surface.isKnownModel |}] [@@mel.as "isKnownModel"]
+let estimate_tokens_fn : js_function = [%mel.raw {| compatibility_surface.estimateTokens |}] [@@mel.as "estimateTokens"]
+let estimate_prompt_tokens_fn : js_function =
+  [%mel.raw {| compatibility_surface.estimatePromptTokens |}] [@@mel.as "estimatePromptTokens"]
+
+let estimate_tokens_many_fn : js_function =
+  [%mel.raw {| compatibility_surface.estimateTokensMany |}] [@@mel.as "estimateTokensMany"]
+
+let estimate_tokens_with_ratio_fn : js_function =
+  [%mel.raw {| compatibility_surface.estimateTokensWithRatio |}] [@@mel.as "estimateTokensWithRatio"]
+
+let estimate_message_tokens_fn : js_function =
+  [%mel.raw {| compatibility_surface.estimateMessageTokens |}] [@@mel.as "estimateMessageTokens"]
+
+let estimate_chat_tokens_fn : js_function =
+  [%mel.raw {| compatibility_surface.estimateChatTokens |}] [@@mel.as "estimateChatTokens"]
+
+let estimate_system_prompt_tokens_fn : js_function =
+  [%mel.raw {| compatibility_surface.estimateSystemPromptTokens |}] [@@mel.as "estimateSystemPromptTokens"]
+
+let get_message_overhead_fn : js_function =
+  [%mel.raw {| compatibility_surface.getMessageOverhead |}] [@@mel.as "getMessageOverhead"]
+
+let calculate_available_tokens_fn : js_function =
+  [%mel.raw {| compatibility_surface.calculateAvailableTokens |}] [@@mel.as "calculateAvailableTokens"]
+
+let messages_fit_budget_fn : js_function =
+  [%mel.raw {| compatibility_surface.messagesFitBudget |}] [@@mel.as "messagesFitBudget"]
+
+let calculate_cost_fn : js_function = [%mel.raw {| compatibility_surface.calculateCost |}] [@@mel.as "calculateCost"]
+let calculate_cost_custom_fn : js_function =
+  [%mel.raw {| compatibility_surface.calculateCostCustom |}] [@@mel.as "calculateCostCustom"]
+
+let calculate_batch_cost_fn : js_function =
+  [%mel.raw {| compatibility_surface.calculateBatchCost |}] [@@mel.as "calculateBatchCost"]
+
+let calculate_image_cost_fn : js_function =
+  [%mel.raw {| compatibility_surface.calculateImageCost |}] [@@mel.as "calculateImageCost"]
+
+let calculate_video_cost_fn : js_function =
+  [%mel.raw {| compatibility_surface.calculateVideoCost |}] [@@mel.as "calculateVideoCost"]
+
+let estimate_cost_fn : js_function = [%mel.raw {| compatibility_surface.estimateCost |}] [@@mel.as "estimateCost"]
+let get_cost_per_token_fn : js_function =
+  [%mel.raw {| compatibility_surface.getCostPerToken |}] [@@mel.as "getCostPerToken"]
+
+let get_pricing_fn : js_function = [%mel.raw {| compatibility_surface.getPricing |}] [@@mel.as "getPricing"]
+let has_pricing_fn : js_function = [%mel.raw {| compatibility_surface.hasPricing |}] [@@mel.as "hasPricing"]
+let get_context_window_fn : js_function =
+  [%mel.raw {| compatibility_surface.getContextWindow |}] [@@mel.as "getContextWindow"]
+
+let has_context_window_fn : js_function =
+  [%mel.raw {| compatibility_surface.hasContextWindow |}] [@@mel.as "hasContextWindow"]
+
+let split_text_fn : js_function = [%mel.raw {| compatibility_surface.splitText |}] [@@mel.as "splitText"]
+let truncate_content_fn : js_function = [%mel.raw {| compatibility_surface.truncateContent |}] [@@mel.as "truncateContent"]
+let fit_messages_fn : js_function = [%mel.raw {| compatibility_surface.fitMessages |}] [@@mel.as "fitMessages"]
+let paginate_messages_fn : js_function = [%mel.raw {| compatibility_surface.paginateMessages |}] [@@mel.as "paginateMessages"]
+let estimate_chunk_count_fn : js_function =
+  [%mel.raw {| compatibility_surface.estimateChunkCount |}] [@@mel.as "estimateChunkCount"]
+
+let provider_base_url_fn : js_function = [%mel.raw {| compatibility_surface.providerBaseUrl |}] [@@mel.as "providerBaseUrl"]
+let provider_api_key_fn : js_function = [%mel.raw {| compatibility_surface.providerApiKey |}] [@@mel.as "providerApiKey"]
+let provider_request_raw_fn : js_function =
+  [%mel.raw {| compatibility_surface.providerRequestRaw |}] [@@mel.as "providerRequestRaw"]
+
+let provider_request_fn : js_function = [%mel.raw {| compatibility_surface.providerRequest |}] [@@mel.as "providerRequest"]
+let provider_request_get_fn : js_function =
+  [%mel.raw {| compatibility_surface.providerRequestGet |}] [@@mel.as "providerRequestGet"]
+
+let provider_list_models_fn : js_function =
+  [%mel.raw {| compatibility_surface.providerListModels |}] [@@mel.as "providerListModels"]
+
+let provider_list_model_ids_fn : js_function =
+  [%mel.raw {| compatibility_surface.providerListModelIds |}] [@@mel.as "providerListModelIds"]
+
+let provider_get_model_fn : js_function =
+  [%mel.raw {| compatibility_surface.providerGetModel |}] [@@mel.as "providerGetModel"]
+
+let provider_model_exists_fn : js_function =
+  [%mel.raw {| compatibility_surface.providerModelExists |}] [@@mel.as "providerModelExists"]
+
+let openai_compatible_chat_fn : js_function =
+  [%mel.raw {| compatibility_surface.openAICompatibleChat |}] [@@mel.as "openAICompatibleChat"]
+
+let openai_compatible_chat_simple_fn : js_function =
+  [%mel.raw {| compatibility_surface.openAICompatibleChatSimple |}] [@@mel.as "openAICompatibleChatSimple"]
+
+let openai_compatible_chat_structured_fn : js_function =
+  [%mel.raw {| compatibility_surface.openAICompatibleChatStructured |}] [@@mel.as "openAICompatibleChatStructured"]
+
+let openai_compatible_stream_fn : js_function =
+  [%mel.raw {| compatibility_surface.openAICompatibleStream |}] [@@mel.as "openAICompatibleStream"]
+
+let openai_compatible_stream_accumulate_fn : js_function =
+  [%mel.raw {| compatibility_surface.openAICompatibleStreamAccumulate |}] [@@mel.as "openAICompatibleStreamAccumulate"]
+
+let stream_readable_from_async_iterable_fn : js_function =
+  [%mel.raw {| compatibility_surface.streamReadableFromAsyncIterable |}] [@@mel.as "streamReadableFromAsyncIterable"]
+
+let provider_embed_fn : js_function = [%mel.raw {| compatibility_surface.providerEmbed |}] [@@mel.as "providerEmbed"]
+let provider_embed_one_fn : js_function =
+  [%mel.raw {| compatibility_surface.providerEmbedOne |}] [@@mel.as "providerEmbedOne"]
+
+let provider_embed_many_fn : js_function =
+  [%mel.raw {| compatibility_surface.providerEmbedMany |}] [@@mel.as "providerEmbedMany"]
+
+let cosine_similarity_fn : js_function =
+  [%mel.raw {| compatibility_surface.cosineSimilarity |}] [@@mel.as "cosineSimilarity"]
+
+let find_similar_fn : js_function = [%mel.raw {| compatibility_surface.findSimilar |}] [@@mel.as "findSimilar"]
+let provider_generate_image_fn : js_function =
+  [%mel.raw {| compatibility_surface.providerGenerateImage |}] [@@mel.as "providerGenerateImage"]
+
+let provider_generate_image_url_fn : js_function =
+  [%mel.raw {| compatibility_surface.providerGenerateImageUrl |}] [@@mel.as "providerGenerateImageUrl"]
+
+let provider_generate_image_base64_fn : js_function =
+  [%mel.raw {| compatibility_surface.providerGenerateImageBase64 |}] [@@mel.as "providerGenerateImageBase64"]
+
+let provider_generate_images_fn : js_function =
+  [%mel.raw {| compatibility_surface.providerGenerateImages |}] [@@mel.as "providerGenerateImages"]
+
+let provider_start_video_generation_fn : js_function =
+  [%mel.raw {| compatibility_surface.providerStartVideoGeneration |}] [@@mel.as "providerStartVideoGeneration"]
+
+let provider_get_video_status_fn : js_function =
+  [%mel.raw {| compatibility_surface.providerGetVideoStatus |}] [@@mel.as "providerGetVideoStatus"]
+
+let provider_generate_video_fn : js_function =
+  [%mel.raw {| compatibility_surface.providerGenerateVideo |}] [@@mel.as "providerGenerateVideo"]
+
+let provider_generate_video_url_fn : js_function =
+  [%mel.raw {| compatibility_surface.providerGenerateVideoUrl |}] [@@mel.as "providerGenerateVideoUrl"]
+
+let make_openai_strict_fn : js_function =
+  [%mel.raw {| compatibility_surface.makeOpenAIStrict |}] [@@mel.as "makeOpenAIStrict"]
+
+let needs_openai_strict_transform_fn : js_function =
+  [%mel.raw {| compatibility_surface.needsOpenAIStrictTransform |}] [@@mel.as "needsOpenAIStrictTransform"]
+
+[@@@warning "+32"]
 
 let chat : js_chat_class =
   [%mel.raw
@@ -846,10 +1744,7 @@ class Chat {
     if (this._defaults.provider) return this._defaults.provider;
     const model = options.model || this._model;
     if (options.localBaseUrl || this._localBaseUrl) return "local";
-    if (typeof model === "string" && model.startsWith("claude")) return "anthropic";
-    if (typeof model === "string" && model.startsWith("grok")) return "xai";
-    if (typeof model === "string" && model.includes("/")) return "openrouter";
-    return "openai";
+    return detectProviderByModel(model) || (isProviderActive("local") ? "local" : "openai");
   }
 
   _env(name) {
@@ -859,8 +1754,8 @@ class Chat {
   _apiKey(provider, options = {}) {
     if (options.apiKey) return options.apiKey;
     if (this._config.apiKey) return this._config.apiKey;
-    if (provider === "openai") return this._env("OPENAI_API_KEY");
-    if (provider === "anthropic") return this._env("ANTHROPIC_API_KEY");
+    if (provider === "openai") return this._env("OPENAI_API_KEY") || this._env("API_KEY_OPENAI");
+    if (provider === "anthropic") return this._env("ANTHROPIC_API_KEY") || this._env("API_KEY_ANTHROPIC");
     if (provider === "xai") return this._env("XAI_API_KEY") || this._env("API_KEY_XAI");
     if (provider === "openrouter") return this._env("OPENROUTER_API_KEY") || this._env("API_KEY_OPENROUTER");
     if (provider === "local") return options.localApiKey || this._localApiKey || this._env("LOCAL_API_KEY") || "local";
@@ -1371,14 +2266,64 @@ function makeProviderClientClass(provider) {
       return new Chat({
         ...this.config,
         model: model || this.config.model,
+        apiKey: this.config.apiKey,
+        baseUrl: this.config.baseUrl,
         defaults: { ...(this.config.defaults || {}), provider },
       });
     }
 
+    getRequestOptions() {
+      return {
+        ...this.config,
+        apiKey: this.config.apiKey || providerApiKey(provider, this.config),
+        baseUrl: this.config.baseUrl || providerBaseUrl(provider, this.config),
+        timeout: this.config.timeout ?? DEFAULT_TIMEOUT,
+      };
+    }
+
+    getChatOptions(overrides = {}) {
+      const defaults = {
+        ...this.getRequestOptions(),
+        model: overrides.model || this.config.defaultModel || this.config.model || (
+          provider === "anthropic" ? "claude-sonnet-4-6" :
+          provider === "xai" ? "grok-4" :
+          provider === "openrouter" ? "openai/gpt-4o" :
+          "gpt-4o"
+        ),
+      };
+      return { ...defaults, ...overrides };
+    }
+
+    getEmbeddingOptions(overrides = {}) {
+      return {
+        ...this.getRequestOptions(),
+        model: overrides.model || this.config.defaultEmbeddingModel || "text-embedding-3-small",
+        ...overrides,
+      };
+    }
+
+    getImageOptions(overrides = {}) {
+      return {
+        ...this.getRequestOptions(),
+        model: overrides.model || this.config.defaultImageModel,
+        ...overrides,
+      };
+    }
+
+    getVideoOptions(overrides = {}) {
+      return {
+        ...this.getRequestOptions(),
+        model: overrides.model || this.config.defaultVideoModel || "grok-imagine-video",
+        ...overrides,
+      };
+    }
+
     async chat(messages, options = {}) {
-      const chat = this._chat(options.model);
+      const chat = this._chat(options.model || this.config.defaultModel);
       chat.addMessages((messages || []).map((message) => message instanceof Message ? message : Message.fromJSON(message)));
-      return chat.generateWithResult({ ...this.config, ...options, provider });
+      const tools = options.tools || options.requestOptions?.tools;
+      if (tools) chat.addTools((tools || []).map((tool) => tool instanceof Tool ? tool : createTool(tool)));
+      return chat.generateWithResult({ ...this.getChatOptions(options), provider });
     }
 
     async chatSimple(messages, options = {}) {
@@ -1386,8 +2331,178 @@ function makeProviderClientClass(provider) {
       return result.content;
     }
 
+    async chatWithTools(messages, tools, options = {}) {
+      const result = await this.chat(messages, { ...options, tools });
+      return result.toolCalls?.length
+        ? { type: "tool_calls", toolCalls: result.toolCalls, usage: result.usage }
+        : { type: "content", content: result.content, usage: result.usage };
+    }
+
+    async chatStructured(messages, schema, options = {}) {
+      return openAICompatibleChatStructured(provider, messages, schema, this.getChatOptions(options));
+    }
+
+    async chatWithWebSearch(messages, options = {}) {
+      return this.chat(messages, { ...options, extra: { ...(options.extra || {}), search_parameters: options.searchParameters || options.search_parameters || {} } });
+    }
+
     async message(messages, options = {}) {
       return this.chat(messages, options);
+    }
+
+    async messageSimple(messages, options = {}) {
+      return this.chatSimple(messages, options);
+    }
+
+    async messageWithTools(messages, tools, options = {}) {
+      return this.chatWithTools(messages, tools, options);
+    }
+
+    async messageStructured(messages, schema, options = {}) {
+      return this.chatStructured(messages, schema, options);
+    }
+
+    stream(messages, options = {}) {
+      return openAICompatibleStream(provider, messages, this.getChatOptions(options));
+    }
+
+    streamContent(messages, options = {}) {
+      return this.stream(messages, options);
+    }
+
+    async streamAccumulate(messages, options = {}, onChunk) {
+      return openAICompatibleStreamAccumulate(provider, messages, this.getChatOptions(options), onChunk);
+    }
+
+    streamReadable(messages, options = {}) {
+      return streamReadableFromAsyncIterable(this.streamContent(messages, options));
+    }
+
+    async listModels(options = {}) {
+      return providerListModels(provider, { ...this.getRequestOptions(), ...options });
+    }
+
+    async listAllModels(options = {}) {
+      return this.listModels(options);
+    }
+
+    async listModelIds(options = {}) {
+      return providerListModelIds(provider, { ...this.getRequestOptions(), ...options });
+    }
+
+    async listLanguageModels(options = {}) {
+      return this.listModels(options);
+    }
+
+    async listImageGenerationModels(options = {}) {
+      return this.listModels(options);
+    }
+
+    async getModel(modelId, options = {}) {
+      return providerGetModel(provider, modelId, { ...this.getRequestOptions(), ...options });
+    }
+
+    async getLanguageModel(modelId, options = {}) {
+      return this.getModel(modelId, options);
+    }
+
+    async getImageGenerationModel(modelId, options = {}) {
+      return this.getModel(modelId, options);
+    }
+
+    async getLanguageModelList(options = {}) {
+      const json = await this.listModels(options);
+      return Array.isArray(json?.data) ? json.data : Array.isArray(json?.models) ? json.models : [];
+    }
+
+    async getImageGenerationModelList(options = {}) {
+      return this.getLanguageModelList(options);
+    }
+
+    async modelExists(modelId, options = {}) {
+      return providerModelExists(provider, modelId, { ...this.getRequestOptions(), ...options });
+    }
+
+    async embed(input, options = {}) {
+      return providerEmbed(provider, input, { ...this.getEmbeddingOptions(options), ...options });
+    }
+
+    async embedOne(input, options = {}) {
+      return providerEmbedOne(provider, input, { ...this.getEmbeddingOptions(options), ...options });
+    }
+
+    async embedMany(inputs, options = {}) {
+      return providerEmbedMany(provider, inputs, { ...this.getEmbeddingOptions(options), ...options });
+    }
+
+    cosineSimilarity(left, right) {
+      return cosineSimilarity(left, right);
+    }
+
+    findSimilar(query, corpus, options = {}) {
+      return findSimilar(query, corpus, options);
+    }
+
+    async generateImage(prompt, options = {}) {
+      return providerGenerateImage(provider, prompt, { ...this.getImageOptions(options), ...options });
+    }
+
+    async generateImageUrl(prompt, options = {}) {
+      return providerGenerateImageUrl(provider, prompt, { ...this.getImageOptions(options), ...options });
+    }
+
+    async generateImageBase64(prompt, options = {}) {
+      return providerGenerateImageBase64(provider, prompt, { ...this.getImageOptions(options), ...options });
+    }
+
+    async generateImages(prompt, count, options = {}) {
+      return providerGenerateImages(provider, prompt, count, { ...this.getImageOptions(options), ...options });
+    }
+
+    async generateImageWithPrompt(prompt, options = {}) {
+      return this.generateImage(prompt, options);
+    }
+
+    async editImage(image, prompt, options = {}) {
+      return providerRequest(provider, "/images/edits", { ...this.getImageOptions(options), json: { image, prompt, ...options.requestOptions } });
+    }
+
+    async editImageUrl(image, prompt, options = {}) {
+      const json = await this.editImage(image, prompt, options);
+      return json?.data?.[0]?.url || "";
+    }
+
+    async editImageBase64(image, prompt, options = {}) {
+      const json = await this.editImage(image, prompt, options);
+      return json?.data?.[0]?.b64_json || "";
+    }
+
+    async editMultipleImages(images, prompt, options = {}) {
+      return this.editImage(images, prompt, options);
+    }
+
+    async startVideoGeneration(prompt, options = {}) {
+      return providerStartVideoGeneration(provider, prompt, { ...this.getVideoOptions(options), ...options });
+    }
+
+    async getVideoStatus(id, options = {}) {
+      return providerGetVideoStatus(provider, id, { ...this.getRequestOptions(), ...options });
+    }
+
+    async generateVideo(prompt, options = {}) {
+      return providerGenerateVideo(provider, prompt, { ...this.getVideoOptions(options), ...options });
+    }
+
+    async generateVideoUrl(prompt, options = {}) {
+      return providerGenerateVideoUrl(provider, prompt, { ...this.getVideoOptions(options), ...options });
+    }
+
+    async generateVideoFromImage(image, prompt, options = {}) {
+      return providerRequest(provider, "/video/generations", { ...this.getVideoOptions(options), json: { image, prompt, ...options.requestOptions } });
+    }
+
+    async editVideo(video, prompt, options = {}) {
+      return providerRequest(provider, "/video/edits", { ...this.getVideoOptions(options), json: { video, prompt, ...options.requestOptions } });
     }
   };
 }
@@ -1451,25 +2566,171 @@ let create_openrouter_client : js_function =
 
 let openai_namespace : js_value =
   [%mel.raw
-    {| Object.freeze({ Client: OpenAIClient, create: createOpenAIClient, createClient: createOpenAIClient }) |}]
+    {|
+Object.freeze({
+  Client: OpenAIClient,
+  create: createOpenAIClient,
+  createClient: createOpenAIClient,
+  chat: (messages, options = {}) => openAICompatibleChat("openai", messages, options),
+  chatSimple: (messages, options = {}) => openAICompatibleChatSimple("openai", messages, options),
+  chatStructured: (messages, schema, options = {}) => openAICompatibleChatStructured("openai", messages, schema, options),
+  chatWithTools: (messages, tools, options = {}) => createOpenAIClient(options).chatWithTools(messages, tools, options),
+  chatStream: (messages, options = {}) => openAICompatibleStream("openai", messages, options),
+  chatStreamContent: (messages, options = {}) => openAICompatibleStream("openai", messages, options),
+  chatStreamAccumulate: (messages, options = {}, onChunk) => openAICompatibleStreamAccumulate("openai", messages, options, onChunk),
+  chatStreamReadable: (messages, options = {}) => streamReadableFromAsyncIterable(openAICompatibleStream("openai", messages, options)),
+  streamWithAccumulator: (stream) => stream,
+  parseSSEStream: async function* (response, selectText = (json) => json?.choices?.[0]?.delta?.content || "") {
+    yield* new Chat({ model: "gpt-4o" })._parseSse(response, selectText);
+  },
+  createAccumulator: () => ({ content: "", toolCalls: [] }),
+  updateAccumulator: (acc, delta) => Object.assign(acc, { content: (acc.content || "") + (delta?.content || ""), last: delta }),
+  accumulatorToToolCalls: (acc) => acc.toolCalls || [],
+  embed: (input, options = {}) => providerEmbed("openai", input, options),
+  embedOne: (input, options = {}) => providerEmbedOne("openai", input, options),
+  embedMany: (inputs, options = {}) => providerEmbedMany("openai", inputs, options),
+  cosineSimilarity,
+  findSimilar,
+  generateImage: (prompt, options = {}) => providerGenerateImage("openai", prompt, options),
+  generateImageUrl: (prompt, options = {}) => providerGenerateImageUrl("openai", prompt, options),
+  generateImageBase64: (prompt, options = {}) => providerGenerateImageBase64("openai", prompt, options),
+  generateImages: (prompt, count, options = {}) => providerGenerateImages("openai", prompt, count, options),
+  generateImageWithPrompt: (prompt, options = {}) => providerGenerateImage("openai", prompt, options),
+  listModels: (options = {}) => providerListModels("openai", options),
+  listModelIds: (options = {}) => providerListModelIds("openai", options),
+  getModel: (modelId, options = {}) => providerGetModel("openai", modelId, options),
+  modelExists: (modelId, options = {}) => providerModelExists("openai", modelId, options),
+  requestRaw: (path, options = {}) => providerRequestRaw("openai", path, options),
+  request: (path, options = {}) => providerRequest("openai", path, options),
+  requestGet: (path, options = {}) => providerRequestGet("openai", path, options),
+  makeOpenAIStrict,
+  needsOpenAIStrictTransform,
+  BASE_URL: "https://api.openai.com/v1",
+  DEFAULT_TIMEOUT,
+})
+|}]
   [@@mel.as "OpenAI"]
 
 let anthropic_namespace : js_value =
   [%mel.raw
-    {| Object.freeze({ Client: AnthropicClient, create: createAnthropicClient, createClient: createAnthropicClient }) |}]
+    {|
+Object.freeze({
+  Client: AnthropicClient,
+  create: createAnthropicClient,
+  createClient: createAnthropicClient,
+  createMessage: (messages, options = {}) => createAnthropicClient(options).message(messages, options),
+  messageSimple: (messages, options = {}) => createAnthropicClient(options).messageSimple(messages, options),
+  messageStructured: (messages, schema, options = {}) => createAnthropicClient(options).messageStructured(messages, schema, options),
+  messageWithTools: (messages, tools, options = {}) => createAnthropicClient(options).messageWithTools(messages, tools, options),
+  messageStream: (messages, options = {}) => openAICompatibleStream("anthropic", messages, options),
+  messageStreamContent: (messages, options = {}) => openAICompatibleStream("anthropic", messages, options),
+  messageStreamAccumulate: (messages, options = {}, onDelta) => openAICompatibleStreamAccumulate("anthropic", messages, options, onDelta),
+  messageStreamReadable: (messages, options = {}) => streamReadableFromAsyncIterable(openAICompatibleStream("anthropic", messages, options)),
+  extractText: (response) => Array.isArray(response?.content) ? response.content.filter((block) => block.type === "text").map((block) => block.text || "").join("") : "",
+  extractToolUses: (response) => Array.isArray(response?.content) ? response.content.filter((block) => block.type === "tool_use") : [],
+  listModels: (options = {}) => providerListModels("anthropic", options),
+  listAllModels: (options = {}) => providerListModels("anthropic", options),
+  listModelIds: (options = {}) => providerListModelIds("anthropic", options),
+  getModel: (modelId, options = {}) => providerGetModel("anthropic", modelId, options),
+  modelExists: (modelId, options = {}) => providerModelExists("anthropic", modelId, options),
+  requestRaw: (path, options = {}) => providerRequestRaw("anthropic", path, options),
+  request: (path, options = {}) => providerRequest("anthropic", path, options),
+  requestGet: (path, options = {}) => providerRequestGet("anthropic", path, options),
+  API_VERSION: "2023-06-01",
+  BASE_URL: "https://api.anthropic.com/v1",
+  DEFAULT_TIMEOUT,
+})
+|}]
   [@@mel.as "Anthropic"]
 
 let xai_namespace : js_value =
-  [%mel.raw {| Object.freeze({ Client: XAIClient, create: createXAIClient, createClient: createXAIClient }) |}]
+  [%mel.raw
+    {|
+Object.freeze({
+  Client: XAIClient,
+  create: createXAIClient,
+  createClient: createXAIClient,
+  chat: (messages, options = {}) => openAICompatibleChat("xai", messages, options),
+  chatSimple: (messages, options = {}) => openAICompatibleChatSimple("xai", messages, options),
+  chatStructured: (messages, schema, options = {}) => openAICompatibleChatStructured("xai", messages, schema, options),
+  chatWithTools: (messages, tools, options = {}) => createXAIClient(options).chatWithTools(messages, tools, options),
+  chatWithWebSearch: (messages, options = {}) => createXAIClient(options).chatWithWebSearch(messages, options),
+  chatStream: (messages, options = {}) => openAICompatibleStream("xai", messages, options),
+  chatStreamContent: (messages, options = {}) => openAICompatibleStream("xai", messages, options),
+  chatStreamAccumulate: (messages, options = {}, onChunk) => openAICompatibleStreamAccumulate("xai", messages, options, onChunk),
+  chatStreamReadable: (messages, options = {}) => streamReadableFromAsyncIterable(openAICompatibleStream("xai", messages, options)),
+  embed: (input, options = {}) => providerEmbed("xai", input, options),
+  embedOne: (input, options = {}) => providerEmbedOne("xai", input, options),
+  embedMany: (inputs, options = {}) => providerEmbedMany("xai", inputs, options),
+  cosineSimilarity,
+  findSimilar,
+  generateImage: (prompt, options = {}) => providerGenerateImage("xai", prompt, options),
+  generateImageUrl: (prompt, options = {}) => providerGenerateImageUrl("xai", prompt, options),
+  generateImageBase64: (prompt, options = {}) => providerGenerateImageBase64("xai", prompt, options),
+  generateImageWithPrompt: (prompt, options = {}) => providerGenerateImage("xai", prompt, options),
+  generateImages: (prompt, count, options = {}) => providerGenerateImages("xai", prompt, count, options),
+  editImage: (image, prompt, options = {}) => createXAIClient(options).editImage(image, prompt, options),
+  editImageUrl: (image, prompt, options = {}) => createXAIClient(options).editImageUrl(image, prompt, options),
+  editImageBase64: (image, prompt, options = {}) => createXAIClient(options).editImageBase64(image, prompt, options),
+  editMultipleImages: (images, prompt, options = {}) => createXAIClient(options).editMultipleImages(images, prompt, options),
+  startVideoGeneration: (prompt, options = {}) => providerStartVideoGeneration("xai", prompt, options),
+  getVideoStatus: (id, options = {}) => providerGetVideoStatus("xai", id, options),
+  generateVideo: (prompt, options = {}) => providerGenerateVideo("xai", prompt, options),
+  generateVideoUrl: (prompt, options = {}) => providerGenerateVideoUrl("xai", prompt, options),
+  generateVideoFromImage: (image, prompt, options = {}) => createXAIClient(options).generateVideoFromImage(image, prompt, options),
+  editVideo: (video, prompt, options = {}) => createXAIClient(options).editVideo(video, prompt, options),
+  listModels: (options = {}) => providerListModels("xai", options),
+  listLanguageModels: (options = {}) => providerListModels("xai", options),
+  listImageGenerationModels: (options = {}) => providerListModels("xai", options),
+  getLanguageModelList: async (options = {}) => {
+    const json = await providerListModels("xai", options);
+    return Array.isArray(json?.data) ? json.data : Array.isArray(json?.models) ? json.models : [];
+  },
+  getImageGenerationModelList: async (options = {}) => {
+    const json = await providerListModels("xai", options);
+    return Array.isArray(json?.data) ? json.data : Array.isArray(json?.models) ? json.models : [];
+  },
+  getModel: (modelId, options = {}) => providerGetModel("xai", modelId, options),
+  getLanguageModel: (modelId, options = {}) => providerGetModel("xai", modelId, options),
+  getImageGenerationModel: (modelId, options = {}) => providerGetModel("xai", modelId, options),
+  modelExists: (modelId, options = {}) => providerModelExists("xai", modelId, options),
+  requestRaw: (path, options = {}) => providerRequestRaw("xai", path, options),
+  request: (path, options = {}) => providerRequest("xai", path, options),
+  requestGet: (path, options = {}) => providerRequestGet("xai", path, options),
+  BASE_URL: "https://api.x.ai/v1",
+  DEFAULT_TIMEOUT,
+})
+|}]
   [@@mel.as "XAI"]
 
 let local_namespace : js_value =
-  [%mel.raw {| Object.freeze({ Client: LocalClient, create: createLocalClient, createClient: createLocalClient }) |}]
+  [%mel.raw
+    {| Object.freeze({ Client: LocalClient, create: createLocalClient, createClient: createLocalClient, chat: (messages, options = {}) => openAICompatibleChat("local", messages, options), chatSimple: (messages, options = {}) => openAICompatibleChatSimple("local", messages, options) }) |}]
   [@@mel.as "Local"]
 
 let openrouter_namespace : js_value =
   [%mel.raw
-    {| Object.freeze({ Client: OpenRouterClient, create: createOpenRouterClient, createClient: createOpenRouterClient }) |}]
+    {|
+Object.freeze({
+  Client: OpenRouterClient,
+  create: createOpenRouterClient,
+  createClient: createOpenRouterClient,
+  chat: (messages, options = {}) => openAICompatibleChat("openrouter", messages, options),
+  chatSimple: (messages, options = {}) => openAICompatibleChatSimple("openrouter", messages, options),
+  chatStructured: (messages, schema, options = {}) => openAICompatibleChatStructured("openrouter", messages, schema, options),
+  chatWithTools: (messages, tools, options = {}) => createOpenRouterClient(options).chatWithTools(messages, tools, options),
+  chatStream: (messages, options = {}) => openAICompatibleStream("openrouter", messages, options),
+  chatStreamContent: (messages, options = {}) => openAICompatibleStream("openrouter", messages, options),
+  chatStreamAccumulate: (messages, options = {}, onChunk) => openAICompatibleStreamAccumulate("openrouter", messages, options, onChunk),
+  chatStreamReadable: (messages, options = {}) => streamReadableFromAsyncIterable(openAICompatibleStream("openrouter", messages, options)),
+  listModels: (options = {}) => providerListModels("openrouter", options),
+  listModelIds: (options = {}) => providerListModelIds("openrouter", options),
+  requestRaw: (path, options = {}) => providerRequestRaw("openrouter", path, options),
+  request: (path, options = {}) => providerRequest("openrouter", path, options),
+  requestGet: (path, options = {}) => providerRequestGet("openrouter", path, options),
+  OPENROUTER_BASE_URL: "https://openrouter.ai/api/v1",
+})
+|}]
   [@@mel.as "OpenRouter"]
 
 let core_namespace : js_value =
@@ -1477,8 +2738,12 @@ let core_namespace : js_value =
   [@@mel.as "Core"]
 
 let schemas_namespace : js_value =
-  [%mel.raw {| Object.freeze({ Schema, JsonSchema }) |}]
+  [%mel.raw {| Object.freeze({ Schema, SchemaError, JsonSchema }) |}]
   [@@mel.as "Schemas"]
+
+let tokens_namespace : js_value =
+  [%mel.raw {| compatibility_surface.Tokens |}]
+  [@@mel.as "Tokens"]
 
 let generate_namespace : js_value =
   [%mel.raw
@@ -1533,6 +2798,23 @@ Object.freeze({
   createXAIClient,
   createLocalClient,
   createOpenRouterClient,
+  detectProviderByModel,
+  isProviderActive,
+  activeProviders,
+  assertProviderActive,
+  getApiKey,
+  getBaseUrl,
+  resolveProvider,
+  getModelsForProvider,
+  getAllKnownModels,
+  isKnownModel,
+  PROVIDERS,
+  PROVIDER_IDS,
+  OPENAI_MODELS,
+  ANTHROPIC_MODELS,
+  XAI_MODELS,
+  MODELS_BY_PROVIDER,
+  ProviderError,
 })
 |}]
   [@@mel.as "Providers"]
@@ -1560,6 +2842,7 @@ Object.freeze({
   version: "0.0.0-port",
   Core,
   Schemas,
+  Tokens,
   Generate,
   Shortcuts,
   Providers,
@@ -1575,11 +2858,58 @@ Object.freeze({
   createTool,
   mergeOptions,
   Schema,
+  SchemaError,
   JsonSchema,
+  ProviderError,
   genText,
   genData,
   genStream,
   genStreamAccumulate,
+  estimateTokens,
+  estimatePromptTokens,
+  estimateTokensMany,
+  estimateTokensWithRatio,
+  estimateMessageTokens,
+  estimateChatTokens,
+  estimateSystemPromptTokens,
+  getMessageOverhead,
+  calculateAvailableTokens,
+  messagesFitBudget,
+  calculateCost,
+  calculateCostCustom,
+  calculateBatchCost,
+  calculateImageCost,
+  calculateVideoCost,
+  estimateCost,
+  getCostPerToken,
+  getPricing,
+  hasPricing,
+  getContextWindow,
+  hasContextWindow,
+  splitText,
+  truncateContent,
+  fitMessages,
+  paginateMessages,
+  estimateChunkCount,
+  detectProviderByModel,
+  isProviderActive,
+  activeProviders,
+  assertProviderActive,
+  getApiKey,
+  getBaseUrl,
+  resolveProvider,
+  getModelsForProvider,
+  getAllKnownModels,
+  isKnownModel,
+  PROVIDERS,
+  PROVIDER_IDS,
+  OPENAI_MODELS,
+  ANTHROPIC_MODELS,
+  XAI_MODELS,
+  MODELS_BY_PROVIDER,
+  CONTEXT_WINDOWS,
+  PRICING,
+  TOKEN_RATIOS,
   OpenAIClient,
   AnthropicClient,
   XAIClient,
@@ -1598,6 +2928,8 @@ Object.freeze({
 let public_message : js_function = [%mel.raw {| Message |}]
 let public_json_schema_class : js_function = [%mel.raw {| JsonSchema |}]
 let public_schema_class : js_function = [%mel.raw {| Schema |}]
+let public_schema_error : js_function = [%mel.raw {| SchemaError |}]
+let public_provider_error : js_function = [%mel.raw {| ProviderError |}]
 let public_tool : js_function = [%mel.raw {| Tool |}]
 let public_create_tool : js_function = [%mel.raw {| createTool |}]
 let public_merge_options : js_function = [%mel.raw {| mergeOptions |}]
@@ -1624,11 +2956,58 @@ let public_local_namespace : js_value = [%mel.raw {| Local |}]
 let public_openrouter_namespace : js_value = [%mel.raw {| OpenRouter |}]
 let public_core_namespace : js_value = [%mel.raw {| Core |}]
 let public_schemas_namespace : js_value = [%mel.raw {| Schemas |}]
+let public_tokens_namespace : js_value = [%mel.raw {| Tokens |}]
 let public_generate_namespace : js_value = [%mel.raw {| Generate |}]
 let public_shortcuts_namespace : js_value = [%mel.raw {| Shortcuts |}]
 let public_providers_namespace : js_value = [%mel.raw {| Providers |}]
 let public_defaults_namespace : js_value = [%mel.raw {| Defaults |}]
 let public_chatoyant_namespace : js_value = [%mel.raw {| Chatoyant |}]
+
+let public_providers : js_value = [%mel.raw {| PROVIDERS |}]
+let public_provider_ids : js_value = [%mel.raw {| PROVIDER_IDS |}]
+let public_openai_models : js_value = [%mel.raw {| OPENAI_MODELS |}]
+let public_anthropic_models : js_value = [%mel.raw {| ANTHROPIC_MODELS |}]
+let public_xai_models : js_value = [%mel.raw {| XAI_MODELS |}]
+let public_models_by_provider : js_value = [%mel.raw {| MODELS_BY_PROVIDER |}]
+let public_detect_provider_by_model : js_function = [%mel.raw {| detectProviderByModel |}]
+let public_is_provider_active : js_function = [%mel.raw {| isProviderActive |}]
+let public_active_providers : js_function = [%mel.raw {| activeProviders |}]
+let public_assert_provider_active : js_function = [%mel.raw {| assertProviderActive |}]
+let public_get_api_key : js_function = [%mel.raw {| getApiKey |}]
+let public_get_base_url : js_function = [%mel.raw {| getBaseUrl |}]
+let public_resolve_provider : js_function = [%mel.raw {| resolveProvider |}]
+let public_get_models_for_provider : js_function = [%mel.raw {| getModelsForProvider |}]
+let public_get_all_known_models : js_function = [%mel.raw {| getAllKnownModels |}]
+let public_is_known_model : js_function = [%mel.raw {| isKnownModel |}]
+let public_context_windows : js_value = [%mel.raw {| CONTEXT_WINDOWS |}]
+let public_pricing : js_value = [%mel.raw {| PRICING |}]
+let public_token_ratios : js_value = [%mel.raw {| TOKEN_RATIOS |}]
+let public_estimate_tokens : js_function = [%mel.raw {| estimateTokens |}]
+let public_estimate_prompt_tokens : js_function = [%mel.raw {| estimatePromptTokens |}]
+let public_estimate_tokens_many : js_function = [%mel.raw {| estimateTokensMany |}]
+let public_estimate_tokens_with_ratio : js_function = [%mel.raw {| estimateTokensWithRatio |}]
+let public_estimate_message_tokens : js_function = [%mel.raw {| estimateMessageTokens |}]
+let public_estimate_chat_tokens : js_function = [%mel.raw {| estimateChatTokens |}]
+let public_estimate_system_prompt_tokens : js_function = [%mel.raw {| estimateSystemPromptTokens |}]
+let public_get_message_overhead : js_function = [%mel.raw {| getMessageOverhead |}]
+let public_calculate_available_tokens : js_function = [%mel.raw {| calculateAvailableTokens |}]
+let public_messages_fit_budget : js_function = [%mel.raw {| messagesFitBudget |}]
+let public_calculate_cost : js_function = [%mel.raw {| calculateCost |}]
+let public_calculate_cost_custom : js_function = [%mel.raw {| calculateCostCustom |}]
+let public_calculate_batch_cost : js_function = [%mel.raw {| calculateBatchCost |}]
+let public_calculate_image_cost : js_function = [%mel.raw {| calculateImageCost |}]
+let public_calculate_video_cost : js_function = [%mel.raw {| calculateVideoCost |}]
+let public_estimate_cost : js_function = [%mel.raw {| estimateCost |}]
+let public_get_cost_per_token : js_function = [%mel.raw {| getCostPerToken |}]
+let public_get_pricing : js_function = [%mel.raw {| getPricing |}]
+let public_has_pricing : js_function = [%mel.raw {| hasPricing |}]
+let public_get_context_window : js_function = [%mel.raw {| getContextWindow |}]
+let public_has_context_window : js_function = [%mel.raw {| hasContextWindow |}]
+let public_split_text : js_function = [%mel.raw {| splitText |}]
+let public_truncate_content : js_function = [%mel.raw {| truncateContent |}]
+let public_fit_messages : js_function = [%mel.raw {| fitMessages |}]
+let public_paginate_messages : js_function = [%mel.raw {| paginateMessages |}]
+let public_estimate_chunk_count : js_function = [%mel.raw {| estimateChunkCount |}]
 
 let chat_session_json () =
   let session =
