@@ -2,7 +2,7 @@
 
 [![npm version](https://img.shields.io/npm/v/chatoyant.svg?style=flat-square)](https://www.npmjs.com/package/chatoyant)
 [![CI](https://img.shields.io/github/actions/workflow/status/Anonyfox/chatoyant/ci.yml?branch=main&label=CI&style=flat-square)](https://github.com/Anonyfox/chatoyant/actions/workflows/ci.yml)
-[![OCaml](https://img.shields.io/badge/OCaml-5.1%2B-ec6813?style=flat-square&logo=ocaml)](https://ocaml.org/)
+[![OCaml](https://img.shields.io/badge/OCaml-5.3%2B-ec6813?style=flat-square&logo=ocaml)](https://ocaml.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 

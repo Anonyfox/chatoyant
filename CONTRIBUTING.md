@@ -5,7 +5,7 @@ npm package is generated from the OCaml sources with Melange.
 
 ## Prerequisites
 
-- OCaml `>= 5.1` and [opam](https://opam.ocaml.org/)
+- OCaml `>= 5.3` and [opam](https://opam.ocaml.org/)
 - Node.js `>= 18` (used to bundle and test the generated npm package)
 
 ## Setup

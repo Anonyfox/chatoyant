@@ -20,7 +20,7 @@
  (bug_reports "https://github.com/Anonyfox/chatoyant/issues")
  (documentation "https://anonyfox.github.io/chatoyant")
  (depends
-  (ocaml (>= 5.1))
+  (ocaml (>= 5.3))
   (dune (>= 3.23))
   (melange (>= 6.0.0))
   ca-certs

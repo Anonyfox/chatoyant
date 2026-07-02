@@ -23,7 +23,7 @@ homepage: "https://github.com/Anonyfox/chatoyant"
 doc: "https://anonyfox.github.io/chatoyant"
 bug-reports: "https://github.com/Anonyfox/chatoyant/issues"
 depends: [
-  "ocaml" {>= "5.1"}
+  "ocaml" {>= "5.3"}
   "dune" {>= "3.23"}
   "melange" {>= "6.0.0"}
   "ca-certs"

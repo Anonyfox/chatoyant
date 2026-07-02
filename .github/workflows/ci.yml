@@ -25,11 +25,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ocaml: ["5.1.x", "5.2.x", "5.3.x"]
-        node: ["20"]
-        include:
-          - ocaml: "5.3.x"
-            node: "22"
+        ocaml: ["5.3.x", "5.4.x"]
+        node: ["20", "22"]
     steps:
       - uses: actions/checkout@v4
 
