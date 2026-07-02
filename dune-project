@@ -28,7 +28,7 @@
   cohttp-eio
   digestif
   domain-name
-  eio
+  (eio (>= 1.0))
   (eio_main :with-test)
   http
   mirage-crypto-rng

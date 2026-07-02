@@ -3,7 +3,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const ignoredDirs = new Set(["_build", "node_modules", "dist", ".cache"]);
+// _opam is the local switch ocaml/setup-ocaml creates inside the workspace on
+// CI; _site is the branded docs build. Both contain third-party markdown.
+const ignoredDirs = new Set(["_build", "_opam", "_site", "node_modules", "dist", ".cache", ".git"]);
 const markdownFiles = [];
 
 function walk(dir) {
