@@ -5,18 +5,22 @@
 # and tags vX.Y.Z. The npm version, the OCaml/dune version, the opam version, and
 # the git tag stay in lockstep.
 #
-#   make release-minor          # bump + prove + commit + tag (no push)
-#   make release-minor DRY=1    # rehearse end-to-end, change nothing
-#   make release-minor PUSH=1   # bump + prove + commit + tag + push
+#   make release-minor               # bump + prove + commit + tag (no push)
+#   make release-minor DRY=1         # rehearse end-to-end, change nothing
+#   make release-minor PUSH=1        # ...and push (the tag triggers npm publish)
+#   make release-minor PUSH=1 OPAM=1 # ...and submit to opam-repository too
+#   make opam-publish                # (re)submit the current version to opam
 #
-# Swap 'minor' for patch | major. DRY=1 and PUSH=1 work on every release-* target.
+# Swap 'minor' for patch | major. DRY=1, PUSH=1, and OPAM=1 work on every
+# release-* target. Re-running opam-publish force-updates the open PR, so it
+# doubles as the "address opam-repository review feedback" command.
 
 .DEFAULT_GOAL := help
-.PHONY: help build test check version-check docs docs-serve \
+.PHONY: help build test check version-check docs docs-serve opam-publish \
         release-patch release-minor release-major
 
 REL   := node scripts/release.mjs
-FLAGS := $(if $(DRY),--dry-run) $(if $(PUSH),--push)
+FLAGS := $(if $(DRY),--dry-run) $(if $(PUSH),--push) $(if $(OPAM),--opam)
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -40,6 +44,9 @@ docs-serve: docs ## Build docs, then serve them at http://localhost:8099
 
 version-check: ## Assert package.json and dune-project versions match
 	npm run version:check
+
+opam-publish: ## Submit the released version to opam-repository (TAG=vX.Y.Z, DRY=1)
+	node scripts/opam-publish.mjs $(if $(TAG),--tag $(TAG)) $(if $(DRY),--dry-run)
 
 release-patch: ## Cut a patch release (DRY=1 rehearse, PUSH=1 push)
 	$(REL) patch $(FLAGS)

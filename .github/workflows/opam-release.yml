@@ -1,15 +1,13 @@
-# Submit a release to the public opam-repository via dune-release.
+# Submit a release to the public opam-repository — CI twin of `make opam-publish`.
 #
-# This is a deliberate, manually-triggered step — separate from npm publishing —
-# because the opam-repository merge is reviewed by maintainers and the first
-# submission creates your fork. Prerequisites:
+# Runs scripts/opam-publish.mjs, which builds + tests the source tarball
+# (dune-release distrib), uploads it to the GitHub release, verifies the served
+# checksum, writes the opam recipe, and opens (or force-updates) the PR against
+# ocaml/opam-repository from your fork. Re-running with the same tag updates
+# the open PR, so this is also how review feedback gets addressed from CI.
 #
-#   - A GitHub PAT (repo scope) stored as the OPAM_PUBLISH_TOKEN secret, used to
-#     create the GitHub release asset and open the opam-repository PR.
-#   - A CHANGES.md whose top entry matches the tag being released.
-#
-# The very first submission is often smoother run locally (`opam install
-# dune-release` then `dune-release`); this workflow automates subsequent ones.
+# Requires the OPAM_PUBLISH_TOKEN secret: a classic PAT with repo scope, used
+# by gh for the release asset upload, the fork, and the pull request.
 
 name: Submit to opam-repository
 
@@ -26,10 +24,11 @@ permissions:
 jobs:
   opam-submit:
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.OPAM_PUBLISH_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag }}
           fetch-depth: 0
 
       - name: Set up OCaml
@@ -37,20 +36,21 @@ jobs:
         with:
           ocaml-compiler: "5.3.x"
 
-      - name: Install dune-release
-        run: opam install dune-release -y
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
 
-      - name: Configure git and token
+      - name: Install dependencies and dune-release
+        run: |
+          opam install . --deps-only --with-test -y
+          opam install dune-release -y
+
+      - name: Configure git identity and credentials
         run: |
           git config --global user.name "${{ github.actor }}"
           git config --global user.email "${{ github.actor }}@users.noreply.github.com"
-          mkdir -p ~/.config/dune
-          printf '%s' "${{ secrets.OPAM_PUBLISH_TOKEN }}" > ~/.config/dune/github.token
+          gh auth setup-git
 
-      - name: Lint, build, publish, and submit
-        run: |
-          opam exec -- dune-release lint
-          opam exec -- dune-release distrib --tag "${{ inputs.tag }}"
-          opam exec -- dune-release publish distrib --tag "${{ inputs.tag }}"
-          opam exec -- dune-release opam pkg --tag "${{ inputs.tag }}"
-          opam exec -- dune-release opam submit --tag "${{ inputs.tag }}"
+      - name: Publish to opam-repository
+        run: opam exec -- node scripts/opam-publish.mjs --tag "${{ inputs.tag }}"

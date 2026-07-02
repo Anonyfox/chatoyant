@@ -73,9 +73,20 @@ make release-minor PUSH=1  # ...and git push --follow-tags
 regenerates `chatoyant.opam`, stamps the `Unreleased` section of `CHANGELOG.md`
 with the new version and date (a release without an `Unreleased` section is
 refused), runs the full gate, then commits and tags. Pushing
-a `v*.*.*` tag triggers `publish.yml`, which publishes the npm package. The
-opam-repository submission is a separate, deliberate step run via the
-`Submit to opam-repository` workflow (or `dune-release` locally).
+a `v*.*.*` tag triggers `publish.yml`, which publishes the npm package.
+
+The full ship — npm and opam-repository in one command:
+
+```bash
+make release-minor PUSH=1 OPAM=1
+```
+
+The opam leg (also available standalone as `make opam-publish`, or as the
+`Submit to opam-repository` workflow) builds and tests the source tarball with
+`dune-release distrib`, uploads it to the GitHub release, verifies the served
+checksum, writes the opam recipe, and opens a PR against `ocaml/opam-repository`
+from your fork. Re-running `make opam-publish` force-updates the open PR — use
+it to address opam-repository review feedback.
 
 ## Pull requests
 

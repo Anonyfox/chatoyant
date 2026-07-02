@@ -16,8 +16,9 @@
 //              restore every touched file. Nothing is committed, tagged, or
 //              pushed. Does not require a clean tree.
 //   --push     After committing and tagging, run `git push --follow-tags`.
-//              Omitted by default: until the repo cutover, pushing a v*.*.*
-//              tag would trigger the legacy root publish workflow.
+//              The pushed tag triggers the npm publish workflow.
+//   --opam     After pushing, submit the release to opam-repository via
+//              scripts/opam-publish.mjs. Requires --push.
 
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -109,7 +110,9 @@ function main() {
   const kind = argv.find((a) => !a.startsWith("-"));
   const dryRun = argv.includes("--dry-run");
   const push = argv.includes("--push");
+  const opam = argv.includes("--opam");
   if (!BUMPS.has(kind)) fail(`expected patch|minor|major, got "${kind ?? ""}"`);
+  if (opam && !push && !dryRun) fail("--opam requires --push (the tag must be public)");
 
   const branch = git("rev-parse", "--abbrev-ref", "HEAD");
   const current = JSON.parse(readFileSync(PKG, "utf8")).version;
@@ -150,6 +153,7 @@ function main() {
       console.log(`  git commit -m "Release ${tag}"`);
       console.log(`  git tag -a ${tag} -m "Release ${tag}"`);
       console.log(push ? "  git push --follow-tags" : "  (push skipped — pass PUSH=1)");
+      if (opam) console.log(`  node scripts/opam-publish.mjs --tag ${tag}`);
       console.log("\nrelease: tree restored, nothing changed.");
       return;
     }
@@ -163,6 +167,13 @@ function main() {
     if (push) {
       gitInherit("push", "--follow-tags");
       console.log(`release: pushed ${branch} with tags.`);
+      if (opam) {
+        console.log("release: submitting to opam-repository...");
+        execFileSync("node", [join(ROOT, "scripts/opam-publish.mjs"), "--tag", tag], {
+          cwd: ROOT,
+          stdio: "inherit",
+        });
+      }
     } else {
       console.log("release: not pushed. When ready:  git push --follow-tags");
     }
