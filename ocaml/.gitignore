@@ -1,5 +1,0 @@
-_build/
-dist/
-node_modules/
-.cache/
-*.install

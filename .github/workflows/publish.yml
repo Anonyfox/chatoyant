@@ -1,22 +1,19 @@
-# GitHub Actions workflow for publishing to npm
+# Publish the npm package on a version tag.
 #
-# This workflow will:
-# 1. Only run when you push a version tag (e.g., v1.0.0)
-# 2. Run all checks (typecheck, lint, test, build)
-# 3. Publish to npm with provenance
-# 4. Create a GitHub release
+#   1. Bump locally with `make release-{patch,minor,major}` (keeps package.json,
+#      dune-project, chatoyant.opam, and the tag in lockstep).
+#   2. Push the tag: `git push --follow-tags`.
 #
-# How to use:
-# 1. Bump version: npm version patch|minor|major
-# 2. Push with tags: git push && git push --tags
-# 3. Workflow runs automatically via OIDC trusted publisher (no token needed)
+# Publishing uses npm provenance via an OIDC trusted publisher — no NPM_TOKEN
+# secret required. Configure the trusted publisher once at npmjs.com.
+# The opam-repository submission is a separate, deliberate step: see
+# opam-release.yml.
 
-name: Publish to npm
+name: Publish npm package
 
 on:
   push:
-    tags:
-      - "v*.*.*"
+    tags: ["v*.*.*"]
   workflow_dispatch:
 
 permissions:
@@ -24,65 +21,52 @@ permissions:
   id-token: write
 
 concurrency:
-  group: "npm-publish"
+  group: npm-publish
   cancel-in-progress: false
 
 jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: "5.3.x"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
         with:
           node-version: "22"
           package-manager-cache: false
 
-      - name: Install latest npm in isolated prefix
+      - name: Install latest npm (provenance support)
         run: |
           npm install --global --prefix "$RUNNER_TEMP/npm-latest" npm@latest
           echo "$RUNNER_TEMP/npm-latest/bin" >> "$GITHUB_PATH"
 
-      - name: Show Node and npm versions
-        run: |
-          node --version
-          npm --version
-
       - name: Install dependencies
-        run: npm ci
+        run: |
+          opam install . --deps-only --with-test -y
+          npm ci
 
-      - name: Run type checking
-        run: npm run typecheck
+      - name: Verify tag matches package version
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG="$(node -p "require('./package.json').version")"
+          if [ "$TAG" != "$PKG" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match package.json version $PKG"
+            exit 1
+          fi
 
-      - name: Run linter
-        run: npm run lint
-
-      - name: Run tests
-        run: npm test
-
-      - name: Build package
-        run: npm run build
+      - name: Build, test, and bundle
+        run: opam exec -- npm test
 
       - name: Publish to npm
-        run: npm publish --provenance --access public
+        run: opam exec -- npm publish --provenance --access public
 
       - name: Create GitHub Release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          release_name: Release ${{ github.ref_name }}
-          body: |
-            ## Changes in ${{ github.ref_name }}
-
-            See [CHANGELOG](https://github.com/Anonyfox/chatoyant/blob/main/CHANGELOG.md) for details.
-
-            ### Installation
-            ```bash
-            npm install chatoyant@${{ github.ref_name }}
-            ```
-          draft: false
-          prerelease: false
+          generate_release_notes: true
