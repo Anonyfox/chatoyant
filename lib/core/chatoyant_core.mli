@@ -1,0 +1,12 @@
+(** High-level provider-neutral Chatoyant core. *)
+
+module Message = Message
+module Options = Options
+module Preset = Preset
+module Result = Result
+module Stream = Stream
+module Chat = Chat
+module Session = Session
+module Generator = Generator
+module Shortcuts = Shortcuts
+module Tool = Tool

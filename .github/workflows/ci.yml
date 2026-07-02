@@ -1,63 +1,64 @@
-# GitHub Actions workflow for continuous integration
-#
-# This workflow runs on:
-# - All pushes to any branch (except main, to avoid duplication with docs workflow)
-# - All pull requests
-#
-# It will verify:
-# - TypeScript type checking passes
-# - Linting passes
-# - All tests pass
-# - Package builds successfully
+# Continuous integration: native OCaml build + tests, the Melange-generated npm
+# bundle, TypeScript declaration checks, the official JSON Schema suite, opam
+# metadata + doc-link lint, and formatting. Mirrors `npm run release:check`
+# locally, across a small matrix of OCaml compilers.
 
 name: CI
 
 on:
   push:
-    branches-ignore:
-      - main
+    branches-ignore: [main]
   pull_request:
-    branches:
-      - "**"
+    branches: ["**"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  test:
+  build:
+    name: ocaml ${{ matrix.ocaml }} · node ${{ matrix.node }}
     runs-on: ubuntu-latest
-
     strategy:
+      fail-fast: false
       matrix:
-        node-version: [18, 20, 22]
-
+        ocaml: ["5.3.x", "5.4.x"]
+        node: ["20", "22"]
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node.js ${{ matrix.node-version }}
+      - name: Set up OCaml ${{ matrix.ocaml }}
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: ${{ matrix.ocaml }}
+          dune-cache: true
+
+      - name: Set up Node ${{ matrix.node }}
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
-          cache: "npm"
+          node-version: ${{ matrix.node }}
+          cache: npm
 
-      - name: Install dependencies
+      - name: Install OCaml dependencies
+        run: opam install . --deps-only --with-test --with-doc -y
+
+      - name: Install ocamlformat
+        run: opam install ocamlformat.0.29.0 -y
+
+      - name: Install Node dependencies
         run: npm ci
 
-      - name: Run type checking
-        run: npm run typecheck
+      - name: Check formatting
+        run: opam exec -- dune build @fmt
 
-      - name: Run linter
-        run: npm run lint
+      - name: Build, test, and bundle
+        run: opam exec -- npm test
 
-      - name: Run tests
-        run: npm test
+      - name: Lint opam metadata and doc links
+        run: opam exec -- npm run lint
 
-      - name: Build package
-        run: npm run build
-
-      - name: Check package exports
-        run: node -e "import('file://$PWD/dist/index.js').then(() => console.log('✅ ESM import works'))"
-
-      - name: Check package size
-        run: |
-          echo "📦 Package sizes:"
-          ls -lh dist/index.js dist/index.cjs | awk '{print $9, $5}'
-
+      - name: Build odoc documentation
+        run: opam exec -- dune build @doc

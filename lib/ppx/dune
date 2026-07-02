@@ -1,0 +1,7 @@
+(library
+ (name chatoyant_ppx)
+ (public_name chatoyant.ppx)
+ (kind ppx_rewriter)
+ (libraries ppxlib)
+ (preprocess
+  (pps ppxlib.metaquot)))

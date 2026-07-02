@@ -1,0 +1,4 @@
+(library
+ (name chatoyant_runtime)
+ (public_name chatoyant.runtime)
+ (modes :standard melange))

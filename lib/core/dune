@@ -1,0 +1,9 @@
+(library
+ (name chatoyant_core)
+ (public_name chatoyant.core)
+ (libraries
+  chatoyant_runtime
+  chatoyant_tokens
+  chatoyant_schema
+  chatoyant_provider)
+ (modes :standard melange))

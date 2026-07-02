@@ -1,0 +1,56 @@
+# Submit a release to the public opam-repository via dune-release.
+#
+# This is a deliberate, manually-triggered step — separate from npm publishing —
+# because the opam-repository merge is reviewed by maintainers and the first
+# submission creates your fork. Prerequisites:
+#
+#   - A GitHub PAT (repo scope) stored as the OPAM_PUBLISH_TOKEN secret, used to
+#     create the GitHub release asset and open the opam-repository PR.
+#   - A CHANGES.md whose top entry matches the tag being released.
+#
+# The very first submission is often smoother run locally (`opam install
+# dune-release` then `dune-release`); this workflow automates subsequent ones.
+
+name: Submit to opam-repository
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to submit (e.g. v0.12.0)"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  opam-submit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: "5.3.x"
+
+      - name: Install dune-release
+        run: opam install dune-release -y
+
+      - name: Configure git and token
+        run: |
+          git config --global user.name "${{ github.actor }}"
+          git config --global user.email "${{ github.actor }}@users.noreply.github.com"
+          mkdir -p ~/.config/dune
+          printf '%s' "${{ secrets.OPAM_PUBLISH_TOKEN }}" > ~/.config/dune/github.token
+
+      - name: Lint, build, publish, and submit
+        run: |
+          opam exec -- dune-release lint
+          opam exec -- dune-release distrib --tag "${{ inputs.tag }}"
+          opam exec -- dune-release publish distrib --tag "${{ inputs.tag }}"
+          opam exec -- dune-release opam pkg --tag "${{ inputs.tag }}"
+          opam exec -- dune-release opam submit --tag "${{ inputs.tag }}"

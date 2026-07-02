@@ -1,0 +1,10 @@
+(library
+ (name chatoyant)
+ (public_name chatoyant)
+ (libraries
+  chatoyant_runtime
+  chatoyant_tokens
+  chatoyant_schema
+  chatoyant_provider
+  chatoyant_core
+  chatoyant_native))

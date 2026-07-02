@@ -1,0 +1,5 @@
+(library
+ (name chatoyant_provider)
+ (public_name chatoyant.provider)
+ (libraries chatoyant_runtime chatoyant_tokens chatoyant_schema)
+ (modes :standard melange))

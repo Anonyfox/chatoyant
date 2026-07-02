@@ -1,127 +1,52 @@
 {
   "name": "chatoyant",
   "version": "0.11.1",
-  "description": "Unified TypeScript SDK for LLM providers (OpenAI, Anthropic, xAI, OpenRouter, local) with streaming, structured outputs, and zero dependencies.",
+  "description": "OCaml-first SDK for LLM providers with a zero-dependency Melange-generated JavaScript package, streaming, structured outputs, and tool calling.",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "sideEffects": false,
   "exports": {
     ".": {
-      "import": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.js"
-      },
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
       "require": {
         "types": "./dist/index.d.cts",
         "default": "./dist/index.cjs"
-      }
-    },
-    "./core": {
-      "import": {
-        "types": "./dist/core.d.ts",
-        "default": "./dist/core.js"
       },
-      "require": {
-        "types": "./dist/core.d.cts",
-        "default": "./dist/core.cjs"
-      }
-    },
-    "./schema": {
-      "import": {
-        "types": "./dist/schema.d.ts",
-        "default": "./dist/schema.js"
-      },
-      "require": {
-        "types": "./dist/schema.d.cts",
-        "default": "./dist/schema.cjs"
-      }
-    },
-    "./tokens": {
-      "import": {
-        "types": "./dist/tokens.d.ts",
-        "default": "./dist/tokens.js"
-      },
-      "require": {
-        "types": "./dist/tokens.d.cts",
-        "default": "./dist/tokens.cjs"
-      }
-    },
-    "./providers/openai": {
-      "import": {
-        "types": "./dist/providers/openai.d.ts",
-        "default": "./dist/providers/openai.js"
-      },
-      "require": {
-        "types": "./dist/providers/openai.d.cts",
-        "default": "./dist/providers/openai.cjs"
-      }
-    },
-    "./providers/anthropic": {
-      "import": {
-        "types": "./dist/providers/anthropic.d.ts",
-        "default": "./dist/providers/anthropic.js"
-      },
-      "require": {
-        "types": "./dist/providers/anthropic.d.cts",
-        "default": "./dist/providers/anthropic.cjs"
-      }
-    },
-    "./providers/xai": {
-      "import": {
-        "types": "./dist/providers/xai.d.ts",
-        "default": "./dist/providers/xai.js"
-      },
-      "require": {
-        "types": "./dist/providers/xai.d.cts",
-        "default": "./dist/providers/xai.cjs"
-      }
-    },
-    "./providers/local": {
-      "import": {
-        "types": "./dist/providers/local.d.ts",
-        "default": "./dist/providers/local.js"
-      },
-      "require": {
-        "types": "./dist/providers/local.d.cts",
-        "default": "./dist/providers/local.cjs"
-      }
-    },
-    "./providers/openrouter": {
-      "import": {
-        "types": "./dist/providers/openrouter.d.ts",
-        "default": "./dist/providers/openrouter.js"
-      },
-      "require": {
-        "types": "./dist/providers/openrouter.d.cts",
-        "default": "./dist/providers/openrouter.cjs"
-      }
+      "default": "./dist/index.js"
     }
   },
   "files": [
     "dist",
     "README.md",
+    "OCAML.md",
+    "JAVASCRIPT.md",
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsup",
-    "dev": "tsx src/index.ts",
-    "test": "node --import tsx --test --test-reporter=dot $(find src -name '*.test.ts' -type f)",
-    "test:watch": "node --import tsx --test --test-reporter=dot --watch $(find src -name '*.test.ts' -type f)",
-    "lint": "biome check .",
-    "lint:fix": "biome check --write .",
-    "format": "biome format --write .",
-    "check": "npm run typecheck && npm run lint",
-    "prepublishOnly": "npm run check && npm run build",
-    "typecheck": "tsc --noEmit",
-    "docs": "typedoc",
-    "docs:serve": "npx serve docs",
-    "release:patch": "npm run check && npm version patch -m 'Release v%s' && git push && git push --tags",
-    "release:minor": "npm run check && npm version minor -m 'Release v%s' && git push && git push --tags",
-    "release:major": "npm run check && npm version major -m 'Release v%s' && git push && git push --tags"
+    "build:ocaml": "dune build @runtest @melange",
+    "build:npm": "node scripts/build-npm.mjs",
+    "build": "npm run build:ocaml && npm run build:npm",
+    "test:node": "node --test --test-reporter=dot $(find test/js -name '*.test.mjs' ! -name 'json-schema-official.test.mjs' -type f | sort)",
+    "test:types": "tsc --noEmit -p tsconfig.json",
+    "test:json-schema-suite": "node scripts/ensure-json-schema-test-suite.mjs && JSON_SCHEMA_TEST_SUITE_DIR=.cache/json-schema-test-suite node --test --test-reporter=dot test/js/json-schema-official.test.mjs",
+    "test:watch": "npm run build && node --test --test-reporter=dot --watch $(find test/js -name '*.test.mjs' ! -name 'json-schema-official.test.mjs' -type f | sort)",
+    "lint:opam": "opam lint chatoyant.opam",
+    "lint:docs": "node scripts/check-doc-links.mjs",
+    "lint": "npm run lint:opam && npm run lint:docs",
+    "test": "npm run build && npm run test:node && npm run test:types && npm run test:json-schema-suite",
+    "check": "npm run release:check",
+    "version:check": "node scripts/check-version-sync.mjs",
+    "release:check": "npm run version:check && npm test && npm run lint && npm run pack:dry-run",
+    "prepublishOnly": "npm run release:check",
+    "typecheck": "npm run test:types",
+    "pack:dry-run": "npm run build && npm pack --dry-run"
   },
   "keywords": [
     "llm",
+    "ai",
     "openai",
     "anthropic",
     "claude",
@@ -130,18 +55,22 @@
     "xai",
     "grok",
     "openrouter",
-    "ai",
+    "local-llm",
     "ai-sdk",
-    "typescript",
-    "typesafe",
-    "streaming",
-    "structured-output",
-    "function-calling",
     "chat-completion",
     "text-generation",
     "ai-client",
     "llm-sdk",
-    "zero-dependency"
+    "json-schema",
+    "structured-output",
+    "function-calling",
+    "streaming",
+    "zero-dependency",
+    "ocaml",
+    "eio",
+    "melange",
+    "typescript",
+    "typesafe"
   ],
   "author": {
     "name": "Anonyfox",
@@ -166,11 +95,8 @@
   },
   "homepage": "https://anonyfox.github.io/chatoyant",
   "devDependencies": {
-    "@biomejs/biome": "^2.3.10",
     "@types/node": "^25.0.3",
-    "tsup": "^8.5.1",
-    "tsx": "^4.21.0",
-    "typedoc": "^0.28.15",
+    "esbuild": "^0.28.1",
     "typescript": "^5.9.3"
   }
 }

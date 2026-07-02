@@ -1,0 +1,11 @@
+(melange.emit
+ (target dist)
+ (libraries
+  chatoyant_runtime
+  chatoyant_tokens
+  chatoyant_schema
+  chatoyant_provider
+  chatoyant_core)
+ (preprocess
+  (pps melange.ppx))
+ (module_systems esm))
