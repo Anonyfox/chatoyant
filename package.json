@@ -95,7 +95,7 @@
   },
   "homepage": "https://anonyfox.github.io/chatoyant",
   "devDependencies": {
-    "@types/node": "^25.0.3",
+    "@types/node": "^26.1.0",
     "esbuild": "^0.28.1",
     "typescript": "^5.9.3"
   }
