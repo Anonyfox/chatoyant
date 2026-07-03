@@ -4,6 +4,19 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Fixed
+
+- **opam lower-bounds:** constrain the TLS/crypto/HTTP stack (`tls`, `tls-eio`,
+  `x509`, `ca-certs`, `mirage-crypto-rng` to `>= 1.0.0`; `cohttp-eio` and `http`
+  to `>= 6.0.0`). The native runtime uses the result-returning `Tls.Config.client`
+  introduced in tls 1.0, so pre-1.0 versions no longer resolve.
+- **opam sandbox:** the Eio HTTP transport test (`test_eio`) moves from `@runtest`
+  to a dedicated `@integration` alias. It binds a local socket, which the
+  network-less opam sandbox rejects (`bind: EPERM`); CI and `make test` still run
+  it via `dune build @integration`.
+
 ## 0.12.0 — 2026-07-02
 ### Changed
 

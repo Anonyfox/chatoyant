@@ -26,20 +26,20 @@ depends: [
   "ocaml" {>= "5.3"}
   "dune" {>= "3.23"}
   "melange" {>= "6.0.0"}
-  "ca-certs"
+  "ca-certs" {>= "1.0.0"}
   "base64"
-  "cohttp-eio"
+  "cohttp-eio" {>= "6.0.0"}
   "digestif"
   "domain-name"
   "eio" {>= "1.0"}
   "eio_main" {with-test}
-  "http"
-  "mirage-crypto-rng"
+  "http" {>= "6.0.0"}
+  "mirage-crypto-rng" {>= "1.0.0"}
   "ppxlib" {build}
-  "tls"
-  "tls-eio"
+  "tls" {>= "1.0.0"}
+  "tls-eio" {>= "1.0.0"}
   "uri"
-  "x509"
+  "x509" {>= "1.0.0"}
   "odoc" {with-doc}
 ]
 build: [

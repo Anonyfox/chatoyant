@@ -35,12 +35,21 @@
  (modules test_xai)
  (libraries chatoyant))
 
-(test
+; test_eio drives the real Eio HTTP transport against a locally-bound server,
+; so it cannot run inside the opam sandbox (no network -> bind EPERM). It lives
+; under the `integration` alias rather than `runtest`; CI and `make test` run it
+; via `dune build @integration` (wired into the build:ocaml npm script).
+(executable
  (name test_eio)
  (modules test_eio)
  (libraries chatoyant cohttp-eio eio_main http)
  (preprocess
   (pps chatoyant.ppx)))
+
+(rule
+ (alias integration)
+ (action
+  (run ./test_eio.exe)))
 
 (executable
  (name smoke_anthropic_real)

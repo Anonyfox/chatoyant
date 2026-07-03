@@ -26,7 +26,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build:ocaml": "dune build @runtest @melange",
+    "build:ocaml": "dune build @runtest @melange @integration",
     "build:npm": "node scripts/build-npm.mjs",
     "build": "npm run build:ocaml && npm run build:npm",
     "test:node": "node --test --test-reporter=dot $(find test/js -name '*.test.mjs' ! -name 'json-schema-official.test.mjs' -type f | sort)",
