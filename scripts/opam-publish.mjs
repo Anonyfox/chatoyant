@@ -27,7 +27,7 @@
 
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -114,17 +114,38 @@ async function main() {
   show("opam", ["exec", "--", "dune-release", "opam", "pkg", "--tag", tag], { cwd: ROOT });
   if (!existsSync(recipe)) fail(`opam pkg did not produce ${recipe}`);
 
-  // 5. Ensure the fork and a treeless local clone with an upstream remote.
-  if (!existsSync(CLONE)) {
-    try {
-      run("gh", ["repo", "view", fork, "--json", "name"]);
-    } catch {
-      show("gh", ["repo", "fork", UPSTREAM, "--clone=false"]);
-    }
+  // 5. Ensure the fork exists, sync its master to upstream server-side, and have
+  //    a healthy local clone. We only ever fetch from `origin` (the fork): a
+  //    treeless clone corrupts on cross-remote fetches ("bad tree object"), so
+  //    upstream is synced via GitHub's merge-upstream API instead, and the clone
+  //    uses --filter=blob:none (trees present, blobs on demand).
+  try {
+    run("gh", ["repo", "view", fork, "--json", "name"]);
+  } catch {
+    show("gh", ["repo", "fork", UPSTREAM, "--clone=false"]);
+  }
+  try {
+    run("gh", ["api", "--method", "POST", `repos/${fork}/merge-upstream`, "-f", "branch=master"]);
+  } catch {
+    console.warn("opam-publish: fork already in sync with upstream (or nothing to merge)");
+  }
+  const healthy =
+    existsSync(CLONE) &&
+    (() => {
+      try {
+        git("fetch", "origin", "master");
+        git("rev-parse", "--verify", "origin/master^{tree}");
+        return true;
+      } catch {
+        return false;
+      }
+    })();
+  if (!healthy) {
+    rmSync(CLONE, { recursive: true, force: true });
     mkdirSync(dirname(CLONE), { recursive: true });
     show("git", [
       "clone",
-      "--filter=tree:0",
+      "--filter=blob:none",
       "--single-branch",
       "--branch",
       "master",
@@ -132,20 +153,14 @@ async function main() {
       CLONE,
     ]);
   }
-  try {
-    git("remote", "get-url", "upstream");
-  } catch {
-    git("remote", "add", "upstream", `https://github.com/${UPSTREAM}.git`);
-  }
-  gitShow("fetch", "upstream", "master");
 
-  // 6. Recreate the release branch from upstream/master and commit the recipe.
-  git("checkout", "-B", branch, "upstream/master");
+  // 6. Recreate the release branch from the fork's freshly-synced master.
+  git("checkout", "-B", branch, "origin/master");
   const pkgDir = join(CLONE, "packages", "chatoyant", `chatoyant.${version}`);
   mkdirSync(pkgDir, { recursive: true });
   run("cp", [recipe, join(pkgDir, "opam")]);
   show("opam", ["lint", join(pkgDir, "opam")]);
-  const isNewPackage = git("ls-tree", "upstream/master", "--name-only", "packages/chatoyant") === "";
+  const isNewPackage = git("ls-tree", "origin/master", "--name-only", "packages/chatoyant") === "";
   const title = `[${isNewPackage ? "new package" : "new release"}] chatoyant (${version})`;
   git("add", "packages/chatoyant");
   git("commit", "-m", title);
