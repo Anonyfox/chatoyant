@@ -88,9 +88,21 @@ async function main() {
   if (!existsSync(tarball)) fail(`distrib did not produce ${tarball}`);
 
   // 2. Attach the tarball to the GitHub release (idempotent via --clobber).
+  //    The release object is normally created by the tag-triggered publish
+  //    workflow, which may still be running — create it ourselves if it does
+  //    not exist yet (the workflow's release step reuses an existing one).
   if (dryRun) {
     console.log(`opam-publish: [dry-run] skipping: gh release upload ${tag} ${tarball}`);
   } else {
+    try {
+      run("gh", ["release", "view", tag, "--json", "tagName"], { cwd: ROOT });
+    } catch {
+      show(
+        "gh",
+        ["release", "create", tag, "--verify-tag", "--generate-notes", "--title", tag],
+        { cwd: ROOT },
+      );
+    }
     show("gh", ["release", "upload", tag, tarball, "--clobber"], { cwd: ROOT });
   }
 
