@@ -4,8 +4,7 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
-
+## 0.12.2 — 2026-07-09
 ### Added
 
 - **New models (July 2026 launches):** OpenAI GPT-5.6 family (`gpt-5.6-sol`,
