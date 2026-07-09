@@ -516,11 +516,20 @@ let () =
        (Chatoyant.Provider.Registry.resolve_by_model ~local_active:true
           "Qwen3-4B-MLX"));
 
-  assert_equal_string "gpt-5.4-mini"
+  assert_equal_string "gpt-5.6-terra"
     (Option.get
        (Chatoyant.Core.Preset.resolve_model_preset
           ~provider:Chatoyant.Provider.Provider.Openai
           Chatoyant.Core.Preset.Balanced));
+  assert_equal_string "claude-fable-5"
+    (Option.get
+       (Chatoyant.Core.Preset.resolve_model_preset
+          ~provider:Chatoyant.Provider.Provider.Anthropic
+          Chatoyant.Core.Preset.Best));
+  assert_equal_string "grok-4.5"
+    (Option.get
+       (Chatoyant.Core.Preset.resolve_model_preset
+          ~provider:Chatoyant.Provider.Provider.Xai Chatoyant.Core.Preset.Best));
   assert_equal_string "grok-4-1-fast-reasoning"
     (Chatoyant.Core.Preset.adjust_xai_model_for_reasoning ~prefer_reasoning:true
        "grok-4-1-fast-non-reasoning");
@@ -1107,6 +1116,73 @@ let () =
    with
   | Error _ -> failwith "Anthropic provider adapter failed"
   | Ok generation -> assert_equal_string "Hello from Claude" generation.content);
+
+  (* The Claude 4.7+/Sonnet 5 generation rejects sampling parameters and
+     budget_tokens: the adapter must send adaptive thinking with effort and
+     drop temperature/top_p. Fable 5 additionally rejects an explicit
+     disabled thinking config. *)
+  let anthropic_body_for ~model ~temperature ~reasoning_effort =
+    (match
+       Anthropic_provider.generate
+         [
+           {
+             Chatoyant.Provider.Provider.role = User;
+             content = Some "Hello";
+             name = None;
+             tool_call_id = None;
+             tool_calls = [];
+             tool_result_error = None;
+           };
+         ]
+         {
+           Chatoyant.Provider.Provider.model;
+           temperature;
+           max_tokens = Some 128;
+           top_p = Some 0.9;
+           stop = [];
+           frequency_penalty = None;
+           presence_penalty = None;
+           web_search = None;
+           thinking_budget = None;
+           reasoning_effort;
+           timeout_ms = Some 1_000;
+           tools = [];
+           tool_choice = None;
+           extra = None;
+         }
+     with
+    | Error _ -> failwith "Anthropic provider adapter failed"
+    | Ok _ -> ());
+    match !Fake_anthropic_http.last_request with
+    | Some { body = Json json; _ } -> Chatoyant.Runtime.Json.to_string json
+    | _ -> failwith "expected a captured Anthropic request body"
+  in
+  let sonnet5_body =
+    anthropic_body_for ~model:"claude-sonnet-5" ~temperature:(Some 0.2)
+      ~reasoning_effort:(Some "high")
+  in
+  assert_contains "\"type\":\"adaptive\"" sonnet5_body;
+  assert_contains "\"display\":\"summarized\"" sonnet5_body;
+  assert_contains "\"effort\":\"high\"" sonnet5_body;
+  if contains_substring "\"temperature\"" sonnet5_body then
+    failwith "sonnet-5 request must not carry temperature";
+  if contains_substring "budget_tokens" sonnet5_body then
+    failwith "sonnet-5 request must not carry budget_tokens";
+  let fable_body =
+    anthropic_body_for ~model:"claude-fable-5" ~temperature:(Some 0.7)
+      ~reasoning_effort:(Some "none")
+  in
+  if contains_substring "\"thinking\"" fable_body then
+    failwith "fable-5 request must not carry a disabled thinking config";
+  if contains_substring "\"temperature\"" fable_body then
+    failwith "fable-5 request must not carry temperature";
+  let haiku_body =
+    anthropic_body_for ~model:"claude-haiku-4-5" ~temperature:(Some 0.2)
+      ~reasoning_effort:(Some "low")
+  in
+  assert_contains "\"temperature\":0.2" haiku_body;
+  if contains_substring "\"output_config\"" haiku_body then
+    failwith "legacy models must not carry output_config";
 
   let xai_body =
     Chatoyant.Provider.Xai.chat_request_json

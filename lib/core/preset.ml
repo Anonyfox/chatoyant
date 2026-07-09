@@ -27,21 +27,21 @@ let string_of_model_preset = function
 
 let resolve_model_preset ~provider preset =
   match (preset, provider) with
-  | Fast, Openai -> Some "gpt-4o-mini"
+  | Fast, Openai -> Some "gpt-5.6-luna"
   | Fast, Anthropic -> Some "claude-haiku-4-5"
   | Fast, Xai -> Some "grok-4-1-fast-non-reasoning"
   | Cheap, Openai -> Some "gpt-5.4-mini"
   | Cheap, Anthropic -> Some "claude-haiku-4-5"
   | Cheap, Xai -> Some "grok-4-1-fast-non-reasoning"
-  | Best, Openai -> Some "gpt-5.4"
-  | Best, Anthropic -> Some "claude-opus-4-6"
-  | Best, Xai -> Some "grok-4.20-0309-reasoning"
-  | Balanced, Openai -> Some "gpt-5.4-mini"
-  | Balanced, Anthropic -> Some "claude-sonnet-4-6"
-  | Balanced, Xai -> Some "grok-4-1-fast-reasoning"
-  | Reasoning, Openai -> Some "gpt-5.4-pro"
-  | Reasoning, Anthropic -> Some "claude-opus-4-6"
-  | Reasoning, Xai -> Some "grok-4.20-0309-reasoning"
+  | Best, Openai -> Some "gpt-5.6-sol"
+  | Best, Anthropic -> Some "claude-fable-5"
+  | Best, Xai -> Some "grok-4.5"
+  | Balanced, Openai -> Some "gpt-5.6-terra"
+  | Balanced, Anthropic -> Some "claude-sonnet-5"
+  | Balanced, Xai -> Some "grok-4.3"
+  | Reasoning, Openai -> Some "gpt-5.5-pro"
+  | Reasoning, Anthropic -> Some "claude-fable-5"
+  | Reasoning, Xai -> Some "grok-4.5"
   | _, (Local | Openrouter) -> None
 
 let temperature_of_creativity = function

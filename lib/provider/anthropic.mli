@@ -58,7 +58,14 @@ type tool = {
 }
 
 type tool_choice = Auto | Any | Tool of string | No_tool
-type thinking = Disabled | Enabled of { budget_tokens : int }
+
+type thinking =
+  | Disabled
+  | Adaptive of { display_summarized : bool }
+      (** Adaptive thinking for the Claude 4.6+ generation; [display_summarized]
+          opts back into readable thinking summaries where the model defaults to
+          omitted text. *)
+  | Enabled of { budget_tokens : int }
 
 type request = {
   model : string;

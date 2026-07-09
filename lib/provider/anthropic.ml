@@ -53,7 +53,11 @@ type tool = {
 }
 
 type tool_choice = Auto | Any | Tool of string | No_tool
-type thinking = Disabled | Enabled of { budget_tokens : int }
+
+type thinking =
+  | Disabled
+  | Adaptive of { display_summarized : bool }
+  | Enabled of { budget_tokens : int }
 
 type request = {
   model : string;
@@ -384,6 +388,12 @@ let code_execution_tool_json ?(name = "code_execution") ?cache_control () =
 let thinking_json thinking =
   match thinking with
   | Disabled -> Chatoyant_runtime.Json.Object [ ("type", string "disabled") ]
+  | Adaptive { display_summarized } ->
+      Chatoyant_runtime.Json.Object
+        (("type", string "adaptive")
+        ::
+        (if display_summarized then [ ("display", string "summarized") ] else [])
+        )
   | Enabled { budget_tokens } ->
       Chatoyant_runtime.Json.Object
         [ ("type", string "enabled"); ("budget_tokens", int budget_tokens) ]
@@ -1285,18 +1295,84 @@ let anthropic_tool_of_provider_tool (tool : Provider.tool_definition) =
     tool_cache_control = None;
   }
 
-let provider_thinking (options : Provider.options) =
-  match options.thinking_budget with
-  | Some budget_tokens -> Some (Enabled { budget_tokens })
-  | None -> (
-      match options.reasoning_effort with
-      | Some "none" -> Some Disabled
-      | _ -> None)
+(* Request-shaping family. The Claude 4.7+/Sonnet 5 generation rejects
+   [budget_tokens] and the sampling parameters with a 400, and Fable 5
+   additionally rejects an explicit disabled thinking config; older models
+   keep the legacy surface. *)
+type model_family =
+  | Legacy_family
+  | Adaptive_preferred (* Opus 4.6 / Sonnet 4.6: adaptive recommended *)
+  | Adaptive_only (* Opus 4.7 / 4.8 / Sonnet 5: no budget, no sampling *)
+  | Always_on_thinking (* Fable 5 / Mythos 5: thinking cannot be disabled *)
+
+let model_family model =
+  let has prefix =
+    let n = String.length prefix in
+    String.length model >= n && String.sub model 0 n = prefix
+  in
+  if has "claude-fable-5" || has "claude-mythos-5" then Always_on_thinking
+  else if
+    has "claude-opus-4-8" || has "claude-opus-4-7" || has "claude-sonnet-5"
+  then Adaptive_only
+  else if has "claude-opus-4-6" || has "claude-sonnet-4-6" then
+    Adaptive_preferred
+  else Legacy_family
+
+let sampling_allowed = function
+  | Adaptive_only | Always_on_thinking -> false
+  | Legacy_family | Adaptive_preferred -> true
+
+let provider_thinking ~family (options : Provider.options) =
+  let requested =
+    Option.is_some options.thinking_budget
+    ||
+    match options.reasoning_effort with
+    | Some effort -> effort <> "none"
+    | None -> false
+  in
+  let off =
+    Option.is_none options.thinking_budget
+    && options.reasoning_effort = Some "none"
+  in
+  match family with
+  | Legacy_family -> (
+      match options.thinking_budget with
+      | Some budget_tokens -> Some (Enabled { budget_tokens })
+      | None -> if off then Some Disabled else None)
+  | Adaptive_preferred ->
+      (* display defaults to summarized on the 4.6 generation. *)
+      if requested then Some (Adaptive { display_summarized = false })
+      else if off then Some Disabled
+      else None
+  | Adaptive_only ->
+      if requested then Some (Adaptive { display_summarized = true })
+      else if off then Some Disabled
+      else None
+  | Always_on_thinking ->
+      (* Thinking is always on; an explicit disabled config is rejected. *)
+      if requested then Some (Adaptive { display_summarized = true }) else None
 
 let provider_extra_fields (options : Provider.options) =
   match options.extra with
   | Some (Chatoyant_runtime.Json.Object fields) -> fields
   | _ -> []
+
+(* Reasoning depth for the 4.6+ generation maps to output_config.effort. *)
+let provider_effort_fields ~family (options : Provider.options) =
+  match family with
+  | Legacy_family -> []
+  | Adaptive_preferred | Adaptive_only | Always_on_thinking -> (
+      match options.reasoning_effort with
+      | Some (("low" | "medium" | "high") as level)
+        when not
+               (List.mem_assoc "output_config" (provider_extra_fields options))
+        ->
+          [
+            ( "output_config",
+              Chatoyant_runtime.Json.Object
+                [ ("effort", Chatoyant_runtime.Json.String level) ] );
+          ]
+      | _ -> [])
 
 module Make_provider
     (Http : Chatoyant_runtime.Effect.HTTP)
@@ -1323,6 +1399,8 @@ struct
       |> String.concat "\n\n"
       |> fun value -> if value = "" then None else Some value
     in
+    let family = model_family options.model in
+    let allow_sampling = sampling_allowed family in
     let request =
       {
         model = options.model;
@@ -1331,16 +1409,17 @@ struct
         system_blocks = [];
         max_tokens = Option.value options.max_tokens ~default:4096;
         stream = false;
-        temperature = options.temperature;
-        top_p = options.top_p;
+        temperature = (if allow_sampling then options.temperature else None);
+        top_p = (if allow_sampling then options.top_p else None);
         top_k = None;
         stop_sequences = options.stop;
         metadata_user_id = None;
         tools = List.map anthropic_tool_of_provider_tool options.tools;
         tool_choice = Option.map (fun name -> Tool name) options.tool_choice;
-        thinking = provider_thinking options;
+        thinking = provider_thinking ~family options;
         cache_control = None;
-        extra = provider_extra_fields options;
+        extra =
+          provider_effort_fields ~family options @ provider_extra_fields options;
       }
     in
     let config =

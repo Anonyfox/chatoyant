@@ -62,10 +62,67 @@ describe("publish package surface", () => {
       else process.env.LOCAL_BASE_URL = previous;
     }
 
-    assert.equal(new Chat({ model: "best" }).model, "gpt-5.4");
+    assert.equal(new Chat({ model: "best" }).model, "gpt-5.6-sol");
     assert.equal(new Chat({ model: "cheap" }).model, "gpt-5.4-mini");
-    assert.equal(new Chat({ model: "balanced", provider: "anthropic" }).model, "claude-sonnet-4-6");
-    assert.equal(new Chat({ model: "balanced", provider: "xai" }).model, "grok-4-1-fast-reasoning");
+    assert.equal(new Chat({ model: "best", provider: "anthropic" }).model, "claude-fable-5");
+    assert.equal(new Chat({ model: "balanced", provider: "anthropic" }).model, "claude-sonnet-5");
+    assert.equal(new Chat({ model: "balanced", provider: "xai" }).model, "grok-4.3");
+    assert.equal(new Chat({ model: "best", provider: "xai" }).model, "grok-4.5");
+  });
+
+  it("shapes Anthropic requests per model generation", async () => {
+    const originalFetch = globalThis.fetch;
+    const seen = [];
+    globalThis.fetch = async (url, init) => {
+      seen.push(JSON.parse(init.body));
+      return new Response(
+        JSON.stringify({
+          id: "msg_gen",
+          model: "claude-sonnet-5",
+          content: [{ type: "text", text: "ok" }],
+          usage: { input_tokens: 2, output_tokens: 1 },
+          stop_reason: "end_turn",
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    };
+
+    try {
+      // Sonnet 5: adaptive thinking with summaries, effort via output_config,
+      // sampling parameters dropped (they return 400 upstream).
+      await new Chat({ model: "claude-sonnet-5" }).user("Hi").generateWithResult({
+        apiKey: "k",
+        reasoning: "high",
+        creativity: "precise",
+        topP: 0.9,
+      });
+      // Fable 5: thinking cannot be disabled — reasoning "off" omits the field.
+      await new Chat({ model: "claude-fable-5" }).user("Hi").generateWithResult({
+        apiKey: "k",
+        reasoning: "off",
+        creativity: "creative",
+      });
+      // Haiku 4.5 keeps the legacy budget_tokens surface and sampling.
+      await new Chat({ model: "claude-haiku-4-5" }).user("Hi").generateWithResult({
+        apiKey: "k",
+        reasoning: "low",
+        creativity: "precise",
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    assert.deepEqual(seen[0].thinking, { type: "adaptive", display: "summarized" });
+    assert.deepEqual(seen[0].output_config, { effort: "high" });
+    assert.equal(seen[0].temperature, undefined);
+    assert.equal(seen[0].top_p, undefined);
+
+    assert.equal(seen[1].thinking, undefined);
+    assert.equal(seen[1].temperature, undefined);
+
+    assert.deepEqual(seen[2].thinking, { type: "enabled", budget_tokens: 2048 });
+    assert.equal(seen[2].output_config, undefined);
+    assert.equal(seen[2].temperature, 0);
   });
 
   it("resolves one-shot provider presets before sending provider requests", async () => {

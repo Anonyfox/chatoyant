@@ -54,7 +54,7 @@ open Chatoyant
 
 let () =
   Eio_main.run @@ fun env ->
-  let ai = Chatoyant.openai ~model:"gpt-5.4-mini" env in
+  let ai = Chatoyant.openai ~model:"gpt-5.6-luna" env in
   match Chatoyant.gen_text ai "Say hello in three words." with
   | Ok text -> print_endline text
   | Error err -> prerr_endline (Chatoyant.Error.provider err)
@@ -93,7 +93,7 @@ end
 let () =
   Eio_main.run @@ fun env ->
   let ai =
-    Chatoyant.openai ~model:"gpt-5.4-mini" ~tools:[ Calculate.tool ] env
+    Chatoyant.openai ~model:"gpt-5.6-luna" ~tools:[ Calculate.tool ] env
   in
   ignore (Chatoyant.gen_text ai "Divide 83 by 3.")
 ```

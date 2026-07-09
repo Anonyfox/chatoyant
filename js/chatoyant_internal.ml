@@ -746,6 +746,8 @@ const PROVIDERS = Object.freeze({
 const PROVIDER_IDS = Object.freeze(Object.keys(PROVIDERS));
 
 const OPENAI_MODELS = Object.freeze([
+  "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna",
+  "gpt-5.5", "gpt-5.5-pro",
   "gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano", "gpt-5.4-pro",
   "gpt-5.2", "gpt-5.2-pro", "gpt-5.2-codex",
   "gpt-5.1", "gpt-5.1-codex", "gpt-5.1-codex-max", "gpt-5.1-codex-mini",
@@ -760,6 +762,8 @@ const OPENAI_MODELS = Object.freeze([
   "gpt-oss-120b", "gpt-oss-20b", "gpt-image-1", "gpt-image-1-mini", "chatgpt-4o-latest",
 ]);
 const ANTHROPIC_MODELS = Object.freeze([
+  "claude-fable-5",
+  "claude-opus-4-8", "claude-opus-4-7", "claude-sonnet-5",
   "claude-opus-4-6", "claude-sonnet-4-6",
   "claude-opus-4-5-20251101", "claude-opus-4-5",
   "claude-sonnet-4-5-20250929", "claude-sonnet-4-5",
@@ -771,6 +775,7 @@ const ANTHROPIC_MODELS = Object.freeze([
   "claude-3-opus-20240229", "claude-3-haiku-20240307",
 ]);
 const XAI_MODELS = Object.freeze([
+  "grok-4.5", "grok-4.3",
   "grok-4.20-0309-reasoning", "grok-4.20-0309-non-reasoning", "grok-4.20-multi-agent-0309",
   "grok-4-1-fast-reasoning", "grok-4-1-fast-non-reasoning",
   "grok-4-fast-reasoning", "grok-4-fast-non-reasoning", "grok-4-0709", "grok-4",
@@ -786,6 +791,11 @@ const MODELS_BY_PROVIDER = Object.freeze({
 });
 
 const PRICING = Object.freeze({
+  "gpt-5.6-sol": { input: 5, output: 30, cached: 0.5 },
+  "gpt-5.6-terra": { input: 2.5, output: 15, cached: 0.25 },
+  "gpt-5.6-luna": { input: 1, output: 6, cached: 0.1 },
+  "gpt-5.5": { input: 5, output: 30, cached: 0.5 },
+  "gpt-5.5-pro": { input: 30, output: 180 },
   "gpt-5.4": { input: 2.5, output: 15, cached: 0.25 },
   "gpt-5.4-mini": { input: 0.75, output: 4.5, cached: 0.075 },
   "gpt-5": { input: 1.25, output: 10, cached: 0.125 },
@@ -796,10 +806,17 @@ const PRICING = Object.freeze({
   "gpt-4o-mini": { input: 0.15, output: 0.6, cached: 0.075 },
   "o3": { input: 2, output: 8, cached: 0.5 },
   "o4-mini": { input: 1.1, output: 4.4, cached: 0.275 },
+  "claude-fable-5": { input: 10, output: 50, cached: 1, cacheWrite5m: 12.5 },
+  "claude-opus-4-8": { input: 5, output: 25, cached: 0.5, cacheWrite5m: 6.25 },
+  "claude-opus-4-7": { input: 5, output: 25, cached: 0.5, cacheWrite5m: 6.25 },
+  // List price; an introductory $2/$10 per MTok applies through 2026-08-31.
+  "claude-sonnet-5": { input: 3, output: 15, cached: 0.3, cacheWrite5m: 3.75 },
   "claude-opus-4-6": { input: 5, output: 25, cached: 0.5, cacheWrite5m: 6.25 },
   "claude-sonnet-4-6": { input: 3, output: 15, cached: 0.3, cacheWrite5m: 3.75 },
   "claude-sonnet-4-5": { input: 3, output: 15, cached: 0.3, cacheWrite5m: 3.75 },
   "claude-haiku-4-5": { input: 1, output: 5, cached: 0.1, cacheWrite5m: 1.25 },
+  "grok-4.5": { input: 2, output: 6, cached: 0.5 },
+  "grok-4.3": { input: 1.25, output: 2.5, cached: 0.2 },
   "grok-4": { input: 3, output: 15, cached: 0.75 },
   "grok-4-1-fast-reasoning": { input: 0.2, output: 1.5, cached: 0.05 },
   "grok-4-1-fast-non-reasoning": { input: 0.2, output: 0.5, cached: 0.05 },
@@ -809,12 +826,17 @@ const PRICING = Object.freeze({
 });
 
 const CONTEXT_WINDOWS = Object.freeze({
+  "gpt-5.6-sol": 1050000, "gpt-5.6-terra": 1050000, "gpt-5.6-luna": 1050000,
+  "gpt-5.5": 1050000,
   "gpt-5.4": 1050000, "gpt-5.4-mini": 400000, "gpt-5": 400000, "gpt-5-mini": 400000,
   "gpt-4.1": 1047576, "gpt-4.1-mini": 1047576,
   "gpt-4o": 128000, "gpt-4o-mini": 128000,
   "o3": 200000, "o4-mini": 200000,
+  "claude-fable-5": 1000000,
+  "claude-opus-4-8": 1000000, "claude-opus-4-7": 1000000, "claude-sonnet-5": 1000000,
   "claude-opus-4-6": 1000000, "claude-sonnet-4-6": 1000000,
   "claude-sonnet-4-5": 200000, "claude-haiku-4-5": 200000,
+  "grok-4.5": 500000, "grok-4.3": 1000000,
   "grok-4": 256000, "grok-4-1-fast-reasoning": 2000000, "grok-4-1-fast-non-reasoning": 2000000,
 });
 
@@ -1936,9 +1958,9 @@ class Chat {
 
   _resolvePreset(model, provider = "openai") {
     const presets = {
-      openai: { fast: "gpt-4o-mini", cheap: "gpt-5.4-mini", best: "gpt-5.4", balanced: "gpt-5.4-mini", reasoning: "gpt-5.4-pro" },
-      anthropic: { fast: "claude-haiku-4-5", cheap: "claude-haiku-4-5", best: "claude-opus-4-6", balanced: "claude-sonnet-4-6", reasoning: "claude-opus-4-6" },
-      xai: { fast: "grok-4-1-fast-non-reasoning", cheap: "grok-4-1-fast-non-reasoning", best: "grok-4.20-0309-reasoning", balanced: "grok-4-1-fast-reasoning", reasoning: "grok-4.20-0309-reasoning" },
+      openai: { fast: "gpt-5.6-luna", cheap: "gpt-5.4-mini", best: "gpt-5.6-sol", balanced: "gpt-5.6-terra", reasoning: "gpt-5.5-pro" },
+      anthropic: { fast: "claude-haiku-4-5", cheap: "claude-haiku-4-5", best: "claude-fable-5", balanced: "claude-sonnet-5", reasoning: "claude-fable-5" },
+      xai: { fast: "grok-4-1-fast-non-reasoning", cheap: "grok-4-1-fast-non-reasoning", best: "grok-4.5", balanced: "grok-4.3", reasoning: "grok-4.5" },
     };
     return presets[provider]?.[model] || presets.openai[model] || model;
   }
@@ -1963,12 +1985,52 @@ class Chat {
     return String(value);
   }
 
-  _anthropicThinking(value, options = {}) {
+  // Request-shaping family: the Claude 4.7+/Sonnet 5 generation rejects
+  // budget_tokens and sampling parameters with a 400, and Fable 5 additionally
+  // rejects an explicit disabled thinking config.
+  _anthropicFamily(model = "") {
+    if (model.startsWith("claude-fable-5") || model.startsWith("claude-mythos-5")) return "always-on";
+    if (model.startsWith("claude-opus-4-8") || model.startsWith("claude-opus-4-7") || model.startsWith("claude-sonnet-5")) {
+      return "adaptive-only";
+    }
+    if (model.startsWith("claude-opus-4-6") || model.startsWith("claude-sonnet-4-6")) return "adaptive-preferred";
+    return "legacy";
+  }
+
+  _anthropicAllowsSampling(model) {
+    const family = this._anthropicFamily(model);
+    return family !== "adaptive-only" && family !== "always-on";
+  }
+
+  _anthropicThinking(model, value, options = {}) {
+    const family = this._anthropicFamily(model);
     const effort = this._reasoningEffort(value);
-    if (!effort || effort === "none") return undefined;
     const budget = options.thinkingBudget ?? options.thinking_budget;
-    const defaultBudget = effort === "low" ? 2048 : effort === "medium" ? 8192 : 32768;
-    return { type: "enabled", budget_tokens: budget ?? defaultBudget };
+    if (family === "legacy") {
+      if (!effort || effort === "none") return undefined;
+      const defaultBudget = effort === "low" ? 2048 : effort === "medium" ? 8192 : 32768;
+      return { type: "enabled", budget_tokens: budget ?? defaultBudget };
+    }
+    const requested = budget !== undefined || (effort && effort !== "none");
+    if (!requested) {
+      // Sonnet 5 runs adaptive thinking when the field is omitted; an explicit
+      // reasoning "off" keeps the no-thinking behavior. Fable 5 rejects a
+      // disabled config, so the field is simply omitted there.
+      if (effort === "none" && family !== "always-on") return { type: "disabled" };
+      return undefined;
+    }
+    const thinking = { type: "adaptive" };
+    // The 4.7+ generation defaults thinking text to omitted; opt back into
+    // summaries so result.reasoningContent stays populated. The 4.6 models
+    // already default to summarized and predate the display field.
+    if (family !== "adaptive-preferred") thinking.display = "summarized";
+    return thinking;
+  }
+
+  _anthropicEffort(model, value) {
+    if (this._anthropicFamily(model) === "legacy") return undefined;
+    const effort = this._reasoningEffort(value);
+    return effort === "low" || effort === "medium" || effort === "high" ? effort : undefined;
   }
 
   _timeoutFor(provider, options = {}) {
@@ -2248,17 +2310,20 @@ class Chat {
     const apiKey = this._apiKey("anthropic", options);
     if (!apiKey) throw new Error("Missing API key for anthropic");
     const system = messages.filter((m) => m.role === "system").map((m) => m.content).join("\n\n") || undefined;
+    const allowSampling = this._anthropicAllowsSampling(model);
     const body = {
       model,
       messages: this._wireMessages("anthropic", messages),
       max_tokens: options.maxTokens ?? options.max_tokens ?? 4096,
-      temperature: this._temperature(options),
-      top_p: options.topP ?? options.top_p,
+      temperature: allowSampling ? this._temperature(options) : undefined,
+      top_p: allowSampling ? options.topP ?? options.top_p : undefined,
       stop_sequences: options.stop,
       system,
     };
-    const thinking = this._anthropicThinking(options.reasoning, options);
+    const thinking = this._anthropicThinking(model, options.reasoning, options);
     if (thinking) body.thinking = thinking;
+    const effort = this._anthropicEffort(model, options.reasoning);
+    if (effort) body.output_config = { effort };
     const tools = this._toolDefinitions("anthropic");
     if (tools?.length) body.tools = tools;
     if (options.extra && typeof options.extra === "object") Object.assign(body, options.extra);
@@ -2301,18 +2366,21 @@ class Chat {
     const apiKey = this._apiKey("anthropic", options);
     if (!apiKey) throw new Error("Missing API key for anthropic");
     const system = messages.filter((m) => m.role === "system").map((m) => m.content).join("\n\n") || undefined;
+    const allowSampling = this._anthropicAllowsSampling(model);
     const body = {
       model,
       messages: this._wireMessages("anthropic", messages),
       max_tokens: options.maxTokens ?? options.max_tokens ?? 4096,
-      temperature: this._temperature(options),
-      top_p: options.topP ?? options.top_p,
+      temperature: allowSampling ? this._temperature(options) : undefined,
+      top_p: allowSampling ? options.topP ?? options.top_p : undefined,
       stop_sequences: options.stop,
       system,
       stream: true,
     };
-    const thinking = this._anthropicThinking(options.reasoning, options);
+    const thinking = this._anthropicThinking(model, options.reasoning, options);
     if (thinking) body.thinking = thinking;
+    const effort = this._anthropicEffort(model, options.reasoning);
+    if (effort) body.output_config = { effort };
     if (options.extra && typeof options.extra === "object") Object.assign(body, options.extra);
     const response = await fetch(`${this._baseUrl("anthropic", options)}/messages`, {
       method: "POST",

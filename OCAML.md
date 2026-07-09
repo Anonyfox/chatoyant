@@ -25,7 +25,7 @@ the `module%tool` syntax:
 open Chatoyant
 
 let run env =
-  let ai = Chatoyant.openai ~model:"gpt-5.4-mini" env in
+  let ai = Chatoyant.openai ~model:"gpt-5.6-luna" env in
   match Chatoyant.gen_text ai "Summarize Eio in one sentence." with
   | Ok text -> print_endline text
   | Error err -> prerr_endline (Chatoyant.Error.provider err)
@@ -146,7 +146,7 @@ let run env =
     { Lookup_city_metric.net = env#net; clock = env#clock; base_url = "http://localhost:8080" }
   in
   let ai =
-    Chatoyant.openai ~model:"gpt-5.4-mini"
+    Chatoyant.openai ~model:"gpt-5.6-luna"
       ~tools:[ Calculate.tool; Lookup_city_metric.make metric_env ]
       env
   in
@@ -161,7 +161,7 @@ let run env =
 `Chat` class while staying idiomatic in OCaml.
 
 ```ocaml
-let ai = Chatoyant.openai ~model:"gpt-5.4-mini" env
+let ai = Chatoyant.openai ~model:"gpt-5.6-luna" env
 
 let result =
   ai

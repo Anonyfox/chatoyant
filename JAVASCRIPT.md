@@ -58,7 +58,7 @@ Unified options map to provider request fields where supported:
 
 ```ts
 await genText("Explain CRDTs", {
-  model: "gpt-5.4-mini",
+  model: "gpt-5.6-terra",
   reasoning: "high",
   creativity: "balanced",
   maxTokens: 1000,
@@ -146,7 +146,7 @@ const models = await OpenAI.listModelIds();
 const claude = await Anthropic.messageSimple([{ role: "user", content: "Hello" }]);
 const grok = await XAI.chatWithWebSearch([{ role: "user", content: "Recent news?" }]);
 const routed = await OpenRouter.chatSimple([{ role: "user", content: "Hello" }], {
-  model: "anthropic/claude-sonnet-4-6",
+  model: "anthropic/claude-sonnet-5",
 });
 const local = await Local.chatSimple([{ role: "user", content: "Hello" }], {
   model: "llama3.2:3b",

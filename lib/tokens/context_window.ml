@@ -1,5 +1,9 @@
 let all =
   [
+    ("gpt-5.6-sol", 1_050_000);
+    ("gpt-5.6-terra", 1_050_000);
+    ("gpt-5.6-luna", 1_050_000);
+    ("gpt-5.5", 1_050_000);
     ("gpt-5.4", 1_050_000);
     ("gpt-5.4-mini", 400_000);
     ("gpt-5.4-nano", 400_000);
@@ -51,6 +55,10 @@ let all =
     ("o4-mini-deep-research", 200_000);
     ("gpt-oss-120b", 131_072);
     ("gpt-oss-20b", 131_072);
+    ("claude-fable-5", 1_000_000);
+    ("claude-opus-4-8", 1_000_000);
+    ("claude-opus-4-7", 1_000_000);
+    ("claude-sonnet-5", 1_000_000);
     ("claude-opus-4-6", 1_000_000);
     ("claude-sonnet-4-6", 1_000_000);
     ("claude-opus-4-5-20251101", 200_000);
@@ -70,9 +78,11 @@ let all =
     ("claude-3-5-haiku-20241022", 200_000);
     ("claude-3-opus-20240229", 200_000);
     ("claude-3-haiku-20240307", 200_000);
-    ("grok-4.20-0309-reasoning", 2_000_000);
-    ("grok-4.20-0309-non-reasoning", 2_000_000);
-    ("grok-4.20-multi-agent-0309", 2_000_000);
+    ("grok-4.5", 500_000);
+    ("grok-4.3", 1_000_000);
+    ("grok-4.20-0309-reasoning", 1_000_000);
+    ("grok-4.20-0309-non-reasoning", 1_000_000);
+    ("grok-4.20-multi-agent-0309", 1_000_000);
     ("grok-4-1-fast-reasoning", 2_000_000);
     ("grok-4-1-fast-non-reasoning", 2_000_000);
     ("grok-4-fast-reasoning", 2_000_000);

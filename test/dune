@@ -39,6 +39,7 @@
 ; so it cannot run inside the opam sandbox (no network -> bind EPERM). It lives
 ; under the `integration` alias rather than `runtest`; CI and `make test` run it
 ; via `dune build @integration` (wired into the build:ocaml npm script).
+
 (executable
  (name test_eio)
  (modules test_eio)
