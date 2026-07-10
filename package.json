@@ -1,6 +1,6 @@
 {
   "name": "chatoyant",
-  "version": "0.12.3",
+  "version": "0.12.4",
   "description": "OCaml-first SDK for LLM providers with a zero-dependency Melange-generated JavaScript package, streaming, structured outputs, and tool calling.",
   "type": "module",
   "main": "./dist/index.cjs",
