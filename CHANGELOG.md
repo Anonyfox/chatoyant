@@ -4,6 +4,40 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Fixed
+
+- **Function tools no longer 400 under strict mode.** The JS package sent
+  every tool with `strict: true` but left the parameters schema unprojected —
+  any tool with an optional parameter (or a nested object) violated OpenAI's
+  strict-schema rules (exhaustive `required`, `additionalProperties: false`
+  at every level) and the request failed on every model. Tool parameter
+  schemas are now OpenAI-strict-projected like the native OCaml provider has
+  always done, on both `/v1/chat/completions` and `/v1/responses`; if a
+  schema cannot be projected it is sent without `strict` instead of as a
+  request the API rejects. Optional parameters declared via field descriptors
+  (`Schema.String({ optional: true })`) or the plain shorthand
+  (`{ type: "string", optional: true }`) reach the wire as nullable and stay
+  legal for local argument validation — the executor sees the parameter as
+  `null` or absent, as before. The shorthand's `optional` marker no longer
+  leaks into wire schemas (it is not a JSON Schema keyword), and Anthropic
+  tool schemas keep their partial `required` untouched.
+- **Provider-client tool and structured surfaces restored to the 0.11.x
+  contracts.** `chatWithTools`/`messageWithTools` accept plain tool
+  definitions again (with or without `execute`, including wire-format
+  `{ type: "function", function }`), send them projected, and return the
+  model's tool calls to the caller from a single request instead of throwing
+  (`Tool execute function is required`) or running the executing tool loop.
+  `chat({ tools })` with definition-only tools makes a single request and
+  returns the calls instead of throwing. `chatStructured` projects `{ name,
+  schema }` wrappers before sending them strict (previously the wrapper's
+  schema went raw with `strict: true` — the same rejection class as the tool
+  bug). `Anthropic.messageStructured`/`chatStructured` use a forced tool
+  again instead of sending an OpenAI `response_format` payload the Anthropic
+  API rejects. `tool_choice` now also carries over (in flat form) when tool
+  requests route through `/v1/responses`.
+
 ## 0.12.4 — 2026-07-10
 ### Fixed
 

@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import {
+  Anthropic,
   Chat,
   CONTEXT_WINDOWS,
   JsonSchema,
+  OpenAI,
   Schema,
   XAI,
   calculateImageCost,
@@ -209,6 +211,138 @@ describe("publish package surface", () => {
     assert.equal(open.top_p, 0.9);
     assert.equal(open.frequency_penalty, 0.2);
     assert.equal(open.presence_penalty, 0.1);
+  });
+
+  it("projects strict tool schemas and keeps optional parameters legal on the wire", async () => {
+    const flavors = {
+      descriptor: { query: Schema.String(), limit: Schema.Integer({ optional: true }) },
+      inline: { query: { type: "string" }, limit: { type: "integer", optional: true } },
+      raw: { type: "object", properties: { query: { type: "string" }, limit: { type: "integer" } }, required: ["query"] },
+      nested: { filter: { type: "object", properties: { tag: { type: "string" } }, required: [] } },
+    };
+    for (const [flavor, parameters] of Object.entries(flavors)) {
+      const chat = new Chat({ model: "gpt-5.4-mini" }).addTool(
+        createTool({ name: "t", description: "d", parameters, execute: async () => ({}) }),
+      );
+      const fn = chat._toolDefinitions("openai")[0].function;
+      const wire = JSON.stringify(fn.parameters);
+      assert.equal(fn.strict, true, flavor);
+      assert.equal(wire.includes('"optional"'), false, `${flavor} leaks the optional marker`);
+      const walk = (node) => {
+        if (!node || typeof node !== "object") return;
+        if (node.type === "object" && node.properties) {
+          assert.equal(node.additionalProperties, false, `${flavor} misses additionalProperties`);
+          assert.deepEqual([...(node.required || [])].sort(), Object.keys(node.properties).sort(), `${flavor} required not exhaustive`);
+          Object.values(node.properties).forEach(walk);
+        }
+        (node.anyOf || []).forEach(walk);
+        if (node.items) walk(node.items);
+      };
+      walk(fn.parameters);
+    }
+
+    // Optional parameters stay nullable on the wire and legal locally: the
+    // executor may receive the key as null or not at all.
+    const optionalTool = createTool({
+      name: "t",
+      description: "d",
+      parameters: { query: { type: "string" }, limit: { type: "integer", optional: true } },
+      execute: async () => ({}),
+    });
+    const chat = new Chat({ model: "gpt-5.4-mini" }).addTool(optionalTool);
+    const projected = chat._toolDefinitions("openai")[0].function.parameters;
+    assert.deepEqual(projected.properties.limit, { anyOf: [{ type: "integer" }, { type: "null" }] });
+    assert.deepEqual(optionalTool.parseArgs({ query: "x" }), { query: "x" });
+    assert.deepEqual(optionalTool.parseArgs({ query: "x", limit: null }), { query: "x", limit: null });
+
+    // Anthropic keeps the unprojected schema (partial required is legal
+    // there), still without leaked markers.
+    const anthropicDef = chat._toolDefinitions("anthropic")[0];
+    assert.equal(JSON.stringify(anthropicDef.input_schema).includes('"optional"'), false);
+    assert.deepEqual(anthropicDef.input_schema.required, ["query"]);
+  });
+
+  it("keeps the provider-client tool and structured surfaces on their 0.11.x contracts", async () => {
+    const originalFetch = globalThis.fetch;
+    const seen = [];
+    globalThis.fetch = async (url, init) => {
+      const body = JSON.parse(init.body);
+      seen.push({ url: String(url), body });
+      if (String(url).includes("anthropic")) {
+        return new Response(
+          JSON.stringify({
+            model: body.model,
+            content: [{ type: "tool_use", id: "tu_1", name: "response", input: { name: "Ada", age: 36 } }],
+            usage: { input_tokens: 4, output_tokens: 2 },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      const message = body.response_format
+        ? { role: "assistant", content: '{"name":"Ada","age":36}' }
+        : {
+            role: "assistant",
+            content: "",
+            tool_calls: [{ id: "call_1", type: "function", function: { name: "search", arguments: '{"query":"shoes"}' } }],
+          };
+      return new Response(
+        JSON.stringify({
+          model: body.model,
+          choices: [{ finish_reason: body.response_format ? "stop" : "tool_calls", message }],
+          usage: { prompt_tokens: 2, completion_tokens: 1, total_tokens: 3 },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    };
+
+    try {
+      // chatWithTools: definition-only tools (no execute) reach the wire
+      // projected, and the calls come back unexecuted.
+      const out = await OpenAI.chatWithTools(
+        [{ role: "user", content: "find shoes" }],
+        [{ name: "search", description: "Search.", parameters: { query: { type: "string" }, limit: { type: "integer", optional: true } } }],
+        { apiKey: "k", model: "gpt-5.4-mini" },
+      );
+      assert.equal(out.type, "tool_calls");
+      assert.deepEqual(out.toolCalls[0].args, { query: "shoes" });
+
+      // chatStructured: a { name, schema } wrapper is projected before it is
+      // sent strict.
+      const wrapped = await OpenAI.chatStructured(
+        [{ role: "user", content: "hi" }],
+        { name: "person", schema: { type: "object", properties: { name: { type: "string" }, age: { type: "integer" } }, required: ["name"] } },
+        { apiKey: "k", model: "gpt-5.4-mini" },
+      );
+      assert.deepEqual(wrapped, { name: "Ada", age: 36 });
+
+      // Anthropic structured output uses a forced tool, never response_format.
+      const person = await Anthropic.messageStructured(
+        [{ role: "user", content: "Extract: Ada is 36" }],
+        { type: "object", properties: { name: { type: "string" }, age: { type: "integer" } }, required: ["name", "age"] },
+        { apiKey: "k", model: "claude-haiku-4-5" },
+      );
+      assert.deepEqual(person, { name: "Ada", age: 36 });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    // chatWithTools is a single request — the executing tool loop must not run.
+    assert.equal(seen.length, 3);
+    const withTools = seen[0];
+    assert.equal(withTools.body.tools[0].function.strict, true);
+    assert.deepEqual([...withTools.body.tools[0].function.parameters.required].sort(), ["limit", "query"]);
+    assert.equal(JSON.stringify(withTools.body.tools[0].function.parameters).includes('"optional"'), false);
+
+    const structured = seen[1];
+    const wireSchema = structured.body.response_format.json_schema;
+    assert.equal(wireSchema.strict, true);
+    assert.equal(wireSchema.schema.additionalProperties, false);
+    assert.deepEqual([...wireSchema.schema.required].sort(), ["age", "name"]);
+
+    const anthropicCall = seen[2];
+    assert.equal(anthropicCall.body.response_format, undefined);
+    assert.equal(anthropicCall.body.tools[0].name, "response");
+    assert.deepEqual(anthropicCall.body.tool_choice, { type: "tool", name: "response" });
   });
 
   it("enforces and validates structured output in generateData", async () => {

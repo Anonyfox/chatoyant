@@ -508,8 +508,19 @@ class Schema {
     const required = [];
     for (const [key, value] of Object.entries(shape || {})) {
       const isField = Schema._isField(value);
-      properties[key] = Schema._fieldSchema(value);
-      if (!isField || !value.optional) required.push(key);
+      // `optional: true` on a plain shorthand property is chatoyant's marker,
+      // not a JSON Schema keyword — it must shape `required`/nullability here
+      // and never reach the wire.
+      const inlineOptional =
+        !isField && Boolean(value) && typeof value === "object" &&
+        !Array.isArray(value) && value.optional === true;
+      if (inlineOptional) {
+        const { optional: _optional, ...rest } = value;
+        properties[key] = { anyOf: [Schema.toJSON(rest), { type: "null" }] };
+      } else {
+        properties[key] = Schema._fieldSchema(value);
+      }
+      if (!inlineOptional && (!isField || !value.optional)) required.push(key);
     }
     return { type: "object", properties, required, additionalProperties: false };
   }
@@ -1228,6 +1239,11 @@ async function openAICompatibleChatSimple(provider, messages, options = {}) {
 }
 
 async function openAICompatibleChatStructured(provider, messages, schema, options = {}) {
+  // Accept either a bare schema or a { name, schema, strict } wrapper; when
+  // strict (the default), the wire schema must be OpenAI-strict-projected in
+  // both cases or the API rejects the request.
+  const baseSchema = schema?.schema ?? schema;
+  const strict = schema?.strict ?? true;
   const result = await openAICompatibleChat(provider, messages, {
     ...options,
     extra: {
@@ -1237,8 +1253,8 @@ async function openAICompatibleChatStructured(provider, messages, schema, option
         json_schema: {
           name: schema?.name || "response",
           description: schema?.description,
-          schema: schema?.schema || JsonSchema.projectOpenAIStrict(schema).schema,
-          strict: schema?.strict ?? true,
+          schema: strict ? JsonSchema.projectOpenAIStrict(baseSchema).schema : baseSchema,
+          strict,
         },
       },
     },
@@ -2181,15 +2197,28 @@ class Chat {
         input_schema: tool.getParametersSchema(),
       }));
     }
-    return this._tools.map((tool) => ({
-      type: "function",
-      function: {
+    return this._tools.map((tool) => {
+      const parameters = tool.getParametersSchema();
+      // strict function tools require an OpenAI-strict schema (exhaustive
+      // `required`, `additionalProperties: false` at every object level) —
+      // project like the native OCaml provider does. If no strict schema can
+      // be produced, send the raw schema without strict instead of a request
+      // the API will reject.
+      let projected;
+      try {
+        projected = JsonSchema.projectOpenAIStrict(parameters)?.schema;
+      } catch (_) {
+        projected = undefined;
+      }
+      const usable = Boolean(projected) && typeof projected === "object" && projected.valid !== false;
+      const fn = {
         name: tool.name,
         description: tool.description,
-        parameters: tool.getParametersSchema(),
-        strict: true,
-      },
-    }));
+        parameters: usable ? projected : parameters,
+      };
+      if (usable) fn.strict = true;
+      return { type: "function", function: fn };
+    });
   }
 
   async _fetchJson(url, init, timeoutMs) {
@@ -2343,6 +2372,12 @@ class Chat {
     const maxTokens = options.maxTokens ?? options.max_tokens;
     if (maxTokens !== undefined) body.max_output_tokens = maxTokens;
     if (reasoningEffort) body.reasoning = { effort: reasoningEffort };
+    if (options.toolChoice) {
+      // /v1/responses uses a flat function reference, unlike chat/completions.
+      body.tool_choice = options.toolChoice?.function?.name
+        ? { type: "function", name: options.toolChoice.function.name }
+        : options.toolChoice;
+    }
     const toolDefs = this._toolDefinitions("openai");
     if (toolDefs?.length) {
       body.tools = toolDefs.map((tool) => ({
@@ -2863,11 +2898,36 @@ function makeProviderClientClass(provider) {
       };
     }
 
+    // Tools can arrive as Tool instances, executable definitions, or plain
+    // definitions (optionally in wire format, { type: "function", function }).
+    // Definition-only tools cannot be executed locally — they still need to
+    // reach the wire so the caller can run the returned tool calls.
+    _toolLikeList(tools) {
+      return (tools || []).map((tool) => {
+        if (tool instanceof Tool) return tool;
+        if (typeof tool?.execute === "function") return createTool(tool);
+        const fn = tool?.function ?? tool ?? {};
+        return {
+          name: fn.name || tool?.name || "tool",
+          description: fn.description ?? tool?.description ?? "",
+          getParametersSchema: () =>
+            fn.parameters ?? tool?.parameters ?? { type: "object", properties: {}, required: [], additionalProperties: false },
+        };
+      });
+    }
+
     async chat(messages, options = {}) {
       const chat = this._chat(options.model || this.config.defaultModel);
       chat.addMessages((messages || []).map((message) => message instanceof Message ? message : Message.fromJSON(message)));
       const tools = options.tools || options.requestOptions?.tools;
-      if (tools) chat.addTools((tools || []).map((tool) => tool instanceof Tool ? tool : createTool(tool)));
+      if (tools) {
+        const list = this._toolLikeList(tools);
+        chat.addTools(list);
+        if (!list.every((tool) => typeof tool.execute === "function")) {
+          // Definition-only tools: single request, the caller owns execution.
+          return chat._callProvider(chat._messages, { ...this.getChatOptions(options), provider });
+        }
+      }
       return chat.generateWithResult({ ...this.getChatOptions(options), provider });
     }
 
@@ -2877,13 +2937,40 @@ function makeProviderClientClass(provider) {
     }
 
     async chatWithTools(messages, tools, options = {}) {
-      const result = await this.chat(messages, { ...options, tools });
+      // Single request that returns tool calls to the caller instead of
+      // running the executing tool loop — the 0.11.x contract.
+      const chat = this._chat(options.model || this.config.defaultModel);
+      chat.addMessages((messages || []).map((message) => message instanceof Message ? message : Message.fromJSON(message)));
+      chat.addTools(this._toolLikeList(tools));
+      const result = await chat._callProvider(chat._messages, { ...this.getChatOptions(options), provider });
       return result.toolCalls?.length
         ? { type: "tool_calls", toolCalls: result.toolCalls, usage: result.usage }
         : { type: "content", content: result.content, usage: result.usage };
     }
 
     async chatStructured(messages, schema, options = {}) {
+      if (provider === "anthropic") {
+        // Anthropic has no response_format — structured output uses a forced
+        // tool whose input is the schema (the 0.11.x contract, same as
+        // Chat.generateData).
+        const name = schema?.name || "response";
+        const jsonSchema = Schema.toJSON(schema?.schema ?? schema);
+        const chat = this._chat(options.model || this.config.defaultModel);
+        chat.addMessages((messages || []).map((message) => message instanceof Message ? message : Message.fromJSON(message)));
+        const chatOptions = this.getChatOptions(options);
+        const result = await chat._callProvider(chat._messages, {
+          ...chatOptions,
+          provider,
+          extra: {
+            ...(chatOptions.extra || {}),
+            tools: [{ name, description: "Return the structured response.", input_schema: jsonSchema }],
+            tool_choice: { type: "tool", name },
+          },
+        });
+        const call = (result.toolCalls || []).find((candidate) => candidate.name === name) || (result.toolCalls || [])[0];
+        if (!call) throw new Error("chatStructured: the model returned no structured response");
+        return call.args;
+      }
       return openAICompatibleChatStructured(provider, messages, schema, this.getChatOptions(options));
     }
 
