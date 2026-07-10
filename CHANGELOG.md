@@ -4,6 +4,22 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Fixed
+
+- **gpt-5.6 function tools no longer 400.** OpenAI applies a server-side
+  reasoning default to the gpt-5.6 family that `/v1/chat/completions` rejects
+  in combination with function tools. The JS package now sends an explicit
+  `reasoning_effort: "none"` on tool requests when no reasoning is asked for
+  (OpenAI's documented remedy), and routes tool requests with active
+  reasoning (`reasoning: "low" | "medium" | "high"`) through `/v1/responses`,
+  which supports the combination — matching the native OCaml provider, which
+  already lived on that endpoint. Verified live against the API.
+- **`maxTokens` works on gpt-5.x / o-series chat requests.** These models
+  reject the legacy `max_tokens` parameter; the JS package now sends
+  `max_completion_tokens` for them (older models keep `max_tokens`).
+
 ## 0.12.2 — 2026-07-09
 ### Added
 

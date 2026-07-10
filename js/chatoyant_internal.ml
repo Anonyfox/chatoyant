@@ -2205,11 +2205,137 @@ class Chat {
     }
   }
 
+  // gpt-5.6 models apply a server-side reasoning default that /v1/chat/completions
+  // rejects in combination with function tools ("Function tools with
+  // reasoning_effort are not supported ... use /v1/responses or set
+  // reasoning_effort to 'none'"). Earlier generations accept both.
+  _openaiToolsRejectReasoning(model = "") {
+    return model.startsWith("gpt-5.6");
+  }
+
+  // The gpt-5.x and o-series generations reject the legacy max_tokens parameter
+  // on /v1/chat/completions; older chat models predate max_completion_tokens.
+  _openaiMaxTokensParam(model = "") {
+    return /^gpt-5|^o\d/.test(model) ? "max_completion_tokens" : "max_tokens";
+  }
+
+  _responsesInputItems(messages) {
+    const items = [];
+    for (const m of messages) {
+      if (m.role === "tool") {
+        items.push({
+          type: "function_call_output",
+          call_id: m.toolCallId,
+          output: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
+        });
+        continue;
+      }
+      if (m.role === "assistant" && m.toolCalls?.length) {
+        if (m.content) items.push({ role: "assistant", content: m.content });
+        for (const call of m.toolCalls) {
+          items.push({
+            type: "function_call",
+            call_id: call.id,
+            name: call.name,
+            arguments: call.arguments || JSON.stringify(call.args ?? {}),
+          });
+        }
+        continue;
+      }
+      items.push({ role: m.role, content: m.content });
+    }
+    return items;
+  }
+
+  // Function tools + active reasoning for the gpt-5.6 family run through
+  // /v1/responses — the endpoint OpenAI's own error message prescribes (the
+  // native OCaml provider adapter already lives there). Returns the same
+  // normalized result shape as _callOpenAICompatible, so the tool loop can
+  // thread turns through it transparently.
+  async _callOpenAIResponses(messages, options, { model, apiKey, baseUrl, reasoningEffort }) {
+    const headers = { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` };
+    const body = {
+      model,
+      input: this._responsesInputItems(messages),
+      store: false,
+      stream: false,
+    };
+    const temperature = this._temperature(options);
+    if (temperature !== undefined) body.temperature = temperature;
+    const topP = options.topP ?? options.top_p;
+    if (topP !== undefined) body.top_p = topP;
+    const maxTokens = options.maxTokens ?? options.max_tokens;
+    if (maxTokens !== undefined) body.max_output_tokens = maxTokens;
+    if (reasoningEffort) body.reasoning = { effort: reasoningEffort };
+    const toolDefs = this._toolDefinitions("openai");
+    if (toolDefs?.length) {
+      body.tools = toolDefs.map((tool) => ({
+        type: "function",
+        name: tool.function.name,
+        description: tool.function.description,
+        parameters: tool.function.parameters,
+        strict: tool.function.strict,
+      }));
+    }
+    if (options.extra && typeof options.extra === "object") Object.assign(body, options.extra);
+    const json = await this._fetchJson(`${baseUrl}/responses`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+    }, this._timeoutFor("openai", options));
+    const output = json.output || [];
+    const content = output
+      .filter((item) => item.type === "message")
+      .flatMap((item) => (item.content || []).filter((c) => c.type === "output_text").map((c) => c.text || ""))
+      .join("");
+    const toolCalls = output
+      .filter((item) => item.type === "function_call")
+      .map((item) => ({
+        id: item.call_id || item.id,
+        name: item.name || "",
+        args: this._parseJson(item.arguments || "{}"),
+        arguments: item.arguments || "{}",
+      }));
+    const responsesUsage = json.usage || {};
+    const usage = this._usageFromOpenAI({
+      prompt_tokens: responsesUsage.input_tokens,
+      completion_tokens: responsesUsage.output_tokens,
+      total_tokens: responsesUsage.total_tokens,
+      prompt_tokens_details: { cached_tokens: responsesUsage.input_tokens_details?.cached_tokens },
+      completion_tokens_details: { reasoning_tokens: responsesUsage.output_tokens_details?.reasoning_tokens },
+    }, "openai");
+    return {
+      content,
+      reasoningContent: "",
+      usage,
+      timing: {},
+      cost: { estimatedUsd: 0, actualUsd: usage.costUsd || undefined },
+      provider: "openai",
+      model: json.model || model,
+      cached: usage.cachedTokens > 0,
+      iterations: 1,
+      toolCalls,
+      finishReason: toolCalls.length ? "tool_calls" : json.status === "completed" ? "stop" : json.status,
+      raw: json,
+    };
+  }
+
   async _callOpenAICompatible(provider, messages, options = {}) {
     const model = this._resolvedModel(options, provider);
     const apiKey = this._apiKey(provider, options);
     if (!apiKey && provider !== "local") throw new Error(`Missing API key for ${provider}`);
     const baseUrl = this._baseUrl(provider, options);
+    const reasoningEffort = this._reasoningEffort(options.reasoning);
+    const tools = this._toolDefinitions(provider);
+    if (
+      provider === "openai" &&
+      tools?.length &&
+      reasoningEffort &&
+      reasoningEffort !== "none" &&
+      this._openaiToolsRejectReasoning(model)
+    ) {
+      return this._callOpenAIResponses(messages, options, { model, apiKey, baseUrl, reasoningEffort });
+    }
     const headers = { "Content-Type": "application/json" };
     if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
     if (provider === "openrouter") {
@@ -2220,19 +2346,25 @@ class Chat {
       model,
       messages: this._wireMessages(provider, messages),
       temperature: this._temperature(options),
-      max_tokens: options.maxTokens ?? options.max_tokens,
       top_p: options.topP ?? options.top_p,
       stop: options.stop,
       frequency_penalty: options.frequencyPenalty ?? options.frequency_penalty,
       presence_penalty: options.presencePenalty ?? options.presence_penalty,
       stream: false,
     };
-    const reasoningEffort = this._reasoningEffort(options.reasoning);
+    const maxTokens = options.maxTokens ?? options.max_tokens;
+    if (maxTokens !== undefined) {
+      body[provider === "openai" ? this._openaiMaxTokensParam(model) : "max_tokens"] = maxTokens;
+    }
     if (reasoningEffort) body.reasoning_effort = reasoningEffort;
+    if (provider === "openai" && tools?.length && !reasoningEffort && this._openaiToolsRejectReasoning(model)) {
+      // Neutralize the server-side reasoning default so function tools keep
+      // working out of the box (OpenAI's documented remedy).
+      body.reasoning_effort = "none";
+    }
     if (provider === "xai" && options.webSearch) {
       body.search_parameters = options.searchParameters || options.search_parameters || {};
     }
-    const tools = this._toolDefinitions(provider);
     if (tools?.length) body.tools = tools;
     if (options.toolChoice) body.tool_choice = options.toolChoice;
     if (options.extra && typeof options.extra === "object") Object.assign(body, options.extra);
@@ -2277,13 +2409,16 @@ class Chat {
       model,
       messages: this._wireMessages(provider, messages),
       temperature: this._temperature(options),
-      max_tokens: options.maxTokens ?? options.max_tokens,
       top_p: options.topP ?? options.top_p,
       stop: options.stop,
       frequency_penalty: options.frequencyPenalty ?? options.frequency_penalty,
       presence_penalty: options.presencePenalty ?? options.presence_penalty,
       stream: true,
     };
+    const streamMaxTokens = options.maxTokens ?? options.max_tokens;
+    if (streamMaxTokens !== undefined) {
+      body[provider === "openai" ? this._openaiMaxTokensParam(model) : "max_tokens"] = streamMaxTokens;
+    }
     const reasoningEffort = this._reasoningEffort(options.reasoning);
     if (reasoningEffort) body.reasoning_effort = reasoningEffort;
     if (provider === "xai" && options.webSearch) {

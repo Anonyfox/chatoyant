@@ -8,6 +8,7 @@ import {
   Schema,
   XAI,
   calculateImageCost,
+  createTool,
   detectProviderByModel,
   estimateChatTokens,
   fitMessages,
@@ -68,6 +69,110 @@ describe("publish package surface", () => {
     assert.equal(new Chat({ model: "balanced", provider: "anthropic" }).model, "claude-sonnet-5");
     assert.equal(new Chat({ model: "balanced", provider: "xai" }).model, "grok-4.3");
     assert.equal(new Chat({ model: "best", provider: "xai" }).model, "grok-4.5");
+  });
+
+  it("keeps gpt-5.6 function tools working around the reasoning lock", async () => {
+    const originalFetch = globalThis.fetch;
+    const seen = [];
+    const tool = createTool({
+      name: "add",
+      description: "Add two numbers",
+      parameters: { a: Schema.Number(), b: Schema.Number() },
+      async execute({ args }) {
+        return { sum: args.a + args.b };
+      },
+    });
+
+    globalThis.fetch = async (url, init) => {
+      const body = JSON.parse(init.body);
+      seen.push({ url: String(url), body });
+      if (String(url).endsWith("/responses")) {
+        // First responses turn asks for the tool; second returns the answer.
+        const isToolTurn = !body.input.some((item) => item.type === "function_call_output");
+        return new Response(
+          JSON.stringify(
+            isToolTurn
+              ? {
+                  status: "completed",
+                  model: body.model,
+                  output: [
+                    { type: "function_call", call_id: "call_r1", name: "add", arguments: '{"a":2,"b":3}' },
+                  ],
+                  usage: { input_tokens: 4, output_tokens: 2, total_tokens: 6 },
+                }
+              : {
+                  status: "completed",
+                  model: body.model,
+                  output: [
+                    { type: "message", content: [{ type: "output_text", text: "The sum is 5." }] },
+                  ],
+                  usage: { input_tokens: 6, output_tokens: 3, total_tokens: 9 },
+                },
+          ),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      return new Response(
+        JSON.stringify({
+          model: body.model,
+          choices: [{ finish_reason: "stop", message: { role: "assistant", content: "done" } }],
+          usage: { prompt_tokens: 2, completion_tokens: 1, total_tokens: 3 },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    };
+
+    try {
+      // Default path: chat/completions must neutralize the server-side
+      // reasoning default with an explicit "none" when tools are present.
+      await new Chat({ model: "gpt-5.6-terra" })
+        .user("add 2 and 3")
+        .addTool(tool)
+        .generateWithResult({ apiKey: "k" });
+
+      // Explicit reasoning + tools must route through /v1/responses and the
+      // tool loop must complete across responses-format turns.
+      const reasoned = await new Chat({ model: "gpt-5.6-terra" })
+        .user("add 2 and 3")
+        .addTool(tool)
+        .generateWithResult({ apiKey: "k", reasoning: "high", maxTokens: 300 });
+      assert.equal(reasoned.content, "The sum is 5.");
+      assert.equal(reasoned.iterations, 2);
+
+      // Pre-5.6 models keep their existing wire shape, with the modern
+      // max-tokens parameter name.
+      await new Chat({ model: "gpt-5.4-mini" })
+        .user("hi")
+        .addTool(tool)
+        .generateWithResult({ apiKey: "k", maxTokens: 100 });
+      await new Chat({ model: "gpt-4o" }).user("hi").generateWithResult({ apiKey: "k", maxTokens: 50 });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    assert.equal(seen[0].url.endsWith("/chat/completions"), true);
+    assert.equal(seen[0].body.reasoning_effort, "none");
+
+    assert.equal(seen[1].url.endsWith("/responses"), true);
+    assert.deepEqual(seen[1].body.reasoning, { effort: "high" });
+    assert.equal(seen[1].body.max_output_tokens, 300);
+    assert.equal(seen[1].body.tools[0].name, "add");
+    assert.equal(seen[1].body.tools[0].type, "function");
+    assert.equal(seen[2].url.endsWith("/responses"), true);
+    assert.equal(
+      seen[2].body.input.some((item) => item.type === "function_call_output" && item.call_id === "call_r1"),
+      true,
+    );
+
+    const mini = seen[3];
+    assert.equal(mini.url.endsWith("/chat/completions"), true);
+    assert.equal(mini.body.reasoning_effort, undefined);
+    assert.equal(mini.body.max_completion_tokens, 100);
+    assert.equal(mini.body.max_tokens, undefined);
+
+    const legacy = seen[4];
+    assert.equal(legacy.body.max_tokens, 50);
+    assert.equal(legacy.body.max_completion_tokens, undefined);
   });
 
   it("shapes Anthropic requests per model generation", async () => {
