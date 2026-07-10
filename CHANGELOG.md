@@ -4,8 +4,7 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
-
+## 0.12.3 — 2026-07-10
 ### Fixed
 
 - **gpt-5.6 function tools no longer 400.** OpenAI applies a server-side
