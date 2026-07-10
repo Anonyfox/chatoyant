@@ -2995,6 +2995,23 @@ let provider_reasoning_json (options : Provider.options) =
     (fun effort -> Chatoyant_runtime.Json.Object [ ("effort", string effort) ])
     options.reasoning_effort
 
+(* The gpt-5 (5.0), gpt-5.5, gpt-5.6, and o-series generations accept only
+   default sampling: temperature and top_p are rejected with a 400 on both
+   /v1/chat/completions and /v1/responses. The 5.1-5.4 generations accept
+   them. *)
+let sampling_locked model =
+  let has prefix =
+    let n = String.length prefix in
+    String.length model >= n && String.sub model 0 n = prefix
+  in
+  let o_series =
+    String.length model >= 2
+    && model.[0] = 'o'
+    && model.[1] >= '0'
+    && model.[1] <= '9'
+  in
+  o_series || model = "gpt-5" || has "gpt-5-" || has "gpt-5.5" || has "gpt-5.6"
+
 module Make_provider
     (Http : Chatoyant_runtime.Effect.HTTP)
     (Config : sig
@@ -3008,6 +3025,7 @@ struct
   let id = Provider.Openai
 
   let generate messages (options : Provider.options) =
+    let allow_sampling = not (sampling_locked options.model) in
     let request =
       {
         responses_model = options.model;
@@ -3018,8 +3036,9 @@ struct
         responses_previous_response_id = None;
         responses_store = Some false;
         responses_stream = false;
-        responses_temperature = options.temperature;
-        responses_top_p = options.top_p;
+        responses_temperature =
+          (if allow_sampling then options.temperature else None);
+        responses_top_p = (if allow_sampling then options.top_p else None);
         responses_max_output_tokens = options.max_tokens;
         responses_reasoning = provider_reasoning_json options;
         responses_tools = List.map responses_tool_of_provider_tool options.tools;

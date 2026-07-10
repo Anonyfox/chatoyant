@@ -1237,7 +1237,7 @@ async function openAICompatibleChatStructured(provider, messages, schema, option
         json_schema: {
           name: schema?.name || "response",
           description: schema?.description,
-          schema: schema?.schema || Schema.toJSON(schema),
+          schema: schema?.schema || JsonSchema.projectOpenAIStrict(schema).schema,
           strict: schema?.strict ?? true,
         },
       },
@@ -1912,13 +1912,74 @@ class Chat {
     return content;
   }
 
-  async generateData(_schema, options = {}) {
-    const text = await this.generate(options);
-    try {
-      return JSON.parse(text);
-    } catch (_) {
-      return text;
+  // Structured generation. With a schema, the request enforces structured
+  // output (OpenAI-strict response_format for OpenAI-compatible providers, a
+  // forced tool for Anthropic — the 0.11.x contract), and the parsed object is
+  // validated against the schema; non-conforming output throws instead of
+  // silently degrading to prose. Without a schema (or in fake mode) the legacy
+  // parse-or-passthrough behavior is kept.
+  async generateData(schema, options = {}) {
+    const opts = mergeOptions(this._defaults, options || {});
+    const fake = opts.__chatoyantTestFake || this._config.__chatoyantTestFake;
+    if (!schema || fake) {
+      const text = await this.generate(options);
+      try {
+        return JSON.parse(text);
+      } catch (_) {
+        return text;
+      }
     }
+    const jsonSchema = Schema.toJSON(schema);
+    const provider = this._detectProvider(opts);
+    let data;
+    if (provider === "anthropic") {
+      // Anthropic has no response_format: force a single "response" tool whose
+      // input is the schema, single shot (no tool loop — nothing to execute).
+      const start = Date.now();
+      const result = await this._callProvider(this._messages, {
+        ...opts,
+        extra: {
+          ...(opts.extra || {}),
+          tools: [{ name: "response", description: "Return the structured response.", input_schema: jsonSchema }],
+          tool_choice: { type: "tool", name: "response" },
+        },
+      });
+      result.timing = result.timing || {};
+      result.timing.latencyMs = Date.now() - start;
+      result.timing.latency_ms = result.timing.latencyMs;
+      const call = (result.toolCalls || [])[0];
+      if (!call) throw new Error("generateData: the model returned no structured response");
+      data = call.args;
+      result.content = JSON.stringify(data);
+      result.toolCalls = [];
+      this._lastResult = result;
+      this._messages.push(Message.assistant(result.content));
+      this._syncStateFromMessages();
+    } else {
+      const projected = JsonSchema.projectOpenAIStrict(jsonSchema).schema;
+      const result = await this.generateWithResult({
+        ...(options || {}),
+        extra: {
+          ...((options || {}).extra || {}),
+          response_format: {
+            type: "json_schema",
+            json_schema: { name: "response", strict: true, schema: projected },
+          },
+        },
+      });
+      try {
+        data = JSON.parse(result.content || "null");
+      } catch (_) {
+        throw new Error(`generateData: expected JSON output, got: ${String(result.content).slice(0, 120)}`);
+      }
+    }
+    const verdict = JsonSchema.validate(jsonSchema, data);
+    if (!verdict.valid) {
+      throw new Error(
+        `generateData: response does not match the schema: ${JSON.stringify(verdict.errors || []).slice(0, 240)}`,
+      );
+    }
+    return data;
   }
 
   toJSON() {
@@ -2219,6 +2280,19 @@ class Chat {
     return /^gpt-5|^o\d/.test(model) ? "max_completion_tokens" : "max_tokens";
   }
 
+  // The gpt-5 (5.0), gpt-5.5, gpt-5.6, and o-series generations accept only
+  // default sampling: temperature, top_p, frequency_penalty, and
+  // presence_penalty are all rejected with a 400 — on /v1/chat/completions
+  // and /v1/responses alike. The 5.1–5.4 generations accept them.
+  _openaiSamplingLocked(model = "") {
+    return (
+      /^o\d/.test(model) ||
+      /^gpt-5($|-)/.test(model) ||
+      model.startsWith("gpt-5.5") ||
+      model.startsWith("gpt-5.6")
+    );
+  }
+
   _responsesInputItems(messages) {
     const items = [];
     for (const m of messages) {
@@ -2260,10 +2334,12 @@ class Chat {
       store: false,
       stream: false,
     };
-    const temperature = this._temperature(options);
-    if (temperature !== undefined) body.temperature = temperature;
-    const topP = options.topP ?? options.top_p;
-    if (topP !== undefined) body.top_p = topP;
+    if (!this._openaiSamplingLocked(model)) {
+      const temperature = this._temperature(options);
+      if (temperature !== undefined) body.temperature = temperature;
+      const topP = options.topP ?? options.top_p;
+      if (topP !== undefined) body.top_p = topP;
+    }
     const maxTokens = options.maxTokens ?? options.max_tokens;
     if (maxTokens !== undefined) body.max_output_tokens = maxTokens;
     if (reasoningEffort) body.reasoning = { effort: reasoningEffort };
@@ -2342,14 +2418,15 @@ class Chat {
       if (options.httpReferer) headers["HTTP-Referer"] = options.httpReferer;
       if (options.title) headers["X-Title"] = options.title;
     }
+    const allowSampling = provider !== "openai" || !this._openaiSamplingLocked(model);
     const body = {
       model,
       messages: this._wireMessages(provider, messages),
-      temperature: this._temperature(options),
-      top_p: options.topP ?? options.top_p,
+      temperature: allowSampling ? this._temperature(options) : undefined,
+      top_p: allowSampling ? options.topP ?? options.top_p : undefined,
       stop: options.stop,
-      frequency_penalty: options.frequencyPenalty ?? options.frequency_penalty,
-      presence_penalty: options.presencePenalty ?? options.presence_penalty,
+      frequency_penalty: allowSampling ? options.frequencyPenalty ?? options.frequency_penalty : undefined,
+      presence_penalty: allowSampling ? options.presencePenalty ?? options.presence_penalty : undefined,
       stream: false,
     };
     const maxTokens = options.maxTokens ?? options.max_tokens;
@@ -2405,14 +2482,15 @@ class Chat {
     const baseUrl = this._baseUrl(provider, options);
     const headers = { "Content-Type": "application/json" };
     if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+    const allowSampling = provider !== "openai" || !this._openaiSamplingLocked(model);
     const body = {
       model,
       messages: this._wireMessages(provider, messages),
-      temperature: this._temperature(options),
-      top_p: options.topP ?? options.top_p,
+      temperature: allowSampling ? this._temperature(options) : undefined,
+      top_p: allowSampling ? options.topP ?? options.top_p : undefined,
       stop: options.stop,
-      frequency_penalty: options.frequencyPenalty ?? options.frequency_penalty,
-      presence_penalty: options.presencePenalty ?? options.presence_penalty,
+      frequency_penalty: allowSampling ? options.frequencyPenalty ?? options.frequency_penalty : undefined,
+      presence_penalty: allowSampling ? options.presencePenalty ?? options.presence_penalty : undefined,
       stream: true,
     };
     const streamMaxTokens = options.maxTokens ?? options.max_tokens;

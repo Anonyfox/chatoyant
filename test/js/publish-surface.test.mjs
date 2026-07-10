@@ -175,6 +175,115 @@ describe("publish package surface", () => {
     assert.equal(legacy.body.max_completion_tokens, undefined);
   });
 
+  it("drops locked sampling parameters for the gpt-5.0/5.5/5.6/o generations", async () => {
+    const originalFetch = globalThis.fetch;
+    const seen = [];
+    globalThis.fetch = async (url, init) => {
+      seen.push(JSON.parse(init.body));
+      return new Response(
+        JSON.stringify({
+          model: "m",
+          choices: [{ finish_reason: "stop", message: { role: "assistant", content: "ok" } }],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    };
+    try {
+      const sampling = { apiKey: "k", creativity: "precise", topP: 0.9, frequencyPenalty: 0.2, presencePenalty: 0.1 };
+      await new Chat({ model: "gpt-5.6-terra" }).user("hi").generateWithResult(sampling);
+      await new Chat({ model: "gpt-5.5" }).user("hi").generateWithResult(sampling);
+      await new Chat({ model: "o4-mini" }).user("hi").generateWithResult(sampling);
+      await new Chat({ model: "gpt-5.4-mini" }).user("hi").generateWithResult(sampling);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+    for (const body of seen.slice(0, 3)) {
+      assert.equal(body.temperature, undefined);
+      assert.equal(body.top_p, undefined);
+      assert.equal(body.frequency_penalty, undefined);
+      assert.equal(body.presence_penalty, undefined);
+    }
+    const open = seen[3];
+    assert.equal(open.temperature, 0);
+    assert.equal(open.top_p, 0.9);
+    assert.equal(open.frequency_penalty, 0.2);
+    assert.equal(open.presence_penalty, 0.1);
+  });
+
+  it("enforces and validates structured output in generateData", async () => {
+    class Person extends Schema {
+      name = Schema.String({ minLength: 2 });
+      age = Schema.Integer();
+    }
+
+    const originalFetch = globalThis.fetch;
+    const seen = [];
+    let reply = '{"name":"Alice","age":30}';
+    globalThis.fetch = async (url, init) => {
+      const body = JSON.parse(init.body);
+      seen.push({ url: String(url), body });
+      if (body.tool_choice?.name === "response") {
+        return new Response(
+          JSON.stringify({
+            id: "msg_s",
+            model: body.model,
+            content: [{ type: "tool_use", id: "toolu_1", name: "response", input: { name: "Bob", age: 41 } }],
+            usage: { input_tokens: 3, output_tokens: 2 },
+            stop_reason: "tool_use",
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      return new Response(
+        JSON.stringify({
+          model: body.model,
+          choices: [{ finish_reason: "stop", message: { role: "assistant", content: reply } }],
+          usage: { prompt_tokens: 2, completion_tokens: 2, total_tokens: 4 },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    };
+
+    try {
+      // OpenAI-compatible: strict response_format is sent and the object
+      // round-trips validated.
+      const person = await new Chat({ model: "gpt-5.6-terra" })
+        .user("Extract: Alice is 30")
+        .generateData(Person, { apiKey: "k" });
+      assert.deepEqual(person, { name: "Alice", age: 30 });
+      const rf = seen[0].body.response_format;
+      assert.equal(rf.type, "json_schema");
+      assert.equal(rf.json_schema.strict, true);
+      assert.equal(rf.json_schema.schema.additionalProperties, false);
+
+      // Prose output must throw, never silently degrade to text.
+      reply = "Klar — hier sind drei Sätze: 1. ...";
+      await assert.rejects(
+        () => new Chat({ model: "gpt-5.4-mini" }).user("x").generateData(Person, { apiKey: "k" }),
+        /expected JSON output/,
+      );
+
+      // Parseable-but-wrong output must throw a validation error.
+      reply = '{"name":"A","age":"not a number"}';
+      await assert.rejects(
+        () => new Chat({ model: "gpt-5.4-mini" }).user("x").generateData(Person, { apiKey: "k" }),
+        /does not match the schema/,
+      );
+
+      // Anthropic: structured output goes through a forced tool.
+      const claude = await new Chat({ model: "claude-sonnet-5" })
+        .user("Extract: Bob is 41")
+        .generateData(Person, { apiKey: "k" });
+      assert.deepEqual(claude, { name: "Bob", age: 41 });
+      const anthropicBody = seen[seen.length - 1].body;
+      assert.equal(anthropicBody.tools[0].name, "response");
+      assert.deepEqual(anthropicBody.tool_choice, { type: "tool", name: "response" });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it("shapes Anthropic requests per model generation", async () => {
     const originalFetch = globalThis.fetch;
     const seen = [];

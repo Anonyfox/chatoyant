@@ -4,6 +4,26 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Fixed
+
+- **`generateData`/`genData` enforce structured output again.** The JS
+  compatibility path ignored the schema entirely — it sent a plain text
+  request and silently returned prose when `JSON.parse` failed. With a schema
+  it now requests strict structured output (OpenAI-strict-projected
+  `response_format` for OpenAI-compatible providers, a forced tool for
+  Anthropic — the 0.11.x contract), validates the parsed object against the
+  schema, and throws on non-conforming output instead of degrading to text.
+  Without a schema the legacy parse-or-passthrough behavior is unchanged.
+- **Sampling parameters no longer 400 on locked OpenAI generations.** The
+  gpt-5 (5.0), gpt-5.5, gpt-5.6, and o-series models reject `temperature`,
+  `top_p`, `frequency_penalty`, and `presence_penalty` (only defaults are
+  supported) on both `/v1/chat/completions` and `/v1/responses`; the 5.1–5.4
+  generations accept them. Both the JS package and the native OCaml provider
+  now omit these parameters for locked models, so `creativity` presets and
+  streaming defaults work across the whole model range.
+
 ## 0.12.3 — 2026-07-10
 ### Fixed
 
