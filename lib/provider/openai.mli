@@ -737,6 +737,19 @@ val realtime_client_secret_request_json :
 
 val authorization_headers : api_key:string -> (string * string) list
 val realtime_url : ?base_url:string -> model:string -> unit -> string
+
+val responses_tool_of_provider_tool :
+  Provider.tool_definition -> Chatoyant_runtime.Json.t
+(** Flat Responses-API function-tool JSON, with the parameters schema
+    OpenAI-strict-projected when [tool_strict] asks for it. Shared by adapters
+    for OpenAI-protocol providers (e.g. Meta). *)
+
+val responses_input_items_of_provider_message :
+  Provider.message -> Chatoyant_runtime.Json.t list
+(** Responses-API input items for one provider-neutral message (tool results
+    become [function_call_output], assistant tool calls become [function_call]
+    items). *)
+
 val chat_response_of_json : Chatoyant_runtime.Json.t -> chat_response
 val generation_of_chat_response : chat_response -> Provider.generation
 val responses_response_of_json : Chatoyant_runtime.Json.t -> responses_response

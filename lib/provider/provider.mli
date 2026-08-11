@@ -5,7 +5,7 @@
     [Chatoyant_core] without forcing the core to know provider-specific wire
     details. *)
 
-type id = Openai | Anthropic | Xai | Local | Openrouter
+type id = Openai | Anthropic | Xai | Meta | Local | Openrouter
 type role = System | User | Assistant | Tool
 
 type tool_call = {

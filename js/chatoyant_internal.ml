@@ -740,6 +740,14 @@ const PROVIDERS = Object.freeze({
     envKeyLegacy: "API_KEY_XAI",
     baseUrl: "https://api.x.ai/v1",
   },
+  meta: {
+    name: "Meta",
+    signatures: ["muse"],
+    envKey: "META_API_KEY",
+    // Meta's own docs and Muse Code export MODEL_API_KEY.
+    envKeyLegacy: "MODEL_API_KEY",
+    baseUrl: "https://api.meta.ai/v1",
+  },
   local: {
     name: "Local",
     signatures: [],
@@ -793,10 +801,14 @@ const XAI_MODELS = Object.freeze([
   "grok-3", "grok-3-mini", "grok-2-vision-1212", "grok-2-image-1212",
   "grok-code-fast-1", "grok-imagine-image", "grok-imagine-image-pro", "grok-imagine-video",
 ]);
+const META_MODELS = Object.freeze([
+  "muse-spark-1.2", "muse-spark-1.1", "muse-spark-1.2-contributor",
+]);
 const MODELS_BY_PROVIDER = Object.freeze({
   openai: OPENAI_MODELS,
   anthropic: ANTHROPIC_MODELS,
   xai: XAI_MODELS,
+  meta: META_MODELS,
   local: Object.freeze([]),
   openrouter: Object.freeze([]),
 });
@@ -826,6 +838,10 @@ const PRICING = Object.freeze({
   "claude-sonnet-4-6": { input: 3, output: 15, cached: 0.3, cacheWrite5m: 3.75 },
   "claude-sonnet-4-5": { input: 3, output: 15, cached: 0.3, cacheWrite5m: 3.75 },
   "claude-haiku-4-5": { input: 1, output: 5, cached: 0.1, cacheWrite5m: 1.25 },
+  "muse-spark-1.2": { input: 1.25, output: 4.25, cached: 0.15 },
+  "muse-spark-1.1": { input: 1.25, output: 4.25, cached: 0.15 },
+  // Discounted tier that permits Meta to train on request data.
+  "muse-spark-1.2-contributor": { input: 0.1, output: 0.2, cached: 0.002 },
   "grok-4.5": { input: 2, output: 6, cached: 0.5 },
   "grok-4.3": { input: 1.25, output: 2.5, cached: 0.2 },
   "grok-4": { input: 3, output: 15, cached: 0.75 },
@@ -847,6 +863,7 @@ const CONTEXT_WINDOWS = Object.freeze({
   "claude-opus-4-8": 1000000, "claude-opus-4-7": 1000000, "claude-sonnet-5": 1000000,
   "claude-opus-4-6": 1000000, "claude-sonnet-4-6": 1000000,
   "claude-sonnet-4-5": 200000, "claude-haiku-4-5": 200000,
+  "muse-spark-1.2": 1048576, "muse-spark-1.1": 1048576, "muse-spark-1.2-contributor": 1048576,
   "grok-4.5": 500000, "grok-4.3": 1000000,
   "grok-4": 256000, "grok-4-1-fast-reasoning": 2000000, "grok-4-1-fast-non-reasoning": 2000000,
 });
@@ -922,7 +939,7 @@ function getModelsForProvider(providerId) {
 }
 
 function getAllKnownModels() {
-  return Object.freeze([...OPENAI_MODELS, ...ANTHROPIC_MODELS, ...XAI_MODELS]);
+  return Object.freeze([...OPENAI_MODELS, ...ANTHROPIC_MODELS, ...XAI_MODELS, ...META_MODELS]);
 }
 
 function isKnownModel(model) {
@@ -1445,7 +1462,7 @@ function needsOpenAIStrictTransform(schema) {
 }
 
 return {
-  PROVIDERS, PROVIDER_IDS, OPENAI_MODELS, ANTHROPIC_MODELS, XAI_MODELS, MODELS_BY_PROVIDER,
+  PROVIDERS, PROVIDER_IDS, OPENAI_MODELS, ANTHROPIC_MODELS, XAI_MODELS, META_MODELS, MODELS_BY_PROVIDER,
   PRICING, CONTEXT_WINDOWS, TOKEN_RATIOS, Tokens,
   isProviderActive, activeProviders, detectProviderByModel, assertProviderActive, getApiKey, getBaseUrl,
   resolveProvider, getModelsForProvider, getAllKnownModels, isKnownModel,
@@ -1488,6 +1505,10 @@ let anthropic_models_value : js_value =
 let xai_models_value : js_value =
   [%mel.raw {| compatibility_surface.XAI_MODELS |}]
 [@@mel.as "XAI_MODELS"]
+
+let meta_models_value : js_value =
+  [%mel.raw {| compatibility_surface.META_MODELS |}]
+[@@mel.as "META_MODELS"]
 
 let models_by_provider_value : js_value =
   [%mel.raw {| compatibility_surface.MODELS_BY_PROVIDER |}]
@@ -2038,6 +2059,9 @@ class Chat {
       openai: { fast: "gpt-5.6-luna", cheap: "gpt-5.4-mini", best: "gpt-5.6-sol", balanced: "gpt-5.6-terra", reasoning: "gpt-5.5-pro" },
       anthropic: { fast: "claude-haiku-4-5", cheap: "claude-haiku-4-5", best: "claude-fable-5", balanced: "claude-sonnet-5", reasoning: "claude-fable-5" },
       xai: { fast: "grok-4-1-fast-non-reasoning", cheap: "grok-4-1-fast-non-reasoning", best: "grok-4.5", balanced: "grok-4.3", reasoning: "grok-4.5" },
+      // One standard-tier family; the -contributor variant trains on request
+      // data, so presets never select it.
+      meta: { fast: "muse-spark-1.2", cheap: "muse-spark-1.2", best: "muse-spark-1.2", balanced: "muse-spark-1.2", reasoning: "muse-spark-1.2" },
     };
     return presets[provider]?.[model] || presets.openai[model] || model;
   }
@@ -2060,6 +2084,30 @@ class Chat {
     if (value === undefined || value === null) return undefined;
     if (value === "off") return "none";
     return String(value);
+  }
+
+  // Muse Spark always reasons: reasoning_effort "none" is rejected with a
+  // 400, so reasoning "off" means omitting the field for Meta.
+  _providerReasoningEffort(provider, value) {
+    const effort = this._reasoningEffort(value);
+    if (provider === "meta" && effort === "none") return undefined;
+    return effort;
+  }
+
+  // The Meta Model API and modern OpenAI generations take
+  // max_completion_tokens; older OpenAI-compatible surfaces keep max_tokens.
+  _maxTokensParam(provider, model) {
+    if (provider === "meta") return "max_completion_tokens";
+    if (provider === "openai") return this._openaiMaxTokensParam(model);
+    return "max_tokens";
+  }
+
+  // Muse Spark accepts only the "auto" tool_choice; named choices,
+  // "required", and "none" are rejected with a 400 — omit them.
+  _providerToolChoice(provider, toolChoice) {
+    if (toolChoice === undefined || toolChoice === null) return undefined;
+    if (provider === "meta" && toolChoice !== "auto") return undefined;
+    return toolChoice;
   }
 
   // Request-shaping family: the Claude 4.7+/Sonnet 5 generation rejects
@@ -2134,6 +2182,7 @@ class Chat {
     if (provider === "openai") return this._env("OPENAI_API_KEY") || this._env("API_KEY_OPENAI");
     if (provider === "anthropic") return this._env("ANTHROPIC_API_KEY") || this._env("API_KEY_ANTHROPIC");
     if (provider === "xai") return this._env("XAI_API_KEY") || this._env("API_KEY_XAI");
+    if (provider === "meta") return this._env("META_API_KEY") || this._env("MODEL_API_KEY");
     if (provider === "openrouter") return this._env("OPENROUTER_API_KEY") || this._env("API_KEY_OPENROUTER");
     if (provider === "local") return options.localApiKey || this._localApiKey || this._env("LOCAL_API_KEY") || "local";
     return undefined;
@@ -2144,6 +2193,7 @@ class Chat {
     if (provider === "openai") return "https://api.openai.com/v1";
     if (provider === "anthropic") return "https://api.anthropic.com/v1";
     if (provider === "xai") return "https://api.x.ai/v1";
+    if (provider === "meta") return "https://api.meta.ai/v1";
     if (provider === "openrouter") return "https://openrouter.ai/api/v1";
     if (provider === "local") {
       const baseUrl = options.localBaseUrl || this._localBaseUrl || this._env("LOCAL_BASE_URL");
@@ -2350,12 +2400,13 @@ class Chat {
     return items;
   }
 
-  // Function tools + active reasoning for the gpt-5.6 family run through
-  // /v1/responses — the endpoint OpenAI's own error message prescribes (the
-  // native OCaml provider adapter already lives there). Returns the same
-  // normalized result shape as _callOpenAICompatible, so the tool loop can
-  // thread turns through it transparently.
-  async _callOpenAIResponses(messages, options, { model, apiKey, baseUrl, reasoningEffort }) {
+  // OpenAI-protocol /v1/responses caller, shared by OpenAI (function tools +
+  // active reasoning for the gpt-5.6 family run here — the endpoint OpenAI's
+  // own error message prescribes) and Meta (whose built-in web_search tool is
+  // responses-only). Returns the same normalized result shape as
+  // _callOpenAICompatible, so the tool loop can thread turns through it
+  // transparently.
+  async _callOpenAIResponses(messages, options, { provider = "openai", model, apiKey, baseUrl, reasoningEffort }) {
     const headers = { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` };
     const body = {
       model,
@@ -2363,7 +2414,7 @@ class Chat {
       store: false,
       stream: false,
     };
-    if (!this._openaiSamplingLocked(model)) {
+    if (provider !== "openai" || !this._openaiSamplingLocked(model)) {
       const temperature = this._temperature(options);
       if (temperature !== undefined) body.temperature = temperature;
       const topP = options.topP ?? options.top_p;
@@ -2372,28 +2423,29 @@ class Chat {
     const maxTokens = options.maxTokens ?? options.max_tokens;
     if (maxTokens !== undefined) body.max_output_tokens = maxTokens;
     if (reasoningEffort) body.reasoning = { effort: reasoningEffort };
-    if (options.toolChoice) {
+    const toolChoice = this._providerToolChoice(provider, options.toolChoice);
+    if (toolChoice) {
       // /v1/responses uses a flat function reference, unlike chat/completions.
-      body.tool_choice = options.toolChoice?.function?.name
-        ? { type: "function", name: options.toolChoice.function.name }
-        : options.toolChoice;
+      body.tool_choice = toolChoice?.function?.name
+        ? { type: "function", name: toolChoice.function.name }
+        : toolChoice;
     }
     const toolDefs = this._toolDefinitions("openai");
-    if (toolDefs?.length) {
-      body.tools = toolDefs.map((tool) => ({
-        type: "function",
-        name: tool.function.name,
-        description: tool.function.description,
-        parameters: tool.function.parameters,
-        strict: tool.function.strict,
-      }));
-    }
+    const tools = (toolDefs || []).map((tool) => ({
+      type: "function",
+      name: tool.function.name,
+      description: tool.function.description,
+      parameters: tool.function.parameters,
+      strict: tool.function.strict,
+    }));
+    if (provider === "meta" && options.webSearch) tools.push({ type: "web_search" });
+    if (tools.length) body.tools = tools;
     if (options.extra && typeof options.extra === "object") Object.assign(body, options.extra);
     const json = await this._fetchJson(`${baseUrl}/responses`, {
       method: "POST",
       headers,
       body: JSON.stringify(body),
-    }, this._timeoutFor("openai", options));
+    }, this._timeoutFor(provider, options));
     const output = json.output || [];
     const content = output
       .filter((item) => item.type === "message")
@@ -2414,14 +2466,14 @@ class Chat {
       total_tokens: responsesUsage.total_tokens,
       prompt_tokens_details: { cached_tokens: responsesUsage.input_tokens_details?.cached_tokens },
       completion_tokens_details: { reasoning_tokens: responsesUsage.output_tokens_details?.reasoning_tokens },
-    }, "openai");
+    }, provider);
     return {
       content,
       reasoningContent: "",
       usage,
       timing: {},
       cost: { estimatedUsd: 0, actualUsd: usage.costUsd || undefined },
-      provider: "openai",
+      provider,
       model: json.model || model,
       cached: usage.cachedTokens > 0,
       iterations: 1,
@@ -2436,7 +2488,7 @@ class Chat {
     const apiKey = this._apiKey(provider, options);
     if (!apiKey && provider !== "local") throw new Error(`Missing API key for ${provider}`);
     const baseUrl = this._baseUrl(provider, options);
-    const reasoningEffort = this._reasoningEffort(options.reasoning);
+    const reasoningEffort = this._providerReasoningEffort(provider, options.reasoning);
     const tools = this._toolDefinitions(provider);
     if (
       provider === "openai" &&
@@ -2446,6 +2498,11 @@ class Chat {
       this._openaiToolsRejectReasoning(model)
     ) {
       return this._callOpenAIResponses(messages, options, { model, apiKey, baseUrl, reasoningEffort });
+    }
+    if (provider === "meta" && options.webSearch) {
+      // Web search is a built-in server-side tool on the Meta Model API,
+      // available only on /v1/responses.
+      return this._callOpenAIResponses(messages, options, { provider, model, apiKey, baseUrl, reasoningEffort });
     }
     const headers = { "Content-Type": "application/json" };
     if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
@@ -2459,14 +2516,15 @@ class Chat {
       messages: this._wireMessages(provider, messages),
       temperature: allowSampling ? this._temperature(options) : undefined,
       top_p: allowSampling ? options.topP ?? options.top_p : undefined,
-      stop: options.stop,
+      // Muse Spark does not support stop sequences (400) — dropped for meta.
+      stop: provider === "meta" ? undefined : options.stop,
       frequency_penalty: allowSampling ? options.frequencyPenalty ?? options.frequency_penalty : undefined,
       presence_penalty: allowSampling ? options.presencePenalty ?? options.presence_penalty : undefined,
       stream: false,
     };
     const maxTokens = options.maxTokens ?? options.max_tokens;
     if (maxTokens !== undefined) {
-      body[provider === "openai" ? this._openaiMaxTokensParam(model) : "max_tokens"] = maxTokens;
+      body[this._maxTokensParam(provider, model)] = maxTokens;
     }
     if (reasoningEffort) body.reasoning_effort = reasoningEffort;
     if (provider === "openai" && tools?.length && !reasoningEffort && this._openaiToolsRejectReasoning(model)) {
@@ -2478,7 +2536,8 @@ class Chat {
       body.search_parameters = options.searchParameters || options.search_parameters || {};
     }
     if (tools?.length) body.tools = tools;
-    if (options.toolChoice) body.tool_choice = options.toolChoice;
+    const toolChoice = this._providerToolChoice(provider, options.toolChoice);
+    if (toolChoice) body.tool_choice = toolChoice;
     if (options.extra && typeof options.extra === "object") Object.assign(body, options.extra);
     const json = await this._fetchJson(`${baseUrl}/chat/completions`, {
       method: "POST",
@@ -2523,16 +2582,17 @@ class Chat {
       messages: this._wireMessages(provider, messages),
       temperature: allowSampling ? this._temperature(options) : undefined,
       top_p: allowSampling ? options.topP ?? options.top_p : undefined,
-      stop: options.stop,
+      // Muse Spark does not support stop sequences (400) — dropped for meta.
+      stop: provider === "meta" ? undefined : options.stop,
       frequency_penalty: allowSampling ? options.frequencyPenalty ?? options.frequency_penalty : undefined,
       presence_penalty: allowSampling ? options.presencePenalty ?? options.presence_penalty : undefined,
       stream: true,
     };
     const streamMaxTokens = options.maxTokens ?? options.max_tokens;
     if (streamMaxTokens !== undefined) {
-      body[provider === "openai" ? this._openaiMaxTokensParam(model) : "max_tokens"] = streamMaxTokens;
+      body[this._maxTokensParam(provider, model)] = streamMaxTokens;
     }
-    const reasoningEffort = this._reasoningEffort(options.reasoning);
+    const reasoningEffort = this._providerReasoningEffort(provider, options.reasoning);
     if (reasoningEffort) body.reasoning_effort = reasoningEffort;
     if (provider === "xai" && options.webSearch) {
       body.search_parameters = options.searchParameters || options.search_parameters || {};
@@ -2867,6 +2927,7 @@ function makeProviderClientClass(provider) {
         model: overrides.model || this.config.defaultModel || this.config.model || (
           provider === "anthropic" ? "claude-sonnet-4-6" :
           provider === "xai" ? "grok-4" :
+          provider === "meta" ? "muse-spark-1.2" :
           provider === "openrouter" ? "openai/gpt-4o" :
           "gpt-4o"
         ),
@@ -2975,6 +3036,9 @@ function makeProviderClientClass(provider) {
     }
 
     async chatWithWebSearch(messages, options = {}) {
+      // Meta runs web search as a built-in responses-only tool; xAI takes
+      // search_parameters on chat/completions.
+      if (provider === "meta") return this.chat(messages, { ...options, webSearch: true });
       return this.chat(messages, { ...options, extra: { ...(options.extra || {}), search_parameters: options.searchParameters || options.search_parameters || {} } });
     }
 
@@ -3171,6 +3235,9 @@ let anthropic_client : js_function =
 let xai_client : js_function = [%mel.raw {| makeProviderClientClass("xai") |}]
 [@@mel.as "XAIClient"]
 
+let meta_client : js_function = [%mel.raw {| makeProviderClientClass("meta") |}]
+[@@mel.as "MetaClient"]
+
 let local_client : js_function =
   [%mel.raw {| makeProviderClientClass("local") |}]
 [@@mel.as "LocalClient"]
@@ -3186,6 +3253,7 @@ function createProviderClient(provider, config = {}) {
   if (provider === "openai") return new OpenAIClient(config);
   if (provider === "anthropic") return new AnthropicClient(config);
   if (provider === "xai") return new XAIClient(config);
+  if (provider === "meta") return new MetaClient(config);
   if (provider === "local") return new LocalClient(config);
   if (provider === "openrouter") return new OpenRouterClient(config);
   const Client = makeProviderClientClass(provider);
@@ -3208,6 +3276,11 @@ let create_xai_client : js_function =
   [%mel.raw
     {| function createXAIClient(config = {}) { return createProviderClient("xai", config); } |}]
 [@@mel.as "createXAIClient"]
+
+let create_meta_client : js_function =
+  [%mel.raw
+    {| function createMetaClient(config = {}) { return createProviderClient("meta", config); } |}]
+[@@mel.as "createMetaClient"]
 
 let create_local_client : js_function =
   [%mel.raw
@@ -3365,6 +3438,39 @@ Object.freeze({
 |}]
 [@@mel.as "XAI"]
 
+(* Meta Model API (Muse Spark). Text-only namespace on purpose: the API has no
+   embeddings, image, or video endpoints. *)
+let meta_namespace : js_value =
+  [%mel.raw
+    {|
+Object.freeze({
+  Client: MetaClient,
+  create: createMetaClient,
+  createClient: createMetaClient,
+  chat: (messages, options = {}) => openAICompatibleChat("meta", messages, options),
+  chatSimple: (messages, options = {}) => openAICompatibleChatSimple("meta", messages, options),
+  chatStructured: (messages, schema, options = {}) => openAICompatibleChatStructured("meta", messages, schema, options),
+  chatWithTools: (messages, tools, options = {}) => createMetaClient(options).chatWithTools(messages, tools, options),
+  chatWithWebSearch: (messages, options = {}) => createMetaClient(options).chatWithWebSearch(messages, options),
+  chatStream: (messages, options = {}) => openAICompatibleStream("meta", messages, options),
+  chatStreamContent: (messages, options = {}) => openAICompatibleStream("meta", messages, options),
+  chatStreamAccumulate: (messages, options = {}, onChunk) => openAICompatibleStreamAccumulate("meta", messages, options, onChunk),
+  chatStreamReadable: (messages, options = {}) => streamReadableFromAsyncIterable(openAICompatibleStream("meta", messages, options)),
+  listModels: (options = {}) => providerListModels("meta", options),
+  listModelIds: (options = {}) => providerListModelIds("meta", options),
+  getModel: (modelId, options = {}) => providerGetModel("meta", modelId, options),
+  modelExists: (modelId, options = {}) => providerModelExists("meta", modelId, options),
+  requestRaw: (path, options = {}) => providerRequestRaw("meta", path, options),
+  request: (path, options = {}) => providerRequest("meta", path, options),
+  requestGet: (path, options = {}) => providerRequestGet("meta", path, options),
+  BASE_URL: "https://api.meta.ai/v1",
+  // Literal on purpose: the module-level DEFAULT_TIMEOUT const is emitted after
+  // this block runs, so referencing it here freezes `undefined` into the namespace.
+  DEFAULT_TIMEOUT: 120000,
+})
+|}]
+[@@mel.as "Meta"]
+
 let local_namespace : js_value =
   [%mel.raw
     {| Object.freeze({ Client: LocalClient, create: createLocalClient, createClient: createLocalClient, chat: (messages, options = {}) => openAICompatibleChat("local", messages, options), chatSimple: (messages, options = {}) => openAICompatibleChatSimple("local", messages, options) }) |}]
@@ -3447,11 +3553,13 @@ Object.freeze({
   OpenAI,
   Anthropic,
   XAI,
+  Meta,
   Local,
   OpenRouter,
   OpenAIClient,
   AnthropicClient,
   XAIClient,
+  MetaClient,
   LocalClient,
   OpenRouterClient,
   create: createProviderClient,
@@ -3459,6 +3567,7 @@ Object.freeze({
   createOpenAIClient,
   createAnthropicClient,
   createXAIClient,
+  createMetaClient,
   createLocalClient,
   createOpenRouterClient,
   detectProviderByModel,
@@ -3476,6 +3585,7 @@ Object.freeze({
   OPENAI_MODELS,
   ANTHROPIC_MODELS,
   XAI_MODELS,
+  META_MODELS,
   MODELS_BY_PROVIDER,
   ProviderError,
 })
@@ -3569,6 +3679,7 @@ Object.freeze({
   OPENAI_MODELS,
   ANTHROPIC_MODELS,
   XAI_MODELS,
+  META_MODELS,
   MODELS_BY_PROVIDER,
   CONTEXT_WINDOWS,
   PRICING,
@@ -3576,12 +3687,14 @@ Object.freeze({
   OpenAIClient,
   AnthropicClient,
   XAIClient,
+  MetaClient,
   LocalClient,
   OpenRouterClient,
   createProviderClient,
   createOpenAIClient,
   createAnthropicClient,
   createXAIClient,
+  createMetaClient,
   createLocalClient,
   createOpenRouterClient,
 })
@@ -3607,6 +3720,7 @@ let public_gen_data : js_function = [%mel.raw {| genData |}]
 let public_openai_client : js_function = [%mel.raw {| OpenAIClient |}]
 let public_anthropic_client : js_function = [%mel.raw {| AnthropicClient |}]
 let public_xai_client : js_function = [%mel.raw {| XAIClient |}]
+let public_meta_client : js_function = [%mel.raw {| MetaClient |}]
 let public_local_client : js_function = [%mel.raw {| LocalClient |}]
 let public_openrouter_client : js_function = [%mel.raw {| OpenRouterClient |}]
 
@@ -3620,6 +3734,7 @@ let public_create_anthropic_client : js_function =
   [%mel.raw {| createAnthropicClient |}]
 
 let public_create_xai_client : js_function = [%mel.raw {| createXAIClient |}]
+let public_create_meta_client : js_function = [%mel.raw {| createMetaClient |}]
 
 let public_create_local_client : js_function =
   [%mel.raw {| createLocalClient |}]
@@ -3630,6 +3745,7 @@ let public_create_openrouter_client : js_function =
 let public_openai_namespace : js_value = [%mel.raw {| OpenAI |}]
 let public_anthropic_namespace : js_value = [%mel.raw {| Anthropic |}]
 let public_xai_namespace : js_value = [%mel.raw {| XAI |}]
+let public_meta_namespace : js_value = [%mel.raw {| Meta |}]
 let public_local_namespace : js_value = [%mel.raw {| Local |}]
 let public_openrouter_namespace : js_value = [%mel.raw {| OpenRouter |}]
 let public_core_namespace : js_value = [%mel.raw {| Core |}]
@@ -3645,6 +3761,7 @@ let public_provider_ids : js_value = [%mel.raw {| PROVIDER_IDS |}]
 let public_openai_models : js_value = [%mel.raw {| OPENAI_MODELS |}]
 let public_anthropic_models : js_value = [%mel.raw {| ANTHROPIC_MODELS |}]
 let public_xai_models : js_value = [%mel.raw {| XAI_MODELS |}]
+let public_meta_models : js_value = [%mel.raw {| META_MODELS |}]
 let public_models_by_provider : js_value = [%mel.raw {| MODELS_BY_PROVIDER |}]
 
 let public_detect_provider_by_model : js_function =

@@ -8,5 +8,6 @@ module Openai_stream = Openai_stream
 module Openai_decode = Openai_decode
 module Anthropic = Anthropic
 module Xai = Xai
+module Meta = Meta
 module Openrouter = Openrouter
 module Local = Local

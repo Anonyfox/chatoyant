@@ -78,6 +78,9 @@ let all =
     ("claude-3-5-haiku-20241022", 200_000);
     ("claude-3-opus-20240229", 200_000);
     ("claude-3-haiku-20240307", 200_000);
+    ("muse-spark-1.2", 1_048_576);
+    ("muse-spark-1.1", 1_048_576);
+    ("muse-spark-1.2-contributor", 1_048_576);
     ("grok-4.5", 500_000);
     ("grok-4.3", 1_000_000);
     ("grok-4.20-0309-reasoning", 1_000_000);

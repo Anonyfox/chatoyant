@@ -9,6 +9,8 @@ let assert_equal_string expected actual =
 let assert_equal_provider expected actual =
   if expected <> actual then failwith "provider mismatch"
 
+let assert_true label condition = if not condition then failwith label
+
 let contains_substring needle text =
   let needle_len = String.length needle in
   let text_len = String.length text in
@@ -533,6 +535,57 @@ let () =
   assert_equal_string "grok-4-1-fast-reasoning"
     (Chatoyant.Core.Preset.adjust_xai_model_for_reasoning ~prefer_reasoning:true
        "grok-4-1-fast-non-reasoning");
+  assert_equal_string "muse-spark-1.2"
+    (Option.get
+       (Chatoyant.Core.Preset.resolve_model_preset
+          ~provider:Chatoyant.Provider.Provider.Meta Chatoyant.Core.Preset.Best));
+
+  (* Meta Model API wire rules: stop dropped, reasoning "none"/"off" omitted
+     (Muse Spark cannot disable reasoning), non-"auto" tool_choice omitted,
+     sampling passes, web_search becomes the built-in responses tool. *)
+  (let meta_options effort tool_choice web_search =
+     {
+       Chatoyant.Provider.Provider.model = "muse-spark-1.2";
+       temperature = Some 0.2;
+       max_tokens = Some 64;
+       top_p = Some 0.9;
+       stop = [ "END" ];
+       frequency_penalty = None;
+       presence_penalty = None;
+       web_search;
+       thinking_budget = None;
+       reasoning_effort = effort;
+       timeout_ms = None;
+       tools = [];
+       tool_choice;
+       extra = None;
+     }
+   in
+   let request_json effort tool_choice web_search =
+     Chatoyant.Provider.Meta.responses_request []
+       (meta_options effort tool_choice web_search)
+     |> Chatoyant.Provider.Openai.responses_request_json
+     |> Chatoyant.Runtime.Json.to_string
+   in
+   let locked = request_json (Some "none") (Some "required") None in
+   assert_true "meta omits reasoning none"
+     (not (contains_substring "reasoning" locked));
+   assert_true "meta omits non-auto tool_choice"
+     (not (contains_substring "tool_choice" locked));
+   assert_true "meta drops stop sequences"
+     (not (contains_substring "END" locked));
+   assert_true "meta keeps temperature"
+     (contains_substring "\"temperature\"" locked);
+   assert_true "meta keeps top_p" (contains_substring "\"top_p\"" locked);
+   assert_true "meta uses max_output_tokens"
+     (contains_substring "\"max_output_tokens\"" locked);
+   let active = request_json (Some "xhigh") (Some "auto") (Some true) in
+   assert_true "meta forwards reasoning effort"
+     (contains_substring "{\"effort\":\"xhigh\"}" active);
+   assert_true "meta forwards auto tool_choice"
+     (contains_substring "\"tool_choice\":\"auto\"" active);
+   assert_true "meta adds web_search built-in tool"
+     (contains_substring "{\"type\":\"web_search\"}" active));
 
   let open Chatoyant.Provider.Openai in
   let tool_schema =

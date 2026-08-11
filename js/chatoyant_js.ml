@@ -38,6 +38,7 @@ let anthropic_client = Chatoyant_internal.public_anthropic_client
 [@@mel.as "AnthropicClient"]
 
 let xai_client = Chatoyant_internal.public_xai_client [@@mel.as "XAIClient"]
+let meta_client = Chatoyant_internal.public_meta_client [@@mel.as "MetaClient"]
 
 let local_client = Chatoyant_internal.public_local_client
 [@@mel.as "LocalClient"]
@@ -57,6 +58,9 @@ let create_anthropic_client = Chatoyant_internal.public_create_anthropic_client
 let create_xai_client = Chatoyant_internal.public_create_xai_client
 [@@mel.as "createXAIClient"]
 
+let create_meta_client = Chatoyant_internal.public_create_meta_client
+[@@mel.as "createMetaClient"]
+
 let create_local_client = Chatoyant_internal.public_create_local_client
 [@@mel.as "createLocalClient"]
 
@@ -71,6 +75,7 @@ let anthropic_namespace = Chatoyant_internal.public_anthropic_namespace
 [@@mel.as "Anthropic"]
 
 let xai_namespace = Chatoyant_internal.public_xai_namespace [@@mel.as "XAI"]
+let meta_namespace = Chatoyant_internal.public_meta_namespace [@@mel.as "Meta"]
 
 let local_namespace = Chatoyant_internal.public_local_namespace
 [@@mel.as "Local"]
@@ -113,6 +118,7 @@ let anthropic_models = Chatoyant_internal.public_anthropic_models
 [@@mel.as "ANTHROPIC_MODELS"]
 
 let xai_models = Chatoyant_internal.public_xai_models [@@mel.as "XAI_MODELS"]
+let meta_models = Chatoyant_internal.public_meta_models [@@mel.as "META_MODELS"]
 
 let models_by_provider = Chatoyant_internal.public_models_by_provider
 [@@mel.as "MODELS_BY_PROVIDER"]

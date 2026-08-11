@@ -256,6 +256,18 @@ module Provider : sig
     (module Chatoyant_provider.Provider.CHAT)
   (** xAI unified chat provider. *)
 
+  val meta :
+    ?https:Http.https ->
+    ?max_response_size:int ->
+    ?base_url:string ->
+    ?timeout_ms:int ->
+    net:_ Eio.Net.t ->
+    clock:_ Eio.Time.clock ->
+    api_key:string ->
+    unit ->
+    (module Chatoyant_provider.Provider.CHAT)
+  (** Meta Model API (Muse Spark) unified chat provider. *)
+
   val openrouter :
     ?https:Http.https ->
     ?max_response_size:int ->
@@ -340,6 +352,21 @@ module Chat : sig
     ?api_key:string ->
     unit ->
     t
+
+  val meta :
+    ?https:Http.https ->
+    ?max_response_size:int ->
+    ?base_url:string ->
+    ?timeout_ms:int ->
+    ?model:string ->
+    ?defaults:Chatoyant_core.Options.t ->
+    < net : _ Eio.Net.t ; clock : _ Eio.Time.clock ; .. > ->
+    ?api_key:string ->
+    unit ->
+    t
+  (** Meta Model API (Muse Spark) chat. When [api_key] is omitted,
+      [META_API_KEY] is read from the process environment, then [MODEL_API_KEY]
+      (the name Meta's own tooling uses). *)
 
   val openrouter :
     ?https:Http.https ->
@@ -497,6 +524,20 @@ val xai :
   < net : _ Eio.Net.t ; clock : _ Eio.Time.clock ; .. > ->
   client
 (** xAI client for one-shot shortcuts and chat forks. *)
+
+val meta :
+  ?https:Http.https ->
+  ?max_response_size:int ->
+  ?base_url:string ->
+  ?timeout_ms:int ->
+  ?model:string ->
+  ?defaults:Chatoyant_core.Options.t ->
+  ?api_key:string ->
+  ?system:string ->
+  ?tools:Chatoyant_core.Tool.t list ->
+  < net : _ Eio.Net.t ; clock : _ Eio.Time.clock ; .. > ->
+  client
+(** Meta Model API (Muse Spark) client for one-shot shortcuts and chat forks. *)
 
 val openrouter :
   ?https:Http.https ->

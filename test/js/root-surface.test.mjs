@@ -21,8 +21,11 @@ describe("public root package surface", () => {
       "JsonSchema",
       "Local",
       "LocalClient",
+      "META_MODELS",
       "MODELS_BY_PROVIDER",
       "Message",
+      "Meta",
+      "MetaClient",
       "OPENAI_MODELS",
       "OpenAI",
       "OpenAIClient",
@@ -53,6 +56,7 @@ describe("public root package surface", () => {
       "calculateVideoCost",
       "createAnthropicClient",
       "createLocalClient",
+      "createMetaClient",
       "createOpenAIClient",
       "createOpenRouterClient",
       "createProviderClient",
@@ -156,7 +160,7 @@ describe("public root package surface", () => {
   });
 
   it("keeps declared namespace members backed by runtime implementations", () => {
-    const { Anthropic, Local, OpenAI, OpenRouter, XAI } = chatoyant;
+    const { Anthropic, Local, Meta, OpenAI, OpenRouter, XAI } = chatoyant;
 
     // Every member the declaration file promises must be a real function at
     // runtime, per namespace contract: OpenAI/XAI/OpenRouter share the
@@ -202,6 +206,7 @@ describe("public root package surface", () => {
     for (const [name, namespace, members] of [
       ["OpenAI", OpenAI, providerFunctionMembers],
       ["XAI", XAI, providerFunctionMembers],
+      ["Meta", Meta, [...providerFunctionMembers, "chatWithWebSearch"]],
       ["OpenRouter", OpenRouter, providerFunctionMembers],
       ["Anthropic", Anthropic, anthropicMembers],
       ["Local", Local, ["chat", "chatSimple"]],
@@ -217,9 +222,11 @@ describe("public root package surface", () => {
     assert.equal(OpenAI.BASE_URL, "https://api.openai.com/v1");
     assert.equal(Anthropic.BASE_URL, "https://api.anthropic.com/v1");
     assert.equal(XAI.BASE_URL, "https://api.x.ai/v1");
+    assert.equal(Meta.BASE_URL, "https://api.meta.ai/v1");
     assert.equal(OpenRouter.OPENROUTER_BASE_URL, "https://openrouter.ai/api/v1");
     assert.equal(OpenAI.DEFAULT_TIMEOUT, 120000);
     assert.equal(Anthropic.DEFAULT_TIMEOUT, 120000);
     assert.equal(XAI.DEFAULT_TIMEOUT, 120000);
+    assert.equal(Meta.DEFAULT_TIMEOUT, 120000);
   });
 });

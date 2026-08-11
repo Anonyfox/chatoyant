@@ -34,6 +34,15 @@ let all =
       base_url = Some "https://api.x.ai/v1";
     };
     {
+      id = Provider.Meta;
+      name = "Meta";
+      signatures = [ "muse" ];
+      env_key = "META_API_KEY";
+      (* Meta's own docs and Muse Code use MODEL_API_KEY. *)
+      legacy_env_key = Some "MODEL_API_KEY";
+      base_url = Some "https://api.meta.ai/v1";
+    };
+    {
       id = Provider.Local;
       name = "Local";
       signatures = [];

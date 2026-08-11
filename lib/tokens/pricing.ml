@@ -136,6 +136,9 @@ let all =
     ( "claude-3-haiku-20240307",
       p ~input:0.25 ~output:1.25 ~cached:0.03 ~cache_write_5m:0.3
         ~cache_write_1h:0.5 () );
+    ("muse-spark-1.2", p ~input:1.25 ~output:4.25 ~cached:0.15 ());
+    ("muse-spark-1.1", p ~input:1.25 ~output:4.25 ~cached:0.15 ());
+    ("muse-spark-1.2-contributor", p ~input:0.1 ~output:0.2 ~cached:0.002 ());
     ("grok-4.5", p ~input:2.0 ~output:6.0 ~cached:0.5 ());
     ("grok-4.3", p ~input:1.25 ~output:2.5 ~cached:0.2 ());
     ("grok-4.20-0309-reasoning", p ~input:1.25 ~output:2.5 ~cached:0.2 ());

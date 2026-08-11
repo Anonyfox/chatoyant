@@ -775,6 +775,20 @@ module Provider = struct
         end) in
     (module Provider : Chatoyant_provider.Provider.CHAT)
 
+  let meta ?https ?max_response_size
+      ?(base_url = Chatoyant_provider.Meta.default_base_url) ?timeout_ms ~net
+      ~clock ~api_key () =
+    let module Http = (val http ?https ?max_response_size ~net ~clock ()) in
+    let module Provider =
+      Chatoyant_provider.Meta.Make_provider
+        (Http)
+        (struct
+          let api_key = api_key
+          let base_url = base_url
+          let timeout_ms = timeout_ms
+        end) in
+    (module Provider : Chatoyant_provider.Provider.CHAT)
+
   let openrouter ?https ?max_response_size ?timeout_ms ?http_referer ?title
       ?(headers = []) ~net ~clock ~api_key () =
     let module Http = (val http ?https ?max_response_size ~net ~clock ()) in
@@ -1032,6 +1046,26 @@ module Chat = struct
     in
     with_provider ?model ?defaults ~clock provider
 
+  let meta ?https ?max_response_size ?base_url ?timeout_ms ?model ?defaults env
+      ?api_key () =
+    let net = env#net in
+    let clock = env#clock in
+    let provider =
+      (* Meta's own tooling exports MODEL_API_KEY; honor it after our
+         canonical META_API_KEY. *)
+      let key =
+        match api_key_or_env "META_API_KEY" api_key with
+        | Some _ as key -> key
+        | None -> api_key_or_env "MODEL_API_KEY" None
+      in
+      match key with
+      | Some api_key ->
+          Provider.meta ?https ?max_response_size ?base_url ?timeout_ms ~net
+            ~clock ~api_key ()
+      | None -> missing_api_key_provider Meta "META_API_KEY"
+    in
+    with_provider ?model ?defaults ~clock provider
+
   let openrouter ?https ?max_response_size ?timeout_ms ?http_referer ?title
       ?headers ?model ?defaults env ?api_key () =
     let net = env#net in
@@ -1164,6 +1198,12 @@ let xai ?https ?max_response_size ?base_url ?timeout_ms ?model ?defaults
     ?api_key ()
   |> add_default_messages ?system ?tools
 
+let meta ?https ?max_response_size ?base_url ?timeout_ms ?model ?defaults
+    ?api_key ?system ?tools env =
+  Chat.meta ?https ?max_response_size ?base_url ?timeout_ms ?model ?defaults env
+    ?api_key ()
+  |> add_default_messages ?system ?tools
+
 let openrouter ?https ?max_response_size ?timeout_ms ?http_referer ?title
     ?headers ?model ?defaults ?api_key ?system ?tools env =
   Chat.openrouter ?https ?max_response_size ?timeout_ms ?http_referer ?title
@@ -1254,7 +1294,9 @@ let structured_extra provider ?name ?description ~strict schema extra =
   let name = Option.value name ~default:"data" in
   let schema_json = structured_schema_json ~strict schema in
   match provider with
-  | Chatoyant_provider.Provider.Openai ->
+  | Chatoyant_provider.Provider.Openai | Meta ->
+      (* Both adapters ride /v1/responses, where structured output is
+         text.format rather than response_format. *)
       let fields = extra |> object_fields |> remove_json_field "text" in
       Some
         (Chatoyant_runtime.Json.Object
@@ -1313,7 +1355,7 @@ let gen_data ?name ?description ?(strict = true) ~codec ?system ?tools ?options
     match provider with
     | Chatoyant_provider.Provider.Anthropic | Local ->
         append_system system (structured_instruction schema)
-    | Openai | Xai | Openrouter -> system
+    | Openai | Xai | Meta | Openrouter -> system
   in
   match
     gen_text ?system ?tools ?options ?timeout_ms ?temperature ?max_tokens ?extra

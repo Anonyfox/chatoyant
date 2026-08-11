@@ -41,8 +41,18 @@ Provider is detected from the model name unless explicitly set.
 | OpenAI | `OPENAI_API_KEY` | `gpt-*`, `o1-*`, `o3-*`, `o4-*`, `chatgpt-*` |
 | Anthropic | `ANTHROPIC_API_KEY` | `claude-*` |
 | xAI | `XAI_API_KEY` | `grok-*` |
+| Meta | `META_API_KEY` (or `MODEL_API_KEY`) | `muse-*` |
 | OpenRouter | `OPENROUTER_API_KEY` | Slash notation such as `openai/gpt-4o` |
 | Local | `LOCAL_BASE_URL` | Explicit `provider: "local"` or local fallback |
+
+Meta's Model API (Muse Spark) is handled with its wire rules applied
+automatically: reasoning cannot be disabled (`reasoning: "off"` omits the
+field; `minimal`–`xhigh` pass through), `stop` sequences and non-`"auto"`
+`toolChoice` values are dropped instead of failing the request, `maxTokens`
+maps to `max_completion_tokens`, and `webSearch: true` routes through
+`/v1/responses` with the built-in `web_search` tool. The discounted
+`muse-spark-1.2-contributor` model permits Meta to train on request data —
+it is priced and recognized but never selected by a preset.
 
 Intent presets resolve to provider-specific model names:
 

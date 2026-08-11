@@ -1,4 +1,4 @@
-type id = Openai | Anthropic | Xai | Local | Openrouter
+type id = Openai | Anthropic | Xai | Meta | Local | Openrouter
 type role = System | User | Assistant | Tool
 
 type tool_definition = {
@@ -68,12 +68,14 @@ let string_of_id = function
   | Openai -> "openai"
   | Anthropic -> "anthropic"
   | Xai -> "xai"
+  | Meta -> "meta"
   | Local -> "local"
   | Openrouter -> "openrouter"
 
 let id_of_string = function
   | "openai" -> Some Openai
   | "anthropic" -> Some Anthropic
+  | "meta" -> Some Meta
   | "xai" -> Some Xai
   | "local" -> Some Local
   | "openrouter" -> Some Openrouter

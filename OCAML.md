@@ -33,7 +33,7 @@ let run env =
 let () = Eio_main.run run
 ```
 
-`Chatoyant.openai`, `Chatoyant.anthropic`, `Chatoyant.xai`,
+`Chatoyant.openai`, `Chatoyant.anthropic`, `Chatoyant.xai`, `Chatoyant.meta`,
 `Chatoyant.openrouter`, and `Chatoyant.local` construct stateful chat clients.
 Provider constructors read the standard provider API key environment variable
 when `~api_key` is omitted.

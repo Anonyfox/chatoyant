@@ -4,6 +4,33 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- **Meta Model API (Muse Spark) as a first-class provider.** Provider id
+  `meta` with model detection for `muse-*`, served at
+  `https://api.meta.ai/v1` (`META_API_KEY`, with Meta's own `MODEL_API_KEY`
+  honored as a fallback). The native OCaml adapter
+  (`Chatoyant_provider.Meta`, plus `Chatoyant.meta` / `Chat.meta` /
+  `Provider.meta` in the Eio runtime) rides the OpenAI-compatible
+  `/v1/responses` protocol and reuses the OpenAI serializers; the JavaScript
+  package integrates through the shared OpenAI-compatible machinery,
+  namespace (`Meta`, `MetaClient`, `createMetaClient`, `META_MODELS`),
+  presets, pricing, and context windows included. Muse Spark's wire rules are
+  applied automatically in both worlds: reasoning cannot be disabled
+  (`reasoning: "off"` omits the field; `minimal`–`xhigh` pass through),
+  `stop` sequences and non-`"auto"` tool choices are dropped instead of
+  failing the request with the API's 400, `maxTokens` maps to
+  `max_completion_tokens` on chat completions, sampling parameters pass
+  through, structured output uses the strict schema paths, and
+  `webSearch: true` runs the built-in `web_search` tool on `/v1/responses`.
+  All three hosted models are priced ($1.25/$4.25 per MTok, cached $0.15;
+  1,048,576-token context): `muse-spark-1.2`, `muse-spark-1.1`, and
+  `muse-spark-1.2-contributor` — the discounted contributor tier permits
+  Meta to train on request data, so presets always resolve to the standard
+  `muse-spark-1.2` and never select it.
+
 ## 0.12.5 — 2026-07-10
 ### Fixed
 

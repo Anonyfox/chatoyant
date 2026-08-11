@@ -42,6 +42,9 @@ let resolve_model_preset ~provider preset =
   | Reasoning, Openai -> Some "gpt-5.5-pro"
   | Reasoning, Anthropic -> Some "claude-fable-5"
   | Reasoning, Xai -> Some "grok-4.5"
+  (* Meta serves one standard-tier family; the discounted -contributor
+     variant trains on request data, so presets never select it. *)
+  | (Fast | Cheap | Best | Balanced | Reasoning), Meta -> Some "muse-spark-1.2"
   | _, (Local | Openrouter) -> None
 
 let temperature_of_creativity = function

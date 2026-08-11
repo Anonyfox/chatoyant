@@ -6,6 +6,7 @@ import {
   Chat,
   CONTEXT_WINDOWS,
   JsonSchema,
+  META_MODELS,
   OpenAI,
   Schema,
   XAI,
@@ -211,6 +212,101 @@ describe("publish package surface", () => {
     assert.equal(open.top_p, 0.9);
     assert.equal(open.frequency_penalty, 0.2);
     assert.equal(open.presence_penalty, 0.1);
+  });
+
+  it("shapes Meta Model API (Muse Spark) requests per its wire rules", async () => {
+    assert.equal(detectProviderByModel("muse-spark-1.2"), "meta");
+    assert.deepEqual([...META_MODELS], ["muse-spark-1.2", "muse-spark-1.1", "muse-spark-1.2-contributor"]);
+    assert.equal(CONTEXT_WINDOWS["muse-spark-1.2"], 1048576);
+
+    const originalFetch = globalThis.fetch;
+    const seen = [];
+    globalThis.fetch = async (url, init) => {
+      seen.push({ url: String(url), headers: init.headers, body: JSON.parse(init.body) });
+      return new Response(
+        JSON.stringify({
+          model: "muse-spark-1.2",
+          choices: [{ finish_reason: "stop", message: { role: "assistant", content: "ok" } }],
+          output: [{ type: "message", content: [{ type: "output_text", text: "ok" }] }],
+          usage: {
+            prompt_tokens: 4, completion_tokens: 2, total_tokens: 6,
+            input_tokens: 4, output_tokens: 2,
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    };
+
+    try {
+      // Everything Muse Spark rejects must be absent; everything it supports
+      // must pass through with the modern parameter names.
+      await new Chat({ provider: "meta", model: "muse-spark-1.2", apiKey: "k" })
+        .user("hi")
+        .generateWithResult({
+          maxTokens: 100, stop: ["END"], reasoning: "off",
+          toolChoice: "required", creativity: "precise", topP: 0.9,
+        });
+
+      // Meta-only reasoning tiers pass through; "auto" tool_choice is kept.
+      await new Chat({ provider: "meta", model: "muse-spark-1.2", apiKey: "k" })
+        .user("hi")
+        .generateWithResult({ reasoning: "xhigh", toolChoice: "auto" });
+
+      // Web search is a responses-only built-in tool.
+      await new Chat({ provider: "meta", model: "muse-spark-1.2", apiKey: "k" })
+        .user("hi")
+        .generateWithResult({ webSearch: true, reasoning: "high", maxTokens: 50 });
+
+      // Function tools ride the shared strict projection.
+      await new Chat({ provider: "meta", model: "muse-spark-1.2", apiKey: "k" })
+        .addTool(createTool({
+          name: "t", description: "d",
+          parameters: { q: Schema.String({ optional: true }) },
+          execute: async () => ({}),
+        }))
+        .user("hi")
+        .generateWithResult({});
+
+      // Structured output uses the strict response_format path.
+      await new Chat({ provider: "meta", model: "muse-spark-1.2", apiKey: "k" })
+        .user("hi")
+        .generateData(
+          { type: "object", properties: { a: { type: "string" } }, required: ["a"], additionalProperties: false },
+          {},
+        )
+        .catch(() => {});
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    const locked = seen[0];
+    assert.equal(locked.url, "https://api.meta.ai/v1/chat/completions");
+    assert.equal(locked.headers.Authorization, "Bearer k");
+    assert.equal(locked.body.max_completion_tokens, 100);
+    assert.equal(locked.body.max_tokens, undefined);
+    assert.equal(locked.body.stop, undefined);
+    assert.equal(locked.body.reasoning_effort, undefined);
+    assert.equal(locked.body.tool_choice, undefined);
+    assert.equal(locked.body.temperature, 0);
+    assert.equal(locked.body.top_p, 0.9);
+
+    assert.equal(seen[1].body.reasoning_effort, "xhigh");
+    assert.equal(seen[1].body.tool_choice, "auto");
+
+    const search = seen[2];
+    assert.equal(search.url, "https://api.meta.ai/v1/responses");
+    assert.deepEqual(search.body.tools, [{ type: "web_search" }]);
+    assert.deepEqual(search.body.reasoning, { effort: "high" });
+    assert.equal(search.body.max_output_tokens, 50);
+
+    const tooled = seen[3];
+    assert.equal(tooled.body.tools[0].function.strict, true);
+    assert.deepEqual(tooled.body.tools[0].function.parameters.required, ["q"]);
+    assert.equal(tooled.body.reasoning_effort, undefined);
+
+    const structured = seen[4];
+    assert.equal(structured.body.response_format.type, "json_schema");
+    assert.equal(structured.body.response_format.json_schema.strict, true);
   });
 
   it("projects strict tool schemas and keeps optional parameters legal on the wire", async () => {

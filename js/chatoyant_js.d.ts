@@ -21,7 +21,7 @@ export type JsonObject = { [key: string]: JsonValue };
 export type JsonSchemaValue = boolean | JsonObject;
 
 /** Supported provider identifiers. */
-export type ProviderId = "openai" | "anthropic" | "xai" | "local" | "openrouter";
+export type ProviderId = "openai" | "anthropic" | "xai" | "meta" | "local" | "openrouter";
 
 /** Provider metadata used by model detection and environment resolution. */
 export interface ProviderMeta {
@@ -615,6 +615,7 @@ export const PROVIDER_IDS: readonly ProviderId[];
 export const OPENAI_MODELS: readonly string[];
 export const ANTHROPIC_MODELS: readonly string[];
 export const XAI_MODELS: readonly string[];
+export const META_MODELS: readonly string[];
 export const MODELS_BY_PROVIDER: Readonly<Record<ProviderId, readonly string[]>>;
 
 export function detectProviderByModel(model: string): ProviderId | null;
@@ -716,6 +717,17 @@ export class XAIClient implements ProviderClient {
 }
 export interface XAIClient extends ProviderClient {}
 
+/** Meta Model API (Muse Spark) high-level provider client. */
+export class MetaClient implements ProviderClient {
+  constructor(config?: GenerationOptions);
+  readonly provider: string;
+  readonly config: GenerationOptions;
+  chat(messages: Array<Message | MessageJSON> | unknown[], options?: GenerationOptions): Promise<GenerationResult>;
+  chatSimple(messages: Array<Message | MessageJSON> | unknown[], options?: GenerationOptions): Promise<string>;
+  message(messages: Array<Message | MessageJSON> | unknown[], options?: GenerationOptions): Promise<GenerationResult>;
+}
+export interface MetaClient extends ProviderClient {}
+
 /** Local OpenAI-compatible provider client. */
 export class LocalClient implements ProviderClient {
   constructor(config?: GenerationOptions);
@@ -741,11 +753,13 @@ export interface OpenRouterClient extends ProviderClient {}
 export function createOpenAIClient(config?: GenerationOptions): OpenAIClient;
 export function createAnthropicClient(config?: GenerationOptions): AnthropicClient;
 export function createXAIClient(config?: GenerationOptions): XAIClient;
+export function createMetaClient(config?: GenerationOptions): MetaClient;
 export function createLocalClient(config?: GenerationOptions): LocalClient;
 export function createOpenRouterClient(config?: GenerationOptions): OpenRouterClient;
 export function createProviderClient(provider: "openai", config?: GenerationOptions): OpenAIClient;
 export function createProviderClient(provider: "anthropic", config?: GenerationOptions): AnthropicClient;
 export function createProviderClient(provider: "xai", config?: GenerationOptions): XAIClient;
+export function createProviderClient(provider: "meta", config?: GenerationOptions): MetaClient;
 export function createProviderClient(provider: "local", config?: GenerationOptions): LocalClient;
 export function createProviderClient(provider: "openrouter", config?: GenerationOptions): OpenRouterClient;
 export function createProviderClient(provider: string, config?: GenerationOptions): ProviderClient;
@@ -858,6 +872,20 @@ export interface XAINamespace extends ProviderFunctionNamespace {
   DEFAULT_TIMEOUT: number;
 }
 
+/**
+ * Namespace for the Meta Model API (Muse Spark). Text-only on purpose: the
+ * API has no embeddings, image, or video endpoints. Web search runs as a
+ * built-in server-side tool.
+ */
+export interface MetaNamespace extends ProviderFunctionNamespace {
+  Client: typeof MetaClient;
+  create: typeof createMetaClient;
+  createClient: typeof createMetaClient;
+  chatWithWebSearch(messages: Array<Message | MessageJSON> | unknown[], options?: GenerationOptions): Promise<GenerationResult>;
+  BASE_URL: string;
+  DEFAULT_TIMEOUT: number;
+}
+
 export interface LocalNamespace {
   Client: typeof LocalClient;
   create: typeof createLocalClient;
@@ -879,6 +907,8 @@ export const OpenAI: OpenAINamespace;
 export const Anthropic: AnthropicNamespace;
 /** Root namespace for xAI-specific entrypoints. */
 export const XAI: XAINamespace;
+/** Root namespace for the Meta Model API (Muse Spark). */
+export const Meta: MetaNamespace;
 /** Root namespace for local OpenAI-compatible inference. */
 export const Local: LocalNamespace;
 /** Root namespace for OpenRouter. */
@@ -949,11 +979,13 @@ export interface ProvidersNamespace {
   OpenAI: OpenAINamespace;
   Anthropic: AnthropicNamespace;
   XAI: XAINamespace;
+  Meta: MetaNamespace;
   Local: LocalNamespace;
   OpenRouter: OpenRouterNamespace;
   OpenAIClient: typeof OpenAIClient;
   AnthropicClient: typeof AnthropicClient;
   XAIClient: typeof XAIClient;
+  MetaClient: typeof MetaClient;
   LocalClient: typeof LocalClient;
   OpenRouterClient: typeof OpenRouterClient;
   create: typeof createProviderClient;
@@ -961,6 +993,7 @@ export interface ProvidersNamespace {
   createOpenAIClient: typeof createOpenAIClient;
   createAnthropicClient: typeof createAnthropicClient;
   createXAIClient: typeof createXAIClient;
+  createMetaClient: typeof createMetaClient;
   createLocalClient: typeof createLocalClient;
   createOpenRouterClient: typeof createOpenRouterClient;
   detectProviderByModel: typeof detectProviderByModel;
@@ -978,6 +1011,7 @@ export interface ProvidersNamespace {
   OPENAI_MODELS: typeof OPENAI_MODELS;
   ANTHROPIC_MODELS: typeof ANTHROPIC_MODELS;
   XAI_MODELS: typeof XAI_MODELS;
+  META_MODELS: typeof META_MODELS;
   MODELS_BY_PROVIDER: typeof MODELS_BY_PROVIDER;
   ProviderError: typeof ProviderError;
 }
@@ -1071,6 +1105,7 @@ export interface ChatoyantNamespace {
   OPENAI_MODELS: typeof OPENAI_MODELS;
   ANTHROPIC_MODELS: typeof ANTHROPIC_MODELS;
   XAI_MODELS: typeof XAI_MODELS;
+  META_MODELS: typeof META_MODELS;
   MODELS_BY_PROVIDER: typeof MODELS_BY_PROVIDER;
   CONTEXT_WINDOWS: typeof CONTEXT_WINDOWS;
   PRICING: typeof PRICING;
@@ -1078,12 +1113,14 @@ export interface ChatoyantNamespace {
   OpenAIClient: typeof OpenAIClient;
   AnthropicClient: typeof AnthropicClient;
   XAIClient: typeof XAIClient;
+  MetaClient: typeof MetaClient;
   LocalClient: typeof LocalClient;
   OpenRouterClient: typeof OpenRouterClient;
   createProviderClient: typeof createProviderClient;
   createOpenAIClient: typeof createOpenAIClient;
   createAnthropicClient: typeof createAnthropicClient;
   createXAIClient: typeof createXAIClient;
+  createMetaClient: typeof createMetaClient;
   createLocalClient: typeof createLocalClient;
   createOpenRouterClient: typeof createOpenRouterClient;
 }

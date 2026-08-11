@@ -26,7 +26,7 @@ _chatoyant_ /shuh-TOY-uhnt/ - having a changeable lustre.
   dependencies.
 - Unified `Chat` session API, one-shot text/data/stream shortcuts, tool calling,
   streaming accumulation, JSON roundtrip, and token/cost accounting.
-- Raw provider clients for OpenAI, Anthropic, xAI, OpenRouter, and local
+- Raw provider clients for OpenAI, Anthropic, xAI, Meta (Muse Spark), OpenRouter, and local
   OpenAI-compatible servers.
 - Standalone Draft 2020-12 JSON Schema parser/validator with OpenAI strict
   projection and typed OCaml codec generation.
@@ -41,6 +41,7 @@ _chatoyant_ /shuh-TOY-uhnt/ - having a changeable lustre.
 | OpenAI | `OPENAI_API_KEY` | `gpt-*`, `o1-*`, `o3-*`, `o4-*`, `chatgpt-*` |
 | Anthropic | `ANTHROPIC_API_KEY` | `claude-*` |
 | xAI | `XAI_API_KEY` | `grok-*` |
+| Meta | `META_API_KEY` (or `MODEL_API_KEY`) | `muse-*` |
 | OpenRouter | `OPENROUTER_API_KEY` | Slash notation such as `openai/gpt-4o` |
 | Local | `LOCAL_BASE_URL` | Explicit `provider: "local"` or local fallback |
 
