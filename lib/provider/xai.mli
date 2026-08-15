@@ -12,6 +12,7 @@ type message = {
   message_name : string option;
   message_tool_call_id : string option;
   message_tool_calls : Provider.tool_call list;
+  message_attachments : Provider.attachment list;
 }
 
 type tool =

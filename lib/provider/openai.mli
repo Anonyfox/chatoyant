@@ -14,6 +14,7 @@ type chat_message = {
   message_name : string option;
   message_tool_call_id : string option;
   message_tool_calls : Provider.tool_call list;
+  message_attachments : Provider.attachment list;
 }
 
 type function_tool = {
@@ -737,6 +738,17 @@ val realtime_client_secret_request_json :
 
 val authorization_headers : api_key:string -> (string * string) list
 val realtime_url : ?base_url:string -> model:string -> unit -> string
+
+val chat_content_parts_json :
+  string option -> Provider.attachment list -> Chatoyant_runtime.Json.t
+(** Chat Completions content array for a message with attachments: a text part
+    (when non-empty) followed by image_url / file parts. Shared with other
+    OpenAI-protocol adapters (xAI, local, OpenRouter). *)
+
+val responses_content_parts :
+  string option -> Provider.attachment list -> Chatoyant_runtime.Json.t
+(** Responses-API input content array: input_text plus input_image / input_file
+    parts — every attachment source has a first-class shape here. *)
 
 val responses_tool_of_provider_tool :
   Provider.tool_definition -> Chatoyant_runtime.Json.t

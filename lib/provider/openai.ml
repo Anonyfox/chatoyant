@@ -6,6 +6,7 @@ type chat_message = {
   message_name : string option;
   message_tool_call_id : string option;
   message_tool_calls : Provider.tool_call list;
+  message_attachments : Provider.attachment list;
 }
 
 type function_tool = {
@@ -702,6 +703,115 @@ let role_to_string = function
   | Assistant -> "assistant"
   | Tool -> "tool"
 
+let attachment_data_uri ~media_type ~data =
+  "data:" ^ media_type ^ ";base64," ^ data
+
+(* Chat Completions content parts. Images travel as image_url (https or data
+   URI); files as file parts (file_id or inline file_data). The chat surface
+   has no image-by-file-id or file-by-url shape — those are rendered as file
+   parts / skipped by the callers that validate; the Responses surface covers
+   every source. *)
+let chat_attachment_part (attachment : Provider.attachment) =
+  match (attachment.attachment_kind, attachment.attachment_source) with
+  | Provider.Image_attachment, Provider.Attachment_url url ->
+      Chatoyant_runtime.Json.Object
+        [
+          ("type", string "image_url");
+          ("image_url", Chatoyant_runtime.Json.Object [ ("url", string url) ]);
+        ]
+  | Provider.Image_attachment, Provider.Attachment_base64 { media_type; data }
+    ->
+      Chatoyant_runtime.Json.Object
+        [
+          ("type", string "image_url");
+          ( "image_url",
+            Chatoyant_runtime.Json.Object
+              [ ("url", string (attachment_data_uri ~media_type ~data)) ] );
+        ]
+  | ( (Provider.Image_attachment | Provider.File_attachment),
+      Provider.Attachment_file_id file_id ) ->
+      Chatoyant_runtime.Json.Object
+        [
+          ("type", string "file");
+          ("file", Chatoyant_runtime.Json.Object [ ("file_id", string file_id) ]);
+        ]
+  | Provider.File_attachment, Provider.Attachment_base64 { media_type; data } ->
+      let file_fields =
+        [ ("file_data", string (attachment_data_uri ~media_type ~data)) ]
+        |> add_opt "filename" string attachment.attachment_filename
+        |> List.rev
+      in
+      Chatoyant_runtime.Json.Object
+        [
+          ("type", string "file");
+          ("file", Chatoyant_runtime.Json.Object file_fields);
+        ]
+  | Provider.File_attachment, Provider.Attachment_url url ->
+      (* No file-by-url part exists on Chat Completions; forward the URL as a
+         file_data reference so the request stays well-formed JSON — servers
+         reject it with a descriptive error rather than a parse failure. *)
+      Chatoyant_runtime.Json.Object
+        [
+          ("type", string "file");
+          ("file", Chatoyant_runtime.Json.Object [ ("file_data", string url) ]);
+        ]
+
+let chat_content_parts_json content attachments =
+  let text_parts =
+    match content with
+    | Some "" | None -> []
+    | Some text ->
+        [
+          Chatoyant_runtime.Json.Object
+            [ ("type", string "text"); ("text", string text) ];
+        ]
+  in
+  Chatoyant_runtime.Json.Array
+    (text_parts @ List.map chat_attachment_part attachments)
+
+(* Responses input content parts: every attachment source has a first-class
+   shape here. *)
+let responses_attachment_part (attachment : Provider.attachment) =
+  match (attachment.attachment_kind, attachment.attachment_source) with
+  | Provider.Image_attachment, Provider.Attachment_url url ->
+      Chatoyant_runtime.Json.Object
+        [ ("type", string "input_image"); ("image_url", string url) ]
+  | Provider.Image_attachment, Provider.Attachment_base64 { media_type; data }
+    ->
+      Chatoyant_runtime.Json.Object
+        [
+          ("type", string "input_image");
+          ("image_url", string (attachment_data_uri ~media_type ~data));
+        ]
+  | Provider.Image_attachment, Provider.Attachment_file_id file_id ->
+      Chatoyant_runtime.Json.Object
+        [ ("type", string "input_image"); ("file_id", string file_id) ]
+  | Provider.File_attachment, Provider.Attachment_file_id file_id ->
+      Chatoyant_runtime.Json.Object
+        [ ("type", string "input_file"); ("file_id", string file_id) ]
+  | Provider.File_attachment, Provider.Attachment_url url ->
+      Chatoyant_runtime.Json.Object
+        [ ("type", string "input_file"); ("file_url", string url) ]
+  | Provider.File_attachment, Provider.Attachment_base64 { media_type; data } ->
+      [ ("file_data", string (attachment_data_uri ~media_type ~data)) ]
+      |> add_opt "filename" string attachment.attachment_filename
+      |> List.rev
+      |> fun fields ->
+      Chatoyant_runtime.Json.Object (("type", string "input_file") :: fields)
+
+let responses_content_parts content attachments =
+  let text_parts =
+    match content with
+    | Some "" | None -> []
+    | Some text ->
+        [
+          Chatoyant_runtime.Json.Object
+            [ ("type", string "input_text"); ("text", string text) ];
+        ]
+  in
+  Chatoyant_runtime.Json.Array
+    (text_parts @ List.map responses_attachment_part attachments)
+
 let chat_message_json message =
   let tool_call_json (call : Provider.tool_call) =
     Chatoyant_runtime.Json.Object
@@ -716,8 +826,15 @@ let chat_message_json message =
             ] );
       ]
   in
+  let add_content fields =
+    match message.message_attachments with
+    | [] -> add_opt "content" string message.message_content fields
+    | attachments ->
+        ("content", chat_content_parts_json message.message_content attachments)
+        :: fields
+  in
   [ ("role", string (role_to_string message.message_role)) ]
-  |> add_opt "content" string message.message_content
+  |> add_content
   |> add_opt "name" string message.message_name
   |> add_opt "tool_call_id" string message.message_tool_call_id
   |> add_non_empty "tool_calls" tool_call_json message.message_tool_calls
@@ -2900,6 +3017,7 @@ let openai_message_of_provider_message (message : Provider.message) =
     message_name = message.name;
     message_tool_call_id = message.tool_call_id;
     message_tool_calls = message.tool_calls;
+    message_attachments = message.attachments;
   }
 
 let responses_tool_of_provider_tool (tool : Provider.tool_definition) =
@@ -2953,12 +3071,15 @@ let responses_input_items_of_provider_message (message : Provider.message) =
         | Assistant -> "assistant"
         | Tool -> "tool"
       in
-      [
-        message_item role
-          (match message.content with
-          | Some text -> string text
-          | None -> Chatoyant_runtime.Json.Null);
-      ]
+      let content =
+        match message.attachments with
+        | [] -> (
+            match message.content with
+            | Some text -> string text
+            | None -> Chatoyant_runtime.Json.Null)
+        | attachments -> responses_content_parts message.content attachments
+      in
+      [ message_item role content ]
 
 let provider_extra_fields (options : Provider.options) =
   let fields =

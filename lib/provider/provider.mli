@@ -19,6 +19,25 @@ type tool_call = {
     provider-original argument text when JSON parsing is impossible; [arguments]
     is [Null] in that case. *)
 
+type attachment_source =
+  | Attachment_url of string
+  | Attachment_base64 of { media_type : string; data : string }
+  | Attachment_file_id of string
+      (** Provider file id from the provider's Files API — the efficient way to
+          reference the same payload across turns: history re-sends only the id,
+          never the bytes. *)
+
+type attachment_kind = Image_attachment | File_attachment
+
+type attachment = {
+  attachment_kind : attachment_kind;
+  attachment_source : attachment_source;
+  attachment_filename : string option;
+}
+(** Provider-neutral media attached to a message. Adapters render these into
+    each provider's wire blocks (OpenAI chat content parts, Responses input
+    items, Anthropic image/document blocks). *)
+
 type message = {
   role : role;
   content : string option;
@@ -26,6 +45,7 @@ type message = {
   tool_call_id : string option;
   tool_calls : tool_call list;
   tool_result_error : bool option;
+  attachments : attachment list;
 }
 
 type tool_definition = {

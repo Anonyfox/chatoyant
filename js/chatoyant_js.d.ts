@@ -232,6 +232,34 @@ export interface ToolCall {
 }
 
 /** JSON representation accepted by `Message.fromJSON()` and emitted by `Message.toJSON()`. */
+/**
+ * Provider-neutral image/file attachment on a message. Exactly one of `url`,
+ * `data` (base64, with `mediaType`), or `fileId` identifies the payload.
+ * File ids come from the provider Files APIs (`uploadFile`) and keep
+ * follow-up turns cheap: history re-sends only the id, never the bytes.
+ */
+export interface Attachment {
+  kind: "image" | "file";
+  url?: string;
+  data?: string;
+  mediaType?: string;
+  fileId?: string;
+  filename?: string;
+}
+
+/** Attachment input accepted by `user()`/`Message`: a normalized Attachment,
+ * an https/data: URL string, a file id string, or `{ data, mediaType }`. */
+export type AttachmentInput = Attachment | string | {
+  url?: string;
+  data?: string | Uint8Array;
+  mediaType?: string;
+  media_type?: string;
+  fileId?: string;
+  file_id?: string;
+  filename?: string;
+  kind?: "image" | "file";
+};
+
 export interface MessageJSON {
   role: Role;
   content: string;
@@ -241,6 +269,16 @@ export interface MessageJSON {
   toolCalls?: ToolCall[];
   tool_calls?: ToolCall[];
   metadata?: unknown;
+  attachments?: Attachment[];
+}
+
+/** Structured second argument for `Chat.user()`: attachments plus metadata.
+ * A plain object without these keys is treated as metadata (legacy shape). */
+export interface UserMessageOptions {
+  metadata?: unknown;
+  attachments?: AttachmentInput[];
+  images?: AttachmentInput[];
+  files?: AttachmentInput[];
 }
 
 /**
@@ -252,13 +290,14 @@ export interface MessageJSON {
  * ```
  */
 export class Message {
-  constructor(role: Role, content: string, options?: Partial<MessageJSON>);
+  constructor(role: Role, content: string, options?: Partial<MessageJSON> & UserMessageOptions);
   role: Role;
   content: string;
   name?: string;
   toolCallId?: string;
   toolCalls?: ToolCall[];
   metadata?: unknown;
+  attachments?: Attachment[];
   toJSON(): MessageJSON;
   static fromJSON(json: MessageJSON): Message;
   static system(content: string, metadata?: unknown): Message;
@@ -470,7 +509,7 @@ export class Chat {
   readonly tools: Tool[];
   readonly lastResult: GenerationResult | null;
   system(content: string, metadata?: unknown): this;
-  user(content: string, metadata?: unknown): this;
+  user(content: string, options?: UserMessageOptions | unknown): this;
   assistant(content: string, metadata?: unknown): this;
   addMessage(message: Message | MessageJSON): this;
   addMessages(messages: Array<Message | MessageJSON>): this;
@@ -606,8 +645,17 @@ export class ProviderError extends Error {
   constructor(message: string, providerId?: ProviderId, envKey?: string);
   readonly providerId?: ProviderId;
   readonly envKey?: string;
+  /** HTTP status of the failed request, when the error came from a provider response. */
+  readonly status?: number;
+  /** Provider error envelope fields (OpenAI-style `error.type` / `error.code` / `error.param`). */
+  readonly errorType?: string;
+  readonly errorCode?: string;
+  readonly errorParam?: string;
+  /** Parsed provider error body, when available. */
+  readonly raw?: unknown;
   static missingApiKey(providerId: ProviderId): ProviderError;
   static unknownProvider(model: string): ProviderError;
+  static fromHttp(providerId: ProviderId | undefined, status: number, body: string | unknown): ProviderError;
 }
 
 export const PROVIDERS: Readonly<ProviderRegistry>;
@@ -794,6 +842,15 @@ export interface OpenAINamespace extends ProviderFunctionNamespace {
   Client: typeof OpenAIClient;
   create: typeof createOpenAIClient;
   createClient: typeof createOpenAIClient;
+  /** Typed Responses-API call: messages (with attachments) in, normalized GenerationResult out; failures throw ProviderError. */
+  createResponse(messages: Array<Message | MessageJSON> | unknown[], options?: GenerationOptions & { tools?: unknown[] }): Promise<GenerationResult>;
+  /** Structured output on the Responses API (text.format), schema-validated like generateData. */
+  responseStructured<T = unknown>(messages: Array<Message | MessageJSON> | unknown[], schema: unknown, options?: GenerationOptions): Promise<T>;
+  /** Upload a file to the provider Files API; reference the returned id in attachments for cheap follow-up turns. */
+  uploadFile(file: Blob | { data: string | Uint8Array; filename?: string; mediaType?: string }, options?: GenerationOptions & { purpose?: string }): Promise<unknown>;
+  listFiles(options?: GenerationOptions): Promise<unknown>;
+  getFile(fileId: string, options?: GenerationOptions): Promise<unknown>;
+  deleteFile(fileId: string, options?: GenerationOptions): Promise<unknown>;
   embed(input: string | string[], options?: GenerationOptions): Promise<unknown>;
   embedOne(input: string, options?: GenerationOptions): Promise<number[]>;
   embedMany(inputs: string[], options?: GenerationOptions): Promise<number[][]>;
@@ -814,6 +871,11 @@ export interface AnthropicNamespace {
   Client: typeof AnthropicClient;
   create: typeof createAnthropicClient;
   createClient: typeof createAnthropicClient;
+  /** Upload a file to the provider Files API; reference the returned id in attachments for cheap follow-up turns. */
+  uploadFile(file: Blob | { data: string | Uint8Array; filename?: string; mediaType?: string }, options?: GenerationOptions & { purpose?: string }): Promise<unknown>;
+  listFiles(options?: GenerationOptions): Promise<unknown>;
+  getFile(fileId: string, options?: GenerationOptions): Promise<unknown>;
+  deleteFile(fileId: string, options?: GenerationOptions): Promise<unknown>;
   createMessage(messages: Array<Message | MessageJSON> | unknown[], options?: GenerationOptions): Promise<GenerationResult>;
   messageSimple(messages: Array<Message | MessageJSON> | unknown[], options?: GenerationOptions): Promise<string>;
   messageStructured<T = unknown>(messages: Array<Message | MessageJSON> | unknown[], schema: unknown, options?: GenerationOptions): Promise<T>;
@@ -881,6 +943,15 @@ export interface MetaNamespace extends ProviderFunctionNamespace {
   Client: typeof MetaClient;
   create: typeof createMetaClient;
   createClient: typeof createMetaClient;
+  /** Typed Responses-API call: messages (with attachments) in, normalized GenerationResult out; failures throw ProviderError. */
+  createResponse(messages: Array<Message | MessageJSON> | unknown[], options?: GenerationOptions & { tools?: unknown[] }): Promise<GenerationResult>;
+  /** Structured output on the Responses API (text.format), schema-validated like generateData. */
+  responseStructured<T = unknown>(messages: Array<Message | MessageJSON> | unknown[], schema: unknown, options?: GenerationOptions): Promise<T>;
+  /** Upload a file to the provider Files API; reference the returned id in attachments for cheap follow-up turns. */
+  uploadFile(file: Blob | { data: string | Uint8Array; filename?: string; mediaType?: string }, options?: GenerationOptions & { purpose?: string }): Promise<unknown>;
+  listFiles(options?: GenerationOptions): Promise<unknown>;
+  getFile(fileId: string, options?: GenerationOptions): Promise<unknown>;
+  deleteFile(fileId: string, options?: GenerationOptions): Promise<unknown>;
   chatWithWebSearch(messages: Array<Message | MessageJSON> | unknown[], options?: GenerationOptions): Promise<GenerationResult>;
   BASE_URL: string;
   DEFAULT_TIMEOUT: number;

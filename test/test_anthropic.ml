@@ -682,6 +682,7 @@ let test_provider_adapter () =
           tool_call_id = None;
           tool_calls = [];
           tool_result_error = None;
+          attachments = [];
         };
         {
           role = Chatoyant.Provider.Provider.User;
@@ -690,6 +691,7 @@ let test_provider_adapter () =
           tool_call_id = None;
           tool_calls = [];
           tool_result_error = None;
+          attachments = [];
         };
       ]
       {

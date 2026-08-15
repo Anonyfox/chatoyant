@@ -45,6 +45,52 @@ Provider is detected from the model name unless explicitly set.
 | OpenRouter | `OPENROUTER_API_KEY` | Slash notation such as `openai/gpt-4o` |
 | Local | `LOCAL_BASE_URL` | Explicit `provider: "local"` or local fallback |
 
+## Images, Files, and the Responses API
+
+Messages accept image and file attachments; each provider adapter renders
+them into its native blocks (OpenAI content parts / Responses input items,
+Anthropic image and document blocks, xAI image parts):
+
+```ts
+import { Chat, OpenAI } from "chatoyant";
+
+// URLs, data: URIs, { data, mediaType } base64 objects, or provider file ids
+const chat = new Chat({ model: "gpt-5.6-terra" })
+  .user("What is in this photo, and what does the spec say?", {
+    images: ["https://example.com/photo.jpg"],
+    files: [{ fileId }],
+  });
+await chat.generate();
+```
+
+For multi-turn conversations, upload once and attach by file id — history
+then re-sends only the id, never the bytes:
+
+```ts
+const file = await OpenAI.uploadFile(
+  { data: pdfBase64, filename: "spec.pdf", mediaType: "application/pdf" },
+);
+chat.user("Read the attached spec.", { files: [{ fileId: file.id }] });
+```
+
+`uploadFile` / `listFiles` / `getFile` / `deleteFile` exist on `OpenAI`,
+`Meta`, and `Anthropic` (Anthropic's Files API beta header is added
+automatically, for uploads and whenever a message references a file id).
+Base64 attachments also work everywhere and benefit from automatic prompt
+caching on repeat turns.
+
+The Responses API has a typed surface of its own — normalized results,
+usage, and `ProviderError` failures included:
+
+```ts
+const result = await OpenAI.createResponse(messages, { reasoning: "high" });
+const data = await OpenAI.responseStructured(messages, PersonSchema);
+```
+
+Both also exist on `Meta`. Provider HTTP failures throw `ProviderError`
+carrying `status`, `errorType`, `errorCode`, and `errorParam` from the
+provider's error envelope alongside the original message.
+
 Meta's Model API (Muse Spark) is handled with its wire rules applied
 automatically: reasoning cannot be disabled (`reasoning: "off"` omits the
 field; `minimal`–`xhigh` pass through), `stop` sequences and non-`"auto"`

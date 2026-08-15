@@ -4,6 +4,51 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- **Image and file attachments on messages, across providers and both
+  languages.** Messages carry provider-neutral attachments (`kind:
+  "image" | "file"`, sourced from a URL, base64 data + media type, or a
+  provider file id), and each adapter renders them into its native wire
+  blocks: OpenAI/Meta Chat Completions content parts and Responses input
+  items, Anthropic image/document blocks (typed `Image`/`Document`
+  content-block variants in the OCaml client), and xAI image parts. In
+  JavaScript, `chat.user(text, { images, files, attachments, metadata })`
+  attaches media (a plain second argument keeps its legacy metadata
+  meaning); in OCaml, `Message.user ~attachments` / `Chat.user
+  ~attachments`. Attachments round-trip through session serialization.
+  Combinations a wire cannot express fail with descriptive typed errors
+  instead of provider 400s (image-by-file-id and file-by-URL on chat
+  completions point at the Responses API; xAI is images-only).
+- **Files APIs: upload once, reference forever.** `uploadFile`,
+  `listFiles`, `getFile`, and `deleteFile` on the `OpenAI`, `Meta`, and
+  `Anthropic` namespaces (multipart uploads from a Blob/File or `{ data,
+  filename, mediaType }`; OpenAI/Meta default to the `user_data` purpose).
+  Anthropic's `files-api-2025-04-14` beta header is applied automatically —
+  on file operations and whenever a message references a file id. File-id
+  attachments keep multi-turn conversations cheap: history re-sends only
+  the id, never the bytes.
+- **Typed Responses API surface.** `OpenAI.createResponse` and
+  `Meta.createResponse` accept messages (attachments included) and return
+  the normalized generation result with usage detail (cached and reasoning
+  tokens); `responseStructured` does structured output through the
+  Responses `text.format` with OpenAI-strict projection and schema
+  validation — a returned object is a validated object. Replaces
+  hand-rolled `request("/responses", ...)` calls.
+
+### Fixed
+
+- **Provider HTTP failures throw `ProviderError` everywhere.** Chat,
+  streaming, and raw-request paths previously threw plain `Error`s despite
+  the documented `ProviderError` contract. Failures now carry `status` and
+  the provider envelope's `errorType`/`errorCode`/`errorParam` plus the
+  parsed body in `raw`, with the message text unchanged, so existing
+  `catch` logic keeps working. `ProviderError.unknownProvider` lists the
+  current model signatures (including `muse`) instead of a stale
+  hardcoded set.
+
 ## 0.13.0 — 2026-08-11
 ### Added
 

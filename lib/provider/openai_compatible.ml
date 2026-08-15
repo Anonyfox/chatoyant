@@ -359,6 +359,7 @@ let compatible_message_of_provider_message (message : Provider.message) =
     message_name = message.name;
     message_tool_call_id = message.tool_call_id;
     message_tool_calls = message.tool_calls;
+    message_attachments = message.attachments;
   }
 
 let openai_function_tool_of_provider_tool (tool : Provider.tool_definition) =

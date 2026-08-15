@@ -173,6 +173,7 @@ let chat_fixture () =
             message_name = None;
             message_tool_call_id = None;
             message_tool_calls = [];
+            message_attachments = [];
           };
           {
             message_role = User;
@@ -180,6 +181,7 @@ let chat_fixture () =
             message_name = Some "tester";
             message_tool_call_id = None;
             message_tool_calls = [];
+            message_attachments = [];
           };
         ];
       chat_stream = true;
@@ -884,6 +886,7 @@ let test_client_and_provider () =
            tool_call_id = None;
            tool_calls = [];
            tool_result_error = None;
+           attachments = [];
          };
        ]
        {
@@ -921,6 +924,7 @@ let test_client_and_provider () =
            tool_call_id = None;
            tool_calls = [];
            tool_result_error = None;
+           attachments = [];
          };
        ]
        {

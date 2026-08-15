@@ -847,7 +847,10 @@ module Chat = struct
     val tools : t -> Chatoyant_core.Tool.t list
     val last_result : t -> Chatoyant_core.Result.generation option
     val system : string -> t -> t
-    val user : string -> t -> t
+
+    val user :
+      ?attachments:Chatoyant_core.Message.attachment list -> string -> t -> t
+
     val assistant : string -> t -> t
     val add_message : Chatoyant_core.Message.t -> t -> t
     val add_messages : Chatoyant_core.Message.t list -> t -> t
@@ -889,7 +892,7 @@ module Chat = struct
     tools_ : unit -> Chatoyant_core.Tool.t list;
     last_result_ : unit -> Chatoyant_core.Result.generation option;
     system_ : string -> t;
-    user_ : string -> t;
+    user_ : ?attachments:Chatoyant_core.Message.attachment list -> string -> t;
     assistant_ : string -> t;
     add_message_ : Chatoyant_core.Message.t -> t;
     add_messages_ : Chatoyant_core.Message.t list -> t;
@@ -940,8 +943,8 @@ module Chat = struct
             ignore (Session.system content session);
             chat);
         user_ =
-          (fun content ->
-            ignore (Session.user content session);
+          (fun ?attachments content ->
+            ignore (Session.user ?attachments content session);
             chat);
         assistant_ =
           (fun content ->
@@ -1094,7 +1097,7 @@ module Chat = struct
   let tools chat = chat.tools_ ()
   let last_result chat = chat.last_result_ ()
   let system content chat = chat.system_ content
-  let user content chat = chat.user_ content
+  let user ?attachments content chat = chat.user_ ?attachments content
   let assistant content chat = chat.assistant_ content
   let add_message message chat = chat.add_message_ message
   let add_messages messages chat = chat.add_messages_ messages

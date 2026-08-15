@@ -13,7 +13,7 @@ val tools : t -> Tool.t list
 val add_message : Message.t -> t -> t
 val add_tool : Tool.t -> t -> t
 val system : string -> t -> t
-val user : string -> t -> t
+val user : ?attachments:Message.attachment list -> string -> t -> t
 val assistant : string -> t -> t
 val clear_messages : t -> t
 val clear_tools : t -> t

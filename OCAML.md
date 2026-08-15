@@ -38,6 +38,28 @@ let () = Eio_main.run run
 Provider constructors read the standard provider API key environment variable
 when `~api_key` is omitted.
 
+User messages accept image/file attachments
+(`Chatoyant.Provider.Provider.attachment`), rendered into each provider's
+wire blocks — OpenAI/Meta content parts and Responses input items, Anthropic
+image/document blocks:
+
+```ocaml
+let attachment =
+  {
+    Chatoyant.Provider.Provider.attachment_kind = File_attachment;
+    attachment_source = Attachment_file_id file_id;
+    attachment_filename = Some "spec.pdf";
+  }
+in
+Chatoyant.Chat.user ~attachments:[ attachment ] "Read the attached spec." chat
+```
+
+Upload once through the raw file clients (`Openai.Make_client.upload_file`,
+`Anthropic.Make_client.upload_file`) and attach by file id — follow-up turns
+re-send only the id, never the bytes. Anthropic file-id sources need the
+`files-api-2025-04-14` beta header (`~beta_headers` on the provider
+constructor).
+
 ## Structured Data
 
 Record and variant codecs can be generated directly from normal OCaml types.

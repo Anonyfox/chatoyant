@@ -6,8 +6,10 @@ import {
   Chat,
   CONTEXT_WINDOWS,
   JsonSchema,
+  Message,
   META_MODELS,
   OpenAI,
+  ProviderError,
   Schema,
   XAI,
   calculateImageCost,
@@ -212,6 +214,161 @@ describe("publish package surface", () => {
     assert.equal(open.top_p, 0.9);
     assert.equal(open.frequency_penalty, 0.2);
     assert.equal(open.presence_penalty, 0.1);
+  });
+
+  it("renders message attachments into each provider's wire blocks", async () => {
+    const originalFetch = globalThis.fetch;
+    const seen = [];
+    globalThis.fetch = async (url, init) => {
+      seen.push({ url: String(url), headers: init.headers, body: JSON.parse(init.body) });
+      return new Response(
+        JSON.stringify({
+          model: "m",
+          choices: [{ finish_reason: "stop", message: { role: "assistant", content: "ok" } }],
+          content: [{ type: "text", text: "ok" }],
+          output: [{ type: "message", content: [{ type: "output_text", text: "ok" }] }],
+          usage: { prompt_tokens: 1, completion_tokens: 1, input_tokens: 1, output_tokens: 1 },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    };
+
+    try {
+      // Chat Completions: text part + image_url (https and data URI) + file part.
+      await new Chat({ model: "gpt-5.4-mini", apiKey: "k" })
+        .user("describe", {
+          images: ["https://x.test/cat.png", "data:image/png;base64,AAAA"],
+          files: [{ fileId: "file-1" }, { data: "aGk=", mediaType: "application/pdf", filename: "a.pdf" }],
+        })
+        .generate({ maxTokens: 10 });
+
+      // Anthropic: image/document blocks; file-id sources switch on the
+      // Files-API beta header automatically.
+      await new Chat({ model: "claude-haiku-4-5", apiKey: "k" })
+        .user("read", { images: [{ data: "AAAA", mediaType: "image/png" }], files: [{ fileId: "file-2", filename: "doc.pdf" }] })
+        .generate({ maxTokens: 10 });
+
+      // Responses API: input_text/input_image/input_file parts, including the
+      // shapes chat completions cannot express (image by file id, file by URL).
+      await OpenAI.createResponse(
+        [new Message("user", "look", { images: [{ fileId: "file-3" }], files: ["https://x.test/spec.pdf"] })],
+        { apiKey: "k", maxTokens: 10 },
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    const chatParts = seen[0].body.messages[0].content;
+    assert.deepEqual(chatParts[0], { type: "text", text: "describe" });
+    assert.deepEqual(chatParts[1], { type: "image_url", image_url: { url: "https://x.test/cat.png" } });
+    assert.deepEqual(chatParts[2], { type: "image_url", image_url: { url: "data:image/png;base64,AAAA" } });
+    assert.deepEqual(chatParts[3], { type: "file", file: { file_id: "file-1" } });
+    assert.deepEqual(chatParts[4], { type: "file", file: { file_data: "data:application/pdf;base64,aGk=", filename: "a.pdf" } });
+
+    const anthropicBlocks = seen[1].body.messages[0].content;
+    assert.deepEqual(anthropicBlocks[1], { type: "image", source: { type: "base64", media_type: "image/png", data: "AAAA" } });
+    assert.deepEqual(anthropicBlocks[2], { type: "document", source: { type: "file", file_id: "file-2" }, title: "doc.pdf" });
+    assert.equal(seen[1].headers["anthropic-beta"], "files-api-2025-04-14");
+
+    assert.equal(seen[2].url, "https://api.openai.com/v1/responses");
+    const inputParts = seen[2].body.input[0].content;
+    assert.deepEqual(inputParts[1], { type: "input_image", file_id: "file-3" });
+    assert.deepEqual(inputParts[2], { type: "input_file", file_url: "https://x.test/spec.pdf" });
+
+    // Unsupported combinations fail with clear typed errors instead of 400s.
+    await assert.rejects(
+      () => new Chat({ model: "gpt-5.4-mini", apiKey: "k" }).user("x", { images: [{ fileId: "f" }] }).generate(),
+      (error) => error instanceof ProviderError && /Responses API/.test(error.message),
+    );
+    await assert.rejects(
+      () => new Chat({ model: "grok-4.5", apiKey: "k" }).user("x", { files: [{ fileId: "f" }] }).generate(),
+      (error) => error instanceof ProviderError && /images only/.test(error.message),
+    );
+
+    // Attachments survive the message JSON round-trip (session persistence).
+    const message = new Message("user", "look", { files: [{ fileId: "file-9", filename: "r.pdf" }] });
+    const revived = Message.fromJSON(JSON.parse(JSON.stringify(message.toJSON())));
+    assert.deepEqual(revived.attachments, [{ kind: "file", fileId: "file-9", filename: "r.pdf" }]);
+  });
+
+  it("exposes typed files and responses surfaces with normalized usage and errors", async () => {
+    const originalFetch = globalThis.fetch;
+    const seen = [];
+    globalThis.fetch = async (url, init) => {
+      const isForm = typeof FormData !== "undefined" && init.body instanceof FormData;
+      seen.push({
+        url: String(url),
+        method: init.method,
+        headers: init.headers,
+        form: isForm ? [...init.body.keys()] : undefined,
+        body: !isForm && init.body ? JSON.parse(init.body) : undefined,
+      });
+      return new Response(
+        JSON.stringify({
+          id: "file-abc",
+          output: [{ type: "message", content: [{ type: "output_text", text: '{"a":"x"}' }] }],
+          usage: { input_tokens: 9, output_tokens: 2, input_tokens_details: { cached_tokens: 3 }, output_tokens_details: { reasoning_tokens: 1 } },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    };
+
+    try {
+      const uploaded = await OpenAI.uploadFile({ data: "aGVsbG8=", filename: "a.pdf", mediaType: "application/pdf" }, { apiKey: "k" });
+      assert.equal(uploaded.id, "file-abc");
+      await Anthropic.uploadFile({ data: "aGVsbG8=", filename: "b.pdf", mediaType: "application/pdf" }, { apiKey: "k" });
+      await OpenAI.deleteFile("file-9", { apiKey: "k" });
+
+      const result = await OpenAI.createResponse([{ role: "user", content: "hi" }], { apiKey: "k", reasoning: "low", maxTokens: 20 });
+      assert.equal(result.usage.inputTokens, 9);
+      assert.equal(result.usage.cachedTokens, 3);
+      assert.equal(result.usage.reasoningTokens, 1);
+      assert.equal(result.provider, "openai");
+
+      const data = await OpenAI.responseStructured(
+        [{ role: "user", content: "give a" }],
+        { type: "object", properties: { a: { type: "string" } }, required: ["a"], additionalProperties: false },
+        { apiKey: "k" },
+      );
+      assert.deepEqual(data, { a: "x" });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    assert.equal(seen[0].method, "POST");
+    assert.equal(seen[0].url, "https://api.openai.com/v1/files");
+    assert.deepEqual(seen[0].form, ["purpose", "file"]);
+    assert.equal(seen[1].url, "https://api.anthropic.com/v1/files");
+    assert.equal(seen[1].headers["anthropic-beta"], "files-api-2025-04-14");
+    assert.deepEqual(seen[1].form, ["file"]);
+    assert.equal(seen[2].method, "DELETE");
+    assert.equal(seen[2].url, "https://api.openai.com/v1/files/file-9");
+
+    assert.deepEqual(seen[3].body.reasoning, { effort: "low" });
+    assert.equal(seen[3].body.max_output_tokens, 20);
+    const format = seen[4].body.text.format;
+    assert.equal(format.type, "json_schema");
+    assert.equal(format.strict, true);
+    assert.equal(format.schema.additionalProperties, false);
+
+    // Provider failures normalize into ProviderError with the envelope fields.
+    globalThis.fetch = async () =>
+      new Response(JSON.stringify({ error: { message: "boom", type: "invalid_request_error", param: "tools", code: "bad" } }), { status: 400 });
+    try {
+      await assert.rejects(
+        () => new Chat({ model: "gpt-5.4-mini", apiKey: "k" }).user("x").generate(),
+        (error) =>
+          error instanceof ProviderError &&
+          error.providerId === "openai" &&
+          error.status === 400 &&
+          error.errorType === "invalid_request_error" &&
+          error.errorParam === "tools" &&
+          error.errorCode === "bad" &&
+          error.message === "boom",
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 
   it("shapes Meta Model API (Muse Spark) requests per its wire rules", async () => {

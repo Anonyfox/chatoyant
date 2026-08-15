@@ -3,6 +3,11 @@
 type role = System | User | Assistant | Tool
 type tool_call = { id : string; name : string; arguments_json : string }
 
+type attachment = Chatoyant_provider.Provider.attachment
+(** Provider-neutral image/file attachment; see
+    {!Chatoyant_provider.Provider.attachment}. File-id sources keep follow-up
+    turns cheap: history re-sends only the id, never the bytes. *)
+
 type t = {
   role : role;
   content : string;
@@ -11,6 +16,7 @@ type t = {
   tool_result_error : bool option;
   tool_calls : tool_call list;
   metadata : (string * Chatoyant_runtime.Json.t) list;
+  attachments : attachment list;
 }
 
 val make :
@@ -19,12 +25,13 @@ val make :
   ?tool_result_error:bool ->
   ?tool_calls:tool_call list ->
   ?metadata:(string * Chatoyant_runtime.Json.t) list ->
+  ?attachments:attachment list ->
   role ->
   string ->
   t
 
 val system : string -> t
-val user : string -> t
+val user : ?attachments:attachment list -> string -> t
 val assistant : string -> t
 
 val assistant_with_tool_calls :

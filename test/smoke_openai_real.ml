@@ -167,6 +167,7 @@ let () =
               message_name = None;
               message_tool_call_id = None;
               message_tool_calls = [];
+              message_attachments = [];
             };
           ];
         chat_stream = false;

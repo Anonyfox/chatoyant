@@ -145,7 +145,9 @@ struct
     session
 
   let system content session = add_message (Message.system content) session
-  let user content session = add_message (Message.user content) session
+
+  let user ?attachments content session =
+    add_message (Message.user ?attachments content) session
 
   let assistant content session =
     add_message (Message.assistant content) session

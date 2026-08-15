@@ -283,6 +283,78 @@ let js_chat_roundtrip_state state_json =
   | Error message -> error_response message
   | Ok session -> ok_state (Js_session.to_json session)
 
+let bytes_to_base64 : js_function =
+  [%mel.raw
+    {|
+function bytesToBase64(bytes) {
+  const view = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes.buffer ?? bytes);
+  if (typeof Buffer !== "undefined") return Buffer.from(view).toString("base64");
+  let binary = "";
+  for (const byte of view) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+|}]
+[@@mel.as "bytesToBase64"]
+
+(* Provider-neutral attachment: { kind: "image"|"file", url | data+mediaType |
+   fileId, filename? }. File ids come from the provider Files APIs and keep
+   follow-up turns cheap: history re-sends only the id, never the bytes. *)
+let normalize_attachment : js_function =
+  [%mel.raw
+    {|
+function normalizeAttachment(kind, value) {
+  if (value == null) throw new TypeError(`Invalid ${kind} attachment: value is required`);
+  if (typeof value === "string") {
+    if (value.startsWith("data:")) {
+      const match = /^data:([^;,]+)?(;base64)?,(.*)$/s.exec(value);
+      if (!match || !match[2]) throw new TypeError(`Invalid ${kind} attachment data URI (must be base64)`);
+      return { kind, data: match[3], mediaType: match[1] || "application/octet-stream" };
+    }
+    if (/^https?:\/\//.test(value)) return { kind, url: value };
+    return { kind, fileId: value };
+  }
+  if (typeof value !== "object") throw new TypeError(`Invalid ${kind} attachment: expected string or object`);
+  if (value.kind === "image" || value.kind === "file") kind = value.kind;
+  const out = { kind };
+  if (value.url) out.url = String(value.url);
+  else if (value.fileId ?? value.file_id) out.fileId = String(value.fileId ?? value.file_id);
+  else if (value.data !== undefined) {
+    out.data = typeof value.data === "string" ? value.data : bytesToBase64(value.data);
+    out.mediaType = value.mediaType || value.media_type || "application/octet-stream";
+  } else {
+    throw new TypeError(`Invalid ${kind} attachment: needs url, data, or fileId`);
+  }
+  const filename = value.filename ?? value.name;
+  if (filename) out.filename = String(filename);
+  return out;
+}
+|}]
+[@@mel.as "normalizeAttachment"]
+
+let normalize_attachment_list : js_function =
+  [%mel.raw
+    {|
+function normalizeAttachmentList(options = {}) {
+  const list = [];
+  for (const value of options.attachments || []) {
+    list.push(normalizeAttachment(value?.kind === "file" ? "file" : "image", value));
+  }
+  for (const value of options.images || []) list.push(normalizeAttachment("image", value));
+  for (const value of options.files || []) list.push(normalizeAttachment("file", value));
+  return list;
+}
+|}]
+[@@mel.as "normalizeAttachmentList"]
+
+let attachment_data_uri : js_function =
+  [%mel.raw
+    {|
+function attachmentDataUri(attachment) {
+  return `data:${attachment.mediaType || "application/octet-stream"};base64,${attachment.data}`;
+}
+|}]
+[@@mel.as "attachmentDataUri"]
+
 let message : js_function =
   [%mel.raw
     {|
@@ -300,6 +372,8 @@ class Message {
     this.toolCallId = options.toolCallId ?? options.tool_call_id;
     this.toolCalls = options.toolCalls ?? options.tool_calls;
     this.metadata = options.metadata;
+    const attachments = normalizeAttachmentList(options);
+    if (attachments.length) this.attachments = attachments;
   }
 
   toJSON() {
@@ -308,6 +382,7 @@ class Message {
     if (this.toolCallId !== undefined) json.toolCallId = this.toolCallId;
     if (this.toolCalls !== undefined) json.toolCalls = this.toolCalls;
     if (this.metadata !== undefined) json.metadata = this.metadata;
+    if (this.attachments !== undefined) json.attachments = this.attachments;
     return json;
   }
 
@@ -708,7 +783,32 @@ class ProviderError extends Error {
   }
 
   static unknownProvider(model) {
-    return new ProviderError(`Could not detect provider for model "${model}". Known signatures: gpt, o1, o3, o4, chatgpt, claude, grok`);
+    const signatures = Object.values(PROVIDERS).flatMap((meta) => meta.signatures).join(", ");
+    return new ProviderError(`Could not detect provider for model "${model}". Known signatures: ${signatures}`);
+  }
+
+  // Normalized HTTP failure: keeps the legacy message text and adds the
+  // status plus the provider error envelope's type/code/param fields.
+  static fromHttp(providerId, status, bodyOrJson) {
+    let json;
+    let text;
+    if (typeof bodyOrJson === "string") {
+      text = bodyOrJson;
+      try { json = JSON.parse(bodyOrJson); } catch (_) { json = undefined; }
+    } else {
+      json = bodyOrJson;
+    }
+    const envelope = json?.error && typeof json.error === "object" ? json.error : undefined;
+    const message =
+      envelope?.message || json?.message || (typeof envelope === "string" ? envelope : undefined) ||
+      text || (json !== undefined && json !== null && Object.keys(json).length ? JSON.stringify(json) : `HTTP ${status}`);
+    const error = new ProviderError(message, providerId);
+    error.status = status;
+    if (envelope?.type !== undefined) error.errorType = envelope.type;
+    if (envelope?.code !== undefined) error.errorCode = envelope.code;
+    if (envelope?.param !== undefined) error.errorParam = envelope.param;
+    if (json !== undefined) error.raw = json;
+    return error;
   }
 }
 |}]
@@ -1204,8 +1304,7 @@ async function providerRequestRaw(provider, path, options = {}) {
   };
   const response = await fetch(url, init);
   if (!response.ok) {
-    const text = await response.text();
-    throw new ProviderError(text || `HTTP ${response.status}`, provider);
+    throw ProviderError.fromHttp(provider, response.status, await response.text());
   }
   return response;
 }
@@ -1244,6 +1343,119 @@ async function providerModelExists(provider, modelId, options = {}) {
   } catch (_) {
     return getModelsForProvider(provider).includes(modelId);
   }
+}
+
+function base64ToBytes(data) {
+  if (typeof Buffer !== "undefined") return Buffer.from(data, "base64");
+  const binary = atob(data);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+// Accepts a Blob/File or { data (base64 string | bytes), filename, mediaType }.
+function fileUploadBlob(file) {
+  if (typeof Blob !== "undefined" && file instanceof Blob) {
+    return { blob: file, filename: file.name || "file" };
+  }
+  if (file && typeof file === "object" && file.data !== undefined) {
+    const bytes = typeof file.data === "string" ? base64ToBytes(file.data) : file.data;
+    const blob = new Blob([bytes], { type: file.mediaType || file.media_type || "application/octet-stream" });
+    return { blob, filename: file.filename || file.name || "file" };
+  }
+  throw new TypeError("uploadFile expects a Blob/File or { data, filename, mediaType }");
+}
+
+const ANTHROPIC_FILES_BETA = { "anthropic-beta": "files-api-2025-04-14" };
+
+function providerFilesHeaders(provider, options = {}) {
+  return provider === "anthropic" ? { ...ANTHROPIC_FILES_BETA, ...(options.headers || {}) } : options.headers;
+}
+
+// Upload once, then reference the returned file id in attachments — follow-up
+// turns re-send only the id, never the bytes.
+async function providerUploadFile(provider, file, options = {}) {
+  const { blob, filename } = fileUploadBlob(file);
+  const form = new FormData();
+  if (provider !== "anthropic") form.append("purpose", options.purpose || "user_data");
+  form.append("file", blob, filename);
+  return providerRequest(provider, "/files", {
+    ...options,
+    method: "POST",
+    body: form,
+    headers: providerFilesHeaders(provider, options),
+  });
+}
+
+function providerListFiles(provider, options = {}) {
+  return providerRequest(provider, "/files", { ...options, method: "GET", headers: providerFilesHeaders(provider, options) });
+}
+
+function providerGetFile(provider, fileId, options = {}) {
+  return providerRequest(provider, `/files/${encodeURIComponent(fileId)}`, {
+    ...options,
+    method: "GET",
+    headers: providerFilesHeaders(provider, options),
+  });
+}
+
+function providerDeleteFile(provider, fileId, options = {}) {
+  return providerRequest(provider, `/files/${encodeURIComponent(fileId)}`, {
+    ...options,
+    method: "DELETE",
+    headers: providerFilesHeaders(provider, options),
+  });
+}
+
+// Typed Responses-API call: messages (with attachments) in, normalized
+// result (content, toolCalls, usage, raw) out; failures throw ProviderError.
+async function providerCreateResponse(provider, messages, options = {}) {
+  const model = options.model || (provider === "meta" ? "muse-spark-1.2" : "gpt-4o");
+  const chat = new Chat({ provider, model });
+  chat.addMessages((messages || []).map((message) => message instanceof Message ? message : Message.fromJSON(message)));
+  if (options.tools) chat.addTools(toolLikeList(options.tools));
+  const resolvedModel = chat._resolvedModel({ ...options, model }, provider);
+  const apiKey = chat._apiKey(provider, options);
+  if (!apiKey) throw ProviderError.missingApiKey(provider);
+  const baseUrl = chat._baseUrl(provider, options);
+  const reasoningEffort = chat._providerReasoningEffort(provider, options.reasoning);
+  return chat._callOpenAIResponses(chat._messages, options, {
+    provider,
+    model: resolvedModel,
+    apiKey,
+    baseUrl,
+    reasoningEffort,
+  });
+}
+
+// Structured output on the Responses API (text.format), schema-validated
+// like generateData: a returned object is a validated object.
+async function providerResponseStructured(provider, messages, schema, options = {}) {
+  const baseSchema = schema?.schema ?? schema;
+  const jsonSchema = Schema.toJSON(baseSchema);
+  const strict = schema?.strict ?? true;
+  const wireSchema = strict ? JsonSchema.projectOpenAIStrict(jsonSchema).schema : jsonSchema;
+  const result = await providerCreateResponse(provider, messages, {
+    ...options,
+    extra: {
+      ...(options.extra || {}),
+      text: {
+        format: { type: "json_schema", name: schema?.name || "response", strict, schema: wireSchema },
+      },
+    },
+  });
+  let data;
+  try {
+    data = JSON.parse(result.content);
+  } catch (_) {
+    throw new Error(`responseStructured: expected JSON output, got: ${String(result.content).slice(0, 200)}`);
+  }
+  const detailed = JsonSchema.validate(jsonSchema, data);
+  if (!detailed.valid) {
+    const first = detailed.errors?.[0];
+    throw new Error(`responseStructured: response does not match the schema: ${first?.message || "invalid"}`);
+  }
+  return data;
 }
 
 function openAICompatibleChat(provider, messages, options = {}) {
@@ -1473,6 +1685,8 @@ return {
   getContextWindow, hasContextWindow, truncateContent, splitText, fitMessages, paginateMessages, estimateChunkCount,
   providerBaseUrl, providerApiKey, providerRequestRaw, providerRequest, providerRequestGet,
   providerListModels, providerListModelIds, providerGetModel, providerModelExists,
+  providerUploadFile, providerListFiles, providerGetFile, providerDeleteFile,
+  providerCreateResponse, providerResponseStructured,
   openAICompatibleChat, openAICompatibleChatSimple, openAICompatibleChatStructured,
   openAICompatibleStream, openAICompatibleStreamAccumulate, streamReadableFromAsyncIterable,
   providerEmbed, providerEmbedOne, providerEmbedMany, cosineSimilarity, findSimilar,
@@ -1693,6 +1907,30 @@ let provider_list_models_fn : js_function =
   [%mel.raw {| compatibility_surface.providerListModels |}]
 [@@mel.as "providerListModels"]
 
+let provider_upload_file_fn : js_function =
+  [%mel.raw {| compatibility_surface.providerUploadFile |}]
+[@@mel.as "providerUploadFile"]
+
+let provider_list_files_fn : js_function =
+  [%mel.raw {| compatibility_surface.providerListFiles |}]
+[@@mel.as "providerListFiles"]
+
+let provider_get_file_fn : js_function =
+  [%mel.raw {| compatibility_surface.providerGetFile |}]
+[@@mel.as "providerGetFile"]
+
+let provider_delete_file_fn : js_function =
+  [%mel.raw {| compatibility_surface.providerDeleteFile |}]
+[@@mel.as "providerDeleteFile"]
+
+let provider_create_response_fn : js_function =
+  [%mel.raw {| compatibility_surface.providerCreateResponse |}]
+[@@mel.as "providerCreateResponse"]
+
+let provider_response_structured_fn : js_function =
+  [%mel.raw {| compatibility_surface.providerResponseStructured |}]
+[@@mel.as "providerResponseStructured"]
+
 let provider_list_model_ids_fn : js_function =
   [%mel.raw {| compatibility_surface.providerListModelIds |}]
 [@@mel.as "providerListModelIds"]
@@ -1843,8 +2081,14 @@ class Chat {
     return this;
   }
 
-  user(content, metadata) {
-    this._messages.push(Message.user(String(content ?? ""), metadata));
+  user(content, options) {
+    // Second argument stays plain metadata unless it carries the structured
+    // keys (attachments/images/files/metadata), matching Message options.
+    const structured =
+      options && typeof options === "object" &&
+      ("attachments" in options || "images" in options || "files" in options || "metadata" in options);
+    const messageOptions = structured ? options : { metadata: options };
+    this._messages.push(new Message("user", String(content ?? ""), messageOptions));
     this._syncStateFromMessages();
     return this;
   }
@@ -2203,6 +2447,62 @@ class Chat {
     throw new Error(`Unsupported provider: ${provider}`);
   }
 
+  // Chat Completions content parts for one attachment. Images travel as
+  // image_url (https or data URI); files as file parts. The chat surface has
+  // no image-by-file-id shape — that needs the Responses API.
+  _chatAttachmentPart(provider, attachment) {
+    if (attachment.kind === "image") {
+      if (attachment.fileId) {
+        throw new ProviderError(
+          "Image attachments by fileId are not supported on chat completions; use a url/data image or the Responses API (createResponse)",
+          provider,
+        );
+      }
+      return { type: "image_url", image_url: { url: attachment.url || attachmentDataUri(attachment) } };
+    }
+    if (provider === "xai") {
+      throw new ProviderError("xAI does not support file attachments (images only)", provider);
+    }
+    if (attachment.fileId) return { type: "file", file: { file_id: attachment.fileId } };
+    if (attachment.data !== undefined) {
+      const file = { file_data: attachmentDataUri(attachment) };
+      if (attachment.filename) file.filename = attachment.filename;
+      return { type: "file", file };
+    }
+    throw new ProviderError(
+      "File attachments by URL are not supported on chat completions; upload the file first (uploadFile) or pass base64 data",
+      provider,
+    );
+  }
+
+  _anthropicMediaSource(attachment) {
+    if (attachment.url) return { type: "url", url: attachment.url };
+    if (attachment.fileId) return { type: "file", file_id: attachment.fileId };
+    return {
+      type: "base64",
+      media_type: attachment.mediaType || "application/octet-stream",
+      data: attachment.data,
+    };
+  }
+
+  _anthropicAttachmentBlocks(attachments) {
+    return (attachments || []).map((attachment) =>
+      attachment.kind === "image"
+        ? { type: "image", source: this._anthropicMediaSource(attachment) }
+        : {
+            type: "document",
+            source: this._anthropicMediaSource(attachment),
+            ...(attachment.filename ? { title: attachment.filename } : {}),
+          },
+    );
+  }
+
+  // Anthropic Files-API sources need an opt-in beta header.
+  _anthropicBetaHeaders(messages) {
+    const usesFileIds = messages.some((m) => (m.attachments || []).some((a) => a.fileId));
+    return usesFileIds ? { "anthropic-beta": "files-api-2025-04-14" } : {};
+  }
+
   _wireMessages(provider, messages) {
     if (provider === "anthropic") {
       return messages.filter((m) => m.role !== "system").map((m) => {
@@ -2220,11 +2520,22 @@ class Chat {
           }
           return { role: "assistant", content };
         }
+        if (m.attachments?.length) {
+          const content = m.content ? [{ type: "text", text: m.content }] : [];
+          return {
+            role: m.role === "assistant" ? "assistant" : "user",
+            content: content.concat(this._anthropicAttachmentBlocks(m.attachments)),
+          };
+        }
         return { role: m.role === "assistant" ? "assistant" : "user", content: m.content };
       });
     }
     return messages.map((m) => {
       const out = { role: m.role, content: m.content };
+      if (m.attachments?.length) {
+        const parts = m.content ? [{ type: "text", text: m.content }] : [];
+        out.content = parts.concat(m.attachments.map((a) => this._chatAttachmentPart(provider, a)));
+      }
       if (m.name) out.name = m.name;
       if (m.toolCallId) out.tool_call_id = m.toolCallId;
       if (m.toolCalls?.length) {
@@ -2271,7 +2582,7 @@ class Chat {
     });
   }
 
-  async _fetchJson(url, init, timeoutMs) {
+  async _fetchJson(url, init, timeoutMs, provider) {
     const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
     let timer;
     if (controller && timeoutMs) {
@@ -2283,8 +2594,7 @@ class Chat {
       let json;
       try { json = text ? JSON.parse(text) : {}; } catch (_) { json = { raw: text }; }
       if (!response.ok) {
-        const message = json?.error?.message || json?.message || text || `HTTP ${response.status}`;
-        throw new Error(message);
+        throw ProviderError.fromHttp(provider, response.status, json?.raw !== undefined ? text : json);
       }
       return json;
     } finally {
@@ -2395,6 +2705,28 @@ class Chat {
         }
         continue;
       }
+      if (m.attachments?.length) {
+        const parts = m.content ? [{ type: "input_text", text: m.content }] : [];
+        for (const attachment of m.attachments) {
+          if (attachment.kind === "image") {
+            parts.push(
+              attachment.fileId
+                ? { type: "input_image", file_id: attachment.fileId }
+                : { type: "input_image", image_url: attachment.url || attachmentDataUri(attachment) },
+            );
+          } else if (attachment.fileId) {
+            parts.push({ type: "input_file", file_id: attachment.fileId });
+          } else if (attachment.url) {
+            parts.push({ type: "input_file", file_url: attachment.url });
+          } else {
+            const part = { type: "input_file", file_data: attachmentDataUri(attachment) };
+            if (attachment.filename) part.filename = attachment.filename;
+            parts.push(part);
+          }
+        }
+        items.push({ role: m.role, content: parts });
+        continue;
+      }
       items.push({ role: m.role, content: m.content });
     }
     return items;
@@ -2445,7 +2777,7 @@ class Chat {
       method: "POST",
       headers,
       body: JSON.stringify(body),
-    }, this._timeoutFor(provider, options));
+    }, this._timeoutFor(provider, options), provider);
     const output = json.output || [];
     const content = output
       .filter((item) => item.type === "message")
@@ -2543,7 +2875,7 @@ class Chat {
       method: "POST",
       headers,
       body: JSON.stringify(body),
-    }, this._timeoutFor(provider, options));
+    }, this._timeoutFor(provider, options), provider);
     const choice = json.choices?.[0] || {};
     const message = choice.message || {};
     const usage = this._usageFromOpenAI(json.usage || {}, provider);
@@ -2604,8 +2936,7 @@ class Chat {
       body: JSON.stringify(body),
     });
     if (!response.ok) {
-      const text = await response.text();
-      throw new Error(text || `HTTP ${response.status}`);
+      throw ProviderError.fromHttp(provider, response.status, await response.text());
     }
     yield* this._parseSse(response, (json) => {
       const choice = json.choices?.[0];
@@ -2641,9 +2972,10 @@ class Chat {
         "Content-Type": "application/json",
         "x-api-key": apiKey,
         "anthropic-version": options.anthropicVersion || "2023-06-01",
+        ...this._anthropicBetaHeaders(messages),
       },
       body: JSON.stringify(body),
-    }, this._timeoutFor("anthropic", options));
+    }, this._timeoutFor("anthropic", options), "anthropic");
     const blocks = json.content || [];
     const text = blocks.filter((block) => block.type === "text").map((block) => block.text || "").join("");
     const toolCalls = blocks.filter((block) => block.type === "tool_use").map((block) => ({
@@ -2696,12 +3028,12 @@ class Chat {
         "Content-Type": "application/json",
         "x-api-key": apiKey,
         "anthropic-version": options.anthropicVersion || "2023-06-01",
+        ...this._anthropicBetaHeaders(messages),
       },
       body: JSON.stringify(body),
     });
     if (!response.ok) {
-      const text = await response.text();
-      throw new Error(text || `HTTP ${response.status}`);
+      throw ProviderError.fromHttp("anthropic", response.status, await response.text());
     }
     yield* this._parseSse(response, (json) => {
       if (json.type === "content_block_delta" && json.delta?.type === "text_delta") return json.delta.text || "";
@@ -2892,6 +3224,29 @@ async function genData(prompt, schema, options = {}) {
 |}]
 [@@mel.as "genData"]
 
+(* Tools can arrive as Tool instances, executable definitions, or plain
+   definitions (optionally in wire format, { type: "function", function }).
+   Definition-only tools cannot be executed locally — they still reach the
+   wire so the caller can run the returned tool calls. *)
+let tool_like_list : js_function =
+  [%mel.raw
+    {|
+function toolLikeList(tools) {
+  return (tools || []).map((tool) => {
+    if (tool instanceof Tool) return tool;
+    if (typeof tool?.execute === "function") return createTool(tool);
+    const fn = tool?.function ?? tool ?? {};
+    return {
+      name: fn.name || tool?.name || "tool",
+      description: fn.description ?? tool?.description ?? "",
+      getParametersSchema: () =>
+        fn.parameters ?? tool?.parameters ?? { type: "object", properties: {}, required: [], additionalProperties: false },
+    };
+  });
+}
+|}]
+[@@mel.as "toolLikeList"]
+
 let make_provider_client_class : js_function =
   [%mel.raw
     {|
@@ -2964,17 +3319,7 @@ function makeProviderClientClass(provider) {
     // Definition-only tools cannot be executed locally — they still need to
     // reach the wire so the caller can run the returned tool calls.
     _toolLikeList(tools) {
-      return (tools || []).map((tool) => {
-        if (tool instanceof Tool) return tool;
-        if (typeof tool?.execute === "function") return createTool(tool);
-        const fn = tool?.function ?? tool ?? {};
-        return {
-          name: fn.name || tool?.name || "tool",
-          description: fn.description ?? tool?.description ?? "",
-          getParametersSchema: () =>
-            fn.parameters ?? tool?.parameters ?? { type: "object", properties: {}, required: [], additionalProperties: false },
-        };
-      });
+      return toolLikeList(tools);
     }
 
     async chat(messages, options = {}) {
@@ -3331,6 +3676,12 @@ Object.freeze({
   requestRaw: (path, options = {}) => providerRequestRaw("openai", path, options),
   request: (path, options = {}) => providerRequest("openai", path, options),
   requestGet: (path, options = {}) => providerRequestGet("openai", path, options),
+  createResponse: (messages, options = {}) => providerCreateResponse("openai", messages, options),
+  responseStructured: (messages, schema, options = {}) => providerResponseStructured("openai", messages, schema, options),
+  uploadFile: (file, options = {}) => providerUploadFile("openai", file, options),
+  listFiles: (options = {}) => providerListFiles("openai", options),
+  getFile: (fileId, options = {}) => providerGetFile("openai", fileId, options),
+  deleteFile: (fileId, options = {}) => providerDeleteFile("openai", fileId, options),
   makeOpenAIStrict,
   needsOpenAIStrictTransform,
   BASE_URL: "https://api.openai.com/v1",
@@ -3358,6 +3709,10 @@ Object.freeze({
   messageStreamReadable: (messages, options = {}) => streamReadableFromAsyncIterable(openAICompatibleStream("anthropic", messages, options)),
   extractText: (response) => Array.isArray(response?.content) ? response.content.filter((block) => block.type === "text").map((block) => block.text || "").join("") : "",
   extractToolUses: (response) => Array.isArray(response?.content) ? response.content.filter((block) => block.type === "tool_use") : [],
+  uploadFile: (file, options = {}) => providerUploadFile("anthropic", file, options),
+  listFiles: (options = {}) => providerListFiles("anthropic", options),
+  getFile: (fileId, options = {}) => providerGetFile("anthropic", fileId, options),
+  deleteFile: (fileId, options = {}) => providerDeleteFile("anthropic", fileId, options),
   listModels: (options = {}) => providerListModels("anthropic", options),
   listAllModels: (options = {}) => providerListModels("anthropic", options),
   listModelIds: (options = {}) => providerListModelIds("anthropic", options),
@@ -3463,6 +3818,12 @@ Object.freeze({
   requestRaw: (path, options = {}) => providerRequestRaw("meta", path, options),
   request: (path, options = {}) => providerRequest("meta", path, options),
   requestGet: (path, options = {}) => providerRequestGet("meta", path, options),
+  createResponse: (messages, options = {}) => providerCreateResponse("meta", messages, options),
+  responseStructured: (messages, schema, options = {}) => providerResponseStructured("meta", messages, schema, options),
+  uploadFile: (file, options = {}) => providerUploadFile("meta", file, options),
+  listFiles: (options = {}) => providerListFiles("meta", options),
+  getFile: (fileId, options = {}) => providerGetFile("meta", fileId, options),
+  deleteFile: (fileId, options = {}) => providerDeleteFile("meta", fileId, options),
   BASE_URL: "https://api.meta.ai/v1",
   // Literal on purpose: the module-level DEFAULT_TIMEOUT const is emitted after
   // this block runs, so referencing it here freezes `undefined` into the namespace.
@@ -4048,6 +4409,7 @@ let openai_chat_request_json () =
             message_name = None;
             message_tool_call_id = None;
             message_tool_calls = [];
+            message_attachments = [];
           };
           {
             message_role = User;
@@ -4055,6 +4417,7 @@ let openai_chat_request_json () =
             message_name = None;
             message_tool_call_id = None;
             message_tool_calls = [];
+            message_attachments = [];
           };
         ];
       chat_stream = false;
@@ -4146,6 +4509,7 @@ let openai_smoke_chat_request_json prompt =
             message_name = None;
             message_tool_call_id = None;
             message_tool_calls = [];
+            message_attachments = [];
           };
         ];
       chat_stream = false;
@@ -4233,6 +4597,7 @@ let compatible_request_fixture model =
             message_name = None;
             message_tool_call_id = None;
             message_tool_calls = [];
+            message_attachments = [];
           };
         ];
       chat_stream = true;
@@ -4290,6 +4655,7 @@ let openrouter_smoke_request_json prompt =
             message_name = None;
             message_tool_call_id = None;
             message_tool_calls = [];
+            message_attachments = [];
           };
         ];
       chat_stream = false;
@@ -4357,6 +4723,7 @@ let xai_request_json () =
             message_name = None;
             message_tool_call_id = None;
             message_tool_calls = [];
+            message_attachments = [];
           };
         ];
       chat_stream = false;
@@ -4398,6 +4765,7 @@ let xai_smoke_request_json prompt =
             message_name = None;
             message_tool_call_id = None;
             message_tool_calls = [];
+            message_attachments = [];
           };
         ];
       chat_stream = false;

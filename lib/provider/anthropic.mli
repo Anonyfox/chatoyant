@@ -46,7 +46,19 @@ type content_block =
       file_id : string option;
       raw : Chatoyant_runtime.Json.t;
     }
+  | Image of { source : media_source }
+      (** Image input block
+          ({{:https://docs.claude.com/en/docs/build-with-claude/vision} vision}).
+      *)
+  | Document of { source : media_source; title : string option }
+      (** Document input block (PDFs and other files). *)
   | Raw_block of Chatoyant_runtime.Json.t
+
+and media_source =
+  | Media_url of string
+  | Media_base64 of { media_type : string; data : string }
+  | Media_file of string
+      (** Files-API id — requires the [files-api-2025-04-14] beta header. *)
 
 type message = { message_role : role; message_content : content_block list }
 
@@ -247,6 +259,14 @@ val cache_ttl_to_string : cache_ttl -> string
 val cache_control_json : cache_control -> Chatoyant_runtime.Json.t
 val ephemeral_cache_control : ?ttl:cache_ttl -> unit -> cache_control
 val content_block_json : content_block -> Chatoyant_runtime.Json.t
+
+val message_json : message -> Chatoyant_runtime.Json.t
+(** Wire JSON for one message (role plus serialized content blocks). *)
+
+val anthropic_message_of_provider_message : Provider.message -> message
+(** Convert a provider-neutral message, rendering attachments into
+    image/document blocks. *)
+
 val tool_json : tool -> Chatoyant_runtime.Json.t
 
 val web_search_tool_json :

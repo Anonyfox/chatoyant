@@ -405,7 +405,9 @@ module Chat : sig
   val tools : t -> Chatoyant_core.Tool.t list
   val last_result : t -> Chatoyant_core.Result.generation option
   val system : string -> t -> t
-  val user : string -> t -> t
+  val user :
+    ?attachments:Chatoyant_core.Message.attachment list -> string -> t -> t
+  (** Append a user message, optionally with image/file attachments. *)
   val assistant : string -> t -> t
   val add_message : Chatoyant_core.Message.t -> t -> t
   val add_messages : Chatoyant_core.Message.t list -> t -> t

@@ -435,6 +435,7 @@ let () =
       | {
        Chatoyant.Core.Message.role = Tool;
        tool_result_error = Some false;
+       attachments = [];
        content;
        _;
       } ->
@@ -540,6 +541,98 @@ let () =
        (Chatoyant.Core.Preset.resolve_model_preset
           ~provider:Chatoyant.Provider.Provider.Meta Chatoyant.Core.Preset.Best));
 
+  (* Attachments render into each provider's wire blocks: Chat Completions
+     content parts, Responses input parts, and Anthropic image/document
+     blocks. File-id sources stay id-only, keeping follow-up turns cheap. *)
+  (let attachment kind source filename =
+     {
+       Chatoyant.Provider.Provider.attachment_kind = kind;
+       attachment_source = source;
+       attachment_filename = filename;
+     }
+   in
+   let message attachments =
+     {
+       Chatoyant.Provider.Provider.role = Chatoyant.Provider.Provider.User;
+       content = Some "look";
+       name = None;
+       tool_call_id = None;
+       tool_calls = [];
+       tool_result_error = None;
+       attachments;
+     }
+   in
+   let image_url =
+     attachment Chatoyant.Provider.Provider.Image_attachment
+       (Chatoyant.Provider.Provider.Attachment_url "https://x.test/cat.png")
+       None
+   in
+   let file_id =
+     attachment Chatoyant.Provider.Provider.File_attachment
+       (Chatoyant.Provider.Provider.Attachment_file_id "file-1")
+       (Some "doc.pdf")
+   in
+   let file_b64 =
+     attachment Chatoyant.Provider.Provider.File_attachment
+       (Chatoyant.Provider.Provider.Attachment_base64
+          { media_type = "application/pdf"; data = "aGk=" })
+       (Some "a.pdf")
+   in
+   let chat_wire =
+     Chatoyant.Provider.Openai.chat_content_parts_json (Some "look")
+       [ image_url; file_id; file_b64 ]
+     |> Chatoyant.Runtime.Json.to_string
+   in
+   assert_contains "{\"type\":\"text\",\"text\":\"look\"}" chat_wire;
+   assert_contains
+     "{\"type\":\"image_url\",\"image_url\":{\"url\":\"https://x.test/cat.png\"}}"
+     chat_wire;
+   assert_contains "{\"type\":\"file\",\"file\":{\"file_id\":\"file-1\"}}"
+     chat_wire;
+   assert_contains "data:application/pdf;base64,aGk=" chat_wire;
+   let responses_wire =
+     Chatoyant.Provider.Openai.responses_content_parts (Some "look")
+       [ image_url; file_id ]
+     |> Chatoyant.Runtime.Json.to_string
+   in
+   assert_contains "\"type\":\"input_text\"" responses_wire;
+   assert_contains
+     "{\"type\":\"input_image\",\"image_url\":\"https://x.test/cat.png\"}"
+     responses_wire;
+   assert_contains "{\"type\":\"input_file\",\"file_id\":\"file-1\"}"
+     responses_wire;
+   let anthropic_wire =
+     Chatoyant.Provider.Anthropic.anthropic_message_of_provider_message
+       (message [ image_url; file_id ])
+     |> Chatoyant.Provider.Anthropic.message_json
+     |> Chatoyant.Runtime.Json.to_string
+   in
+   assert_contains
+     "{\"type\":\"image\",\"source\":{\"type\":\"url\",\"url\":\"https://x.test/cat.png\"}}"
+     anthropic_wire;
+   assert_contains
+     "{\"type\":\"document\",\"source\":{\"type\":\"file\",\"file_id\":\"file-1\"},\"title\":\"doc.pdf\"}"
+     anthropic_wire;
+   let core_message =
+     Chatoyant.Core.Message.user ~attachments:[ file_id ] "read this"
+   in
+   match
+     Chatoyant.Core.Message.of_json
+       (Chatoyant.Core.Message.to_json core_message)
+   with
+   | Error message -> failwith message
+   | Ok revived -> (
+       match revived.Chatoyant.Core.Message.attachments with
+       | [
+        {
+          Chatoyant.Provider.Provider.attachment_kind = File_attachment;
+          attachment_source = Attachment_file_id "file-1";
+          attachment_filename = Some "doc.pdf";
+        };
+       ] ->
+           ()
+       | _ -> failwith "attachment did not round-trip through message JSON"));
+
   (* Meta Model API wire rules: stop dropped, reasoning "none"/"off" omitted
      (Muse Spark cannot disable reasoning), non-"auto" tool_choice omitted,
      sampling passes, web_search becomes the built-in responses tool. *)
@@ -607,6 +700,7 @@ let () =
               message_name = None;
               message_tool_call_id = None;
               message_tool_calls = [];
+              message_attachments = [];
             };
           ];
         chat_stream = false;
@@ -1148,6 +1242,7 @@ let () =
            tool_call_id = None;
            tool_calls = [];
            tool_result_error = None;
+           attachments = [];
          };
        ]
        {
@@ -1185,6 +1280,7 @@ let () =
              tool_call_id = None;
              tool_calls = [];
              tool_result_error = None;
+             attachments = [];
            };
          ]
          {
@@ -1249,6 +1345,7 @@ let () =
               message_name = None;
               message_tool_call_id = None;
               message_tool_calls = [];
+              message_attachments = [];
             };
           ];
         chat_stream = false;

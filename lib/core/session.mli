@@ -15,7 +15,7 @@ module Make
   val tools : t -> Tool.t list
   val last_result : t -> Result.generation option
   val system : string -> t -> t
-  val user : string -> t -> t
+  val user : ?attachments:Message.attachment list -> string -> t -> t
   val assistant : string -> t -> t
   val add_message : Message.t -> t -> t
   val add_messages : Message.t list -> t -> t

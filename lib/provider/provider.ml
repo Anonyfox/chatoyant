@@ -16,6 +16,19 @@ type tool_call = {
   raw : Chatoyant_runtime.Json.t option;
 }
 
+type attachment_source =
+  | Attachment_url of string
+  | Attachment_base64 of { media_type : string; data : string }
+  | Attachment_file_id of string
+
+type attachment_kind = Image_attachment | File_attachment
+
+type attachment = {
+  attachment_kind : attachment_kind;
+  attachment_source : attachment_source;
+  attachment_filename : string option;
+}
+
 type message = {
   role : role;
   content : string option;
@@ -23,6 +36,7 @@ type message = {
   tool_call_id : string option;
   tool_calls : tool_call list;
   tool_result_error : bool option;
+  attachments : attachment list;
 }
 
 type options = {

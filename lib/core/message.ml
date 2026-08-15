@@ -1,5 +1,6 @@
 type role = System | User | Assistant | Tool
 type tool_call = { id : string; name : string; arguments_json : string }
+type attachment = Chatoyant_provider.Provider.attachment
 
 type t = {
   role : role;
@@ -9,14 +10,24 @@ type t = {
   tool_result_error : bool option;
   tool_calls : tool_call list;
   metadata : (string * Chatoyant_runtime.Json.t) list;
+  attachments : attachment list;
 }
 
 let make ?name ?tool_call_id ?tool_result_error ?(tool_calls = [])
-    ?(metadata = []) role content =
-  { role; content; name; tool_call_id; tool_result_error; tool_calls; metadata }
+    ?(metadata = []) ?(attachments = []) role content =
+  {
+    role;
+    content;
+    name;
+    tool_call_id;
+    tool_result_error;
+    tool_calls;
+    metadata;
+    attachments;
+  }
 
 let system content = make System content
-let user content = make User content
+let user ?attachments content = make ?attachments User content
 let assistant content = make Assistant content
 
 let assistant_with_tool_calls ?(content = "") calls =
@@ -77,6 +88,7 @@ let to_provider_message message =
     tool_call_id = message.tool_call_id;
     tool_calls;
     tool_result_error = message.tool_result_error;
+    attachments = message.attachments;
   }
 
 let string value = Chatoyant_runtime.Json.String value
@@ -94,6 +106,24 @@ let tool_call_to_json call =
 
 let metadata_to_json metadata = Chatoyant_runtime.Json.Object metadata
 
+let attachment_to_json (attachment : attachment) =
+  let kind =
+    match attachment.attachment_kind with
+    | Chatoyant_provider.Provider.Image_attachment -> "image"
+    | Chatoyant_provider.Provider.File_attachment -> "file"
+  in
+  let source_fields =
+    match attachment.attachment_source with
+    | Chatoyant_provider.Provider.Attachment_url url -> [ ("url", string url) ]
+    | Chatoyant_provider.Provider.Attachment_base64 { media_type; data } ->
+        [ ("mediaType", string media_type); ("data", string data) ]
+    | Chatoyant_provider.Provider.Attachment_file_id file_id ->
+        [ ("fileId", string file_id) ]
+  in
+  ("kind", string kind) :: source_fields
+  |> add_opt "filename" (Option.map string attachment.attachment_filename)
+  |> fun fields -> Chatoyant_runtime.Json.Object fields
+
 let to_json message =
   [
     ("role", string (role_to_string message.role));
@@ -103,6 +133,14 @@ let to_json message =
         (List.map tool_call_to_json message.tool_calls) );
     ("metadata", metadata_to_json message.metadata);
   ]
+  |> (fun fields ->
+  match message.attachments with
+  | [] -> fields
+  | attachments ->
+      ( "attachments",
+        Chatoyant_runtime.Json.Array (List.map attachment_to_json attachments)
+      )
+      :: fields)
   |> add_opt "name" (Option.map string message.name)
   |> add_opt "tool_call_id" (Option.map string message.tool_call_id)
   |> add_opt "tool_result_error"
@@ -130,6 +168,42 @@ let metadata_of_json json =
   match field "metadata" json with
   | Some (Chatoyant_runtime.Json.Object fields) -> fields
   | _ -> []
+
+let attachment_of_json json =
+  let kind =
+    match string_field "kind" json with
+    | Some "file" -> Chatoyant_provider.Provider.File_attachment
+    | _ -> Chatoyant_provider.Provider.Image_attachment
+  in
+  let source =
+    match
+      ( string_field "url" json,
+        string_field "data" json,
+        string_field "fileId" json )
+    with
+    | Some url, _, _ -> Some (Chatoyant_provider.Provider.Attachment_url url)
+    | None, Some data, _ ->
+        Some
+          (Chatoyant_provider.Provider.Attachment_base64
+             {
+               media_type =
+                 Option.value
+                   (string_field "mediaType" json)
+                   ~default:"application/octet-stream";
+               data;
+             })
+    | None, None, Some file_id ->
+        Some (Chatoyant_provider.Provider.Attachment_file_id file_id)
+    | None, None, None -> None
+  in
+  Option.map
+    (fun attachment_source ->
+      {
+        Chatoyant_provider.Provider.attachment_kind = kind;
+        attachment_source;
+        attachment_filename = string_field "filename" json;
+      })
+    source
 
 let of_json json =
   match Option.bind (string_field "role" json) role_of_string with
@@ -164,4 +238,9 @@ let of_json json =
                   Chatoyant_runtime.Json.as_bool;
               tool_calls;
               metadata = metadata_of_json json;
+              attachments =
+                (match field "attachments" json with
+                | Some (Chatoyant_runtime.Json.Array values) ->
+                    List.filter_map attachment_of_json values
+                | _ -> []);
             })

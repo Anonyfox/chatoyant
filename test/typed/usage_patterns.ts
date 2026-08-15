@@ -28,11 +28,17 @@ import {
   genText,
   getModelsForProvider,
   mergeOptions,
+  type Attachment,
+  type AttachmentInput,
   type GenerateResult,
   type GenerateWithToolsOptions,
+  type GenerationResult,
   type InferSchemaInput,
   type ProviderId,
+  type UserMessageOptions,
   type VideoPollingOptions,
+  Anthropic,
+  Meta,
 } from "chatoyant";
 
 function assertType<T>(_value: T): void {}
@@ -195,6 +201,35 @@ assertType<typeof Providers.OpenRouter.create>(Chatoyant.OpenRouter.create);
 assertType<typeof Tokens>(Chatoyant.Tokens);
 assertType<typeof detectProviderByModel>(Chatoyant.detectProviderByModel);
 assertType<{ x: number } & { y: number }>(Chatoyant.mergeOptions({ x: 1 }, { y: 2 }));
+
+// Attachments and the typed Responses/files surfaces.
+const attachment: Attachment = { kind: "file", fileId: "file-1", filename: "spec.pdf" };
+const attachmentInputs: AttachmentInput[] = [
+  attachment,
+  "https://example.com/photo.jpg",
+  { data: "aGk=", mediaType: "application/pdf", filename: "a.pdf" },
+];
+const userOptions: UserMessageOptions = { images: attachmentInputs, files: [{ fileId: "f" }], metadata: { source: "docs" } };
+assertType<Chat>(new Chat({ model: "gpt-5.6-terra" }).user("look", userOptions));
+assertType<Chat>(new Chat({ model: "gpt-5.6-terra" }).user("legacy metadata", { anything: true }));
+assertType<Attachment[] | undefined>(new Message("user", "hi", { files: [{ fileId: "f" }] }).attachments);
+assertType<Promise<GenerationResult>>(
+  OpenAI.createResponse([{ role: "user", content: "hi" }], { apiKey: "test", reasoning: "high" }),
+);
+assertType<Promise<{ name: string }>>(
+  OpenAI.responseStructured<{ name: string }>([{ role: "user", content: "hi" }], { type: "object" }, { apiKey: "test" }),
+);
+assertType<Promise<GenerationResult>>(Meta.createResponse([{ role: "user", content: "hi" }], { apiKey: "test" }));
+assertType<Promise<unknown>>(OpenAI.uploadFile({ data: "aGk=", filename: "a.pdf", mediaType: "application/pdf" }, { apiKey: "test", purpose: "user_data" }));
+assertType<Promise<unknown>>(Anthropic.uploadFile({ data: new Uint8Array([1]), filename: "b.pdf" }, { apiKey: "test" }));
+assertType<Promise<unknown>>(Meta.listFiles({ apiKey: "test" }));
+assertType<Promise<unknown>>(OpenAI.deleteFile("file-1", { apiKey: "test" }));
+const providerError = new ProviderError("boom", "openai");
+assertType<number | undefined>(providerError.status);
+assertType<string | undefined>(providerError.errorType);
+assertType<string | undefined>(providerError.errorCode);
+assertType<string | undefined>(providerError.errorParam);
+assertType<ProviderError>(ProviderError.fromHttp("openai", 400, '{"error":{}}'));
 
 type CjsPackage = typeof import("../../dist/index.cjs");
 declare const cjsPackage: CjsPackage;

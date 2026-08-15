@@ -41,7 +41,14 @@ type content_block =
       file_id : string option;
       raw : Chatoyant_runtime.Json.t;
     }
+  | Image of { source : media_source }
+  | Document of { source : media_source; title : string option }
   | Raw_block of Chatoyant_runtime.Json.t
+
+and media_source =
+  | Media_url of string
+  | Media_base64 of { media_type : string; data : string }
+  | Media_file of string
 
 type message = { message_role : role; message_content : content_block list }
 
@@ -340,7 +347,33 @@ let rec content_block_json = function
   | Code_execution_tool_result { raw; _ }
   | Container_upload { raw; _ } ->
       raw
+  | Image { source } ->
+      Chatoyant_runtime.Json.Object
+        [ ("type", string "image"); ("source", media_source_json source) ]
+  | Document { source; title } ->
+      Chatoyant_runtime.Json.Object
+        (("type", string "document")
+        :: ("source", media_source_json source)
+        ::
+        (match title with
+        | None -> []
+        | Some title -> [ ("title", string title) ]))
   | Raw_block json -> json
+
+and media_source_json = function
+  | Media_url url ->
+      Chatoyant_runtime.Json.Object
+        [ ("type", string "url"); ("url", string url) ]
+  | Media_base64 { media_type; data } ->
+      Chatoyant_runtime.Json.Object
+        [
+          ("type", string "base64");
+          ("media_type", string media_type);
+          ("data", string data);
+        ]
+  | Media_file file_id ->
+      Chatoyant_runtime.Json.Object
+        [ ("type", string "file"); ("file_id", string file_id) ]
 
 let message_json message =
   Chatoyant_runtime.Json.Object
@@ -1285,7 +1318,34 @@ let anthropic_message_of_provider_message (message : Provider.message) =
               };
           ];
       }
-  | User | System -> { message_role = User; message_content = [ Text content ] }
+  | User | System ->
+      let media_source_of_attachment (attachment : Provider.attachment) =
+        match attachment.attachment_source with
+        | Provider.Attachment_url url -> Media_url url
+        | Provider.Attachment_base64 { media_type; data } ->
+            Media_base64 { media_type; data }
+        | Provider.Attachment_file_id file_id -> Media_file file_id
+      in
+      let attachment_blocks =
+        List.map
+          (fun (attachment : Provider.attachment) ->
+            match attachment.attachment_kind with
+            | Provider.Image_attachment ->
+                Image { source = media_source_of_attachment attachment }
+            | Provider.File_attachment ->
+                Document
+                  {
+                    source = media_source_of_attachment attachment;
+                    title = attachment.attachment_filename;
+                  })
+          message.attachments
+      in
+      let message_content =
+        match attachment_blocks with
+        | [] -> [ Text content ]
+        | blocks -> (if content = "" then [] else [ Text content ]) @ blocks
+      in
+      { message_role = User; message_content }
 
 let anthropic_tool_of_provider_tool (tool : Provider.tool_definition) =
   {

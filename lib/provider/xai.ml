@@ -6,6 +6,7 @@ type message = {
   message_name : string option;
   message_tool_call_id : string option;
   message_tool_calls : Provider.tool_call list;
+  message_attachments : Provider.attachment list;
 }
 
 type tool =
@@ -550,8 +551,16 @@ let message_json message =
             ] );
       ]
   in
+  let add_content fields =
+    match message.message_attachments with
+    | [] -> add_opt "content" string message.message_content fields
+    | attachments ->
+        ( "content",
+          Openai.chat_content_parts_json message.message_content attachments )
+        :: fields
+  in
   [ ("role", string (role_to_string message.message_role)) ]
-  |> add_opt "content" string message.message_content
+  |> add_content
   |> add_opt "name" string message.message_name
   |> add_opt "tool_call_id" string message.message_tool_call_id
   |> add_non_empty "tool_calls" tool_call_json message.message_tool_calls
@@ -2260,6 +2269,7 @@ let xai_message_of_provider_message (message : Provider.message) =
     message_name = message.name;
     message_tool_call_id = message.tool_call_id;
     message_tool_calls = message.tool_calls;
+    message_attachments = message.attachments;
   }
 
 let openai_function_tool_of_provider_tool (tool : Provider.tool_definition) =
