@@ -28,7 +28,7 @@ jobs:
         ocaml: ["5.3.x", "5.4.x"]
         node: ["20", "22"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up OCaml ${{ matrix.ocaml }}
         uses: ocaml/setup-ocaml@v3
