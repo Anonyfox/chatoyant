@@ -34,6 +34,25 @@ _chatoyant_ /shuh-TOY-uhnt/ - having a changeable lustre.
   checks, package metadata checks, and the official JSON Schema suite against
   the bundled npm package.
 
+## Package Size Next To Other JS LLM Libraries
+
+Chatoyant ships every provider client, the JSON Schema validator and the
+token/cost tables in one npm package with no runtime dependencies. Numbers
+below come from `npm view <pkg> version dist.unpackedSize dependencies` on
+2026-10-24. Unpacked size is the published tarball only; transitive
+dependencies and separate provider packages are not counted.
+
+| Package | Version | Unpacked size | Direct runtime deps |
+| --- | --- | ---: | ---: |
+| `chatoyant` | 0.15.0 | 0.6 MB | 0 |
+| `ai` (Vercel AI SDK) | 7.0.152 | 8.4 MB | 3 |
+| `langchain` | 1.5.19 | 3.3 MB | 4 |
+| `@langchain/core` | 1.3.0 | 7.6 MB | 7 |
+| `openai` | 7.43.0 | 22.9 MB | 0 |
+| `@anthropic-ai/sdk` | 1.3.0 | 15.7 MB | 3 |
+
+The bundled ESM entry (`dist/index.js`) of 0.15.0 is 56.7 KB with `gzip -9`.
+
 ## Provider Routing
 
 | Provider | Env var | Detection |
