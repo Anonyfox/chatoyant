@@ -4,6 +4,16 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Docs
+
+- Docs site: every page now has `lang`, a canonical URL, a description and
+  Open Graph tags; the build also writes `robots.txt`, `sitemap.xml` and
+  `llms.txt`. Logo served as a 7.5 KB WebP instead of the 565 KB PNG, solid
+  title colours instead of the animated gradient, reduced-motion support,
+  `font-display: swap`, unique ids and labelled permalinks on API pages.
+
 ## 0.15.0 — 2026-10-24
 
 Model data checked against the OpenAI, Anthropic, xAI and Meta pricing and

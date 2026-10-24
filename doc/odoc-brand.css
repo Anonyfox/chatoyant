@@ -1,19 +1,28 @@
-/* Chatoyant brand overlay for odoc — iridescent sky-blue/purple, after the
- * "chatoyancy" (changeable lustre) the project is named for. Appended to odoc's
- * generated stylesheet by scripts/brand-docs.mjs after `dune build @doc`. */
+/* Chatoyant brand overlay for odoc. Appended to odoc's generated stylesheet by
+ * scripts/brand-docs.mjs after `dune build @doc`.
+ *
+ * Colours come from cat's-eye chrysoberyl, the stone "chatoyancy" describes:
+ * a deep green-teal body (links, rules) and the honey band of light across it
+ * (hover and small accents). Backgrounds stay odoc's white / near-black. */
 
-:root,
-.light:root {
-  --odoc-blue: #0284c7; /* sky blue — brand primary */
-  --chatoyant-accent: #a855f7; /* purple — deep shimmer */
+:root {
+  --odoc-blue: #0f6b70; /* chrysoberyl teal: links, spec rule */
+  --chatoyant-accent: #96650f; /* honey band: hover, accents */
+  --chatoyant-muted: #5b6770;
+  --chatoyant-line: #dfe3e6;
+  --header-shadow: var(--chatoyant-line); /* odoc's h1 rule is tan by default */
 }
 
-.dark:root {
-  --odoc-blue: #38bdf8;
-  --chatoyant-accent: #c084fc;
+@media (prefers-color-scheme: dark) {
+  :root {
+    --odoc-blue: #5cc2c6;
+    --chatoyant-accent: #e0b354;
+    --chatoyant-muted: #9aa5ad;
+    --chatoyant-line: #3a3f43;
+    --header-shadow: var(--chatoyant-line);
+  }
 }
 
-/* Re-tint the links odoc draws (belt-and-suspenders alongside --odoc-blue). */
 .odoc-content a,
 nav.odoc-nav a,
 .odoc-tocs a,
@@ -21,45 +30,25 @@ nav.odoc-nav a,
   color: var(--odoc-blue);
 }
 
-/* Shimmering gradient page title. */
+/* Page titles: solid colour, no animation. */
 .odoc-preamble h1 {
-  background-image: linear-gradient(110deg, #0ea5e9 0%, #a855f7 45%, #0ea5e9 90%);
-  background-size: 220% auto;
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  color: transparent;
-  animation: chatoyant-shimmer 5s linear infinite;
+  color: var(--color);
 }
 
-.odoc-preamble h1 code {
-  background: none;
-  -webkit-text-fill-color: transparent;
-  color: transparent;
-}
-
-@keyframes chatoyant-shimmer {
-  to {
-    background-position: 220% center;
-  }
-}
-
-/* Accent the declaration/signature blocks. */
 .spec {
   border-left: 3px solid var(--odoc-blue);
 }
 
-/* Branded footer backlink, injected on every page. */
+/* Footer backlink, injected on every page. */
 .chatoyant-footer {
-  grid-column: 1 / -1; /* span odoc's sidebar + content columns, full width */
+  grid-column: 1 / -1; /* span odoc's sidebar + content columns */
   justify-self: stretch;
   margin-top: 4rem;
-  padding: 1.75rem 1rem 1rem;
-  border-top: 1px solid var(--bg2, #e2e8f0);
-  text-align: center;
+  padding: 1.5rem 1rem 1rem;
+  border-top: 1px solid var(--chatoyant-line);
   font-size: 0.875rem;
   line-height: 1.7;
-  color: var(--fg3, #64748b);
+  color: var(--chatoyant-muted);
 }
 
 .chatoyant-footer a {
@@ -68,83 +57,76 @@ nav.odoc-nav a,
   text-decoration: none;
 }
 
-.chatoyant-footer a:hover {
+.chatoyant-footer a:hover,
+.chatoyant-footer .heart {
   color: var(--chatoyant-accent);
 }
 
-.chatoyant-footer .heart {
-  color: #ef4444;
+/* Landing block on the root index.html: left-aligned, logo beside the name. */
+.chatoyant-hero {
+  max-width: 64ch;
+  margin: 1.5rem 0 2.5rem;
 }
 
-/* Branded landing hero (root index.html). */
-.chatoyant-hero {
-  max-width: 62ch;
-  margin: 1.5rem auto 2.5rem;
-  text-align: center;
+.chatoyant-hero-head {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
 }
 
 .chatoyant-hero-logo {
-  display: block;
-  width: 150px;
-  height: 150px;
-  margin: 0 auto 1.25rem;
-  border-radius: 24%;
-  box-shadow: 0 6px 28px rgba(14, 165, 233, 0.25);
+  width: 72px;
+  height: 72px;
+  border-radius: 16px;
 }
 
 .chatoyant-hero-title {
-  margin: 0 0 0.75rem;
-  font-size: 2.5rem;
-  background-image: linear-gradient(110deg, #0ea5e9 0%, #a855f7 45%, #0ea5e9 90%);
-  background-size: 220% auto;
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  color: transparent;
-  animation: chatoyant-shimmer 5s linear infinite;
+  margin: 0;
+  font-size: 2.4rem;
+  letter-spacing: -0.01em;
+  color: var(--color);
+  border-bottom: 3px solid var(--chatoyant-accent);
 }
 
 .chatoyant-hero-tagline {
-  margin: 0 auto 1.5rem;
+  margin: 0 0 1.25rem;
   font-size: 1.05rem;
   line-height: 1.65;
-  color: var(--fg2, #504945);
 }
 
 .chatoyant-hero-links {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.6rem;
-  justify-content: center;
+  gap: 0.5rem 1.25rem;
 }
 
 .chatoyant-hero-links a {
-  display: inline-block;
-  padding: 0.45rem 1.1rem;
-  border: 1px solid var(--odoc-blue);
-  border-radius: 999px;
   color: var(--odoc-blue);
-  font-size: 0.9rem;
   font-weight: 600;
   text-decoration: none;
-  text-transform: none; /* keep "npm"/"opam" brand casing */
-  transition: background 0.15s, color 0.15s;
+  border-bottom: 1px solid currentColor;
 }
 
 .chatoyant-hero-links a:hover {
-  background: var(--odoc-blue);
-  color: #fff;
-}
-
-/* The default odoc package list, restyled as a subtle version line. */
-.by-name {
-  text-align: center;
+  color: var(--chatoyant-accent);
 }
 
 .by-name ol {
-  margin: 1.75rem 0 0;
+  margin: 1.5rem 0 0;
   padding: 0;
-  font-size: 0.85rem;
-  color: var(--fg3, #665c54);
+  font-size: 0.875rem;
+  color: var(--chatoyant-muted);
   list-style: none;
+}
+
+/* odoc animates scrolling and the search spinner; honour the OS setting. */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .search-snake:before {
+    animation: none;
+  }
 }
