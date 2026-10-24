@@ -6,8 +6,11 @@
 name: CI
 
 on:
+  # Run on every push, including main: release commits land directly on main,
+  # and skipping CI there let a formatting break (ocamlformat warning 50 in
+  # v0.14.0) go unnoticed until every later Dependabot PR failed on it.
   push:
-    branches-ignore: [main]
+    branches: ["**"]
   pull_request:
     branches: ["**"]
 
