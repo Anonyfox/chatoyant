@@ -732,11 +732,13 @@ describe("publish package surface", () => {
       assert.equal(String(url), "https://api.anthropic.com/v1/messages");
       assert.equal(init.headers["x-api-key"], "anthropic-key");
       const body = JSON.parse(init.body);
-      assert.equal(body.model, "claude-haiku-4-5");
-      assert.equal(body.temperature, 0);
-      assert.equal(body.top_p, 0.9);
+      // fast -> claude-haiku-5-5, which always thinks and rejects sampling.
+      assert.equal(body.model, "claude-haiku-5-5");
+      assert.equal(body.temperature, undefined);
+      assert.equal(body.top_p, undefined);
       assert.deepEqual(body.stop_sequences, ["END"]);
-      assert.deepEqual(body.thinking, { type: "enabled", budget_tokens: 2048 });
+      assert.deepEqual(body.thinking, { type: "adaptive", display: "summarized" });
+      assert.deepEqual(body.output_config, { effort: "low" });
       return new Response(
         JSON.stringify({
           id: "msg_doc",
