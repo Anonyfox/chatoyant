@@ -86,7 +86,7 @@ let starts_with ~prefix value =
 let supports_openai_reasoning model =
   List.exists
     (fun prefix -> starts_with ~prefix model)
-    [ "gpt-6"; "chat-latest"; "gpt-5"; "o1"; "o3"; "o4" ]
+    [ "gpt-6"; "gpt-5"; "o1"; "o3"; "o4" ]
 
 let adjust_xai_model_for_reasoning ~prefer_reasoning model =
   match (model, prefer_reasoning) with

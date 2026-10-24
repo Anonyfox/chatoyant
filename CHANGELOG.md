@@ -6,24 +6,65 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+Model data refreshed against the official OpenAI, Anthropic, xAI, and Meta
+pricing and model pages on 2026-10-24.
+
 ### Changed
 
-- Refresh OpenAI, Anthropic, xAI, and Meta presets and token/media prices
-  using the verified 2026-10-24 figures; preserve retired model IDs.
-- Shape GPT-6 sampling, reasoning effort, token limits, and tool requests;
-  route Astra/6.1 Sol tool calls through Responses. Treat Claude 5.5
-  Opus/Sonnet/Haiku thinking as always on.
-- Refresh conservative pricing family fallbacks and document unmodelled
-  long-context pricing tiers.
+- **Model presets now resolve to the providers' current recommended models**
+  (behavior change for anyone using `fast`/`cheap`/`balanced`/`best`/`reasoning`):
+  - OpenAI: `fast` gpt-5.6-luna -> gpt-6-luna, `cheap` gpt-5.4-mini ->
+    gpt-6-luna, `balanced` gpt-5.6-terra -> gpt-6.1-sol, `best` gpt-5.6-sol ->
+    gpt-6-astra, `reasoning` gpt-5.5-pro -> gpt-6-astra.
+  - Anthropic: `fast`/`cheap` claude-haiku-4-5 -> claude-haiku-5-5,
+    `balanced` claude-sonnet-5 -> claude-sonnet-5-5, `best`/`reasoning`
+    claude-fable-5 -> claude-fable-5-1.
+  - xAI: `best`/`reasoning` grok-4.5 -> grok-4.7 (`balanced` grok-4.3 and
+    `fast`/`cheap` grok-4-1-fast-non-reasoning unchanged).
+  - Meta: all presets muse-spark-1.2 -> muse-spark-1.3.
+- Prices: gpt-5.6-sol $5/$30/$0.50 -> $4/$20/$0.40 (OpenAI promotional
+  price, at least through 2026-11-21); gpt-5.6-terra $2.50/$15/$0.25 ->
+  $2/$12/$0.20; gpt-5.6-luna $1/$6/$0.10 -> $0.20/$1.20/$0.02;
+  gpt-4-turbo and gpt-4-turbo-2024-04-09 $5/$15 -> $10/$30; claude-sonnet-5
+  $3/$15 (cache read $0.30, writes $3.75/$6) -> $2/$10 (cache read $0.20,
+  writes $2.50/$4), the former introductory price is now standard; grok-4.5
+  cached input $0.50 -> $0.30.
+- Pricing fallbacks for unknown ids follow the current families
+  (claude-*-opus/sonnet/haiku/fable -> the 5.5/5.1 models, `gpt-6*` ->
+  gpt-6.1-sol, unknown `grok-*` -> grok-4.7, `muse-*` -> muse-spark-1.3 /
+  muse-wonder-1.0). Only `gpt-4o*` ids fall back to gpt-4o now (previously
+  any `gpt-*` id containing an "o").
+- Request shaping for the new generations: GPT-6 models drop sampling
+  parameters; GPT-6 Astra and GPT-6.1 Sol map reasoning `none`/`minimal` to
+  `low` (they reject `none`), and in JavaScript their tool calls go through
+  `/v1/responses`; GPT-6 Sol/Luna tool calls follow the gpt-5.6 handling;
+  GPT-6 and chat-latest use `max_completion_tokens`. Claude Opus/Sonnet/Haiku
+  5.5 never receive a disabled thinking config; Claude Opus 5 uses the
+  adaptive-only surface. The OCaml OpenAI provider also drops
+  frequency/presence penalties on sampling-locked models.
+- The JavaScript price and context-window tables now cover every model in
+  the OCaml tables.
 
 ### Added
 
-- GPT-6 Astra, 6.1 Sol, Sol, Luna, Cyber 5.6/5.5, Codex 5.3,
-  chat-latest, and GPT-5 Search API pricing and model recognition.
-- Claude Fable/Mythos 5.1, Opus 5.5/5, Sonnet/Haiku 5.5,
-  Grok 4.7/4.6/Build and Imagine 2.0/quality/1.5/lite,
-  Muse Spark 1.3/contributor and Wonder 1.0, with context windows
-  where specified and regression coverage in OCaml and JavaScript.
+- Pricing, context windows, and detection for gpt-6-astra, gpt-6.1-sol,
+  gpt-6-sol, gpt-6-luna, gpt-5.6-cyber, gpt-5.5-cyber, gpt-5.3-codex,
+  chat-latest, gpt-5-search-api, claude-fable-5-1, claude-mythos-5-1,
+  claude-opus-5-5, claude-opus-5, claude-sonnet-5-5, claude-haiku-5-5,
+  grok-4.7, grok-4.6, grok-build-0.1, grok-imagine-image-2.0,
+  grok-imagine-image-quality, grok-imagine-video-1.5,
+  grok-imagine-video-1.5-lite, muse-spark-1.3, muse-spark-1.3-contributor,
+  and muse-wonder-1.0. `chat-latest` is detected as OpenAI.
+- Long-context price tiers (OpenAI >272K input, xAI >=200K prompt, Claude
+  Haiku 5.5 >100K prompt) are documented but not modelled; estimates use the
+  standard tier.
+
+### Deprecated
+
+- Retired on the providers' first-party APIs, still resolvable for pricing
+  and detection: claude-opus-4-1, claude-opus-4, claude-sonnet-4,
+  claude-3-5-haiku and other claude-3 ids; xAI no longer lists
+  grok-4-1-fast-*, grok-code-fast-1, grok-3*, and grok-4-0709.
 
 ## 0.14.0 — 2026-08-15
 ### Added
