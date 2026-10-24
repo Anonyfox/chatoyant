@@ -27,7 +27,7 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.OPAM_PUBLISH_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -37,7 +37,7 @@ jobs:
           ocaml-compiler: "5.3.x"
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "22"
 

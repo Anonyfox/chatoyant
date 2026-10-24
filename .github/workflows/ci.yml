@@ -6,8 +6,11 @@
 name: CI
 
 on:
+  # Run on every push, including main: release commits land directly on main,
+  # and skipping CI there let a formatting break (ocamlformat warning 50 in
+  # v0.14.0) go unnoticed until every later Dependabot PR failed on it.
   push:
-    branches-ignore: [main]
+    branches: ["**"]
   pull_request:
     branches: ["**"]
 
@@ -28,7 +31,7 @@ jobs:
         ocaml: ["5.3.x", "5.4.x"]
         node: ["20", "22"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up OCaml ${{ matrix.ocaml }}
         uses: ocaml/setup-ocaml@v3
@@ -37,7 +40,7 @@ jobs:
           dune-cache: true
 
       - name: Set up Node ${{ matrix.node }}
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node }}
           cache: npm
