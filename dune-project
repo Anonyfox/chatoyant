@@ -2,7 +2,7 @@
 (using melange 1.0)
 
 (name chatoyant)
-(version 0.14.0)
+(version 0.15.0)
 (generate_opam_files true)
 (authors "Anonyfox <max@anonyfox.com>")
 (maintainers "Anonyfox <max@anonyfox.com>")
