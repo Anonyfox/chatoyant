@@ -6,65 +6,70 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
-Model data refreshed against the official OpenAI, Anthropic, xAI, and Meta
-pricing and model pages on 2026-10-24.
+Model data checked against the OpenAI, Anthropic, xAI and Meta pricing and
+model pages on 2026-10-24.
 
 ### Changed
 
-- **Model presets now resolve to the providers' current recommended models**
-  (behavior change for anyone using `fast`/`cheap`/`balanced`/`best`/`reasoning`):
+- Presets now point at each provider's current models. If you use
+  `fast`, `cheap`, `balanced`, `best` or `reasoning`, your requests will go to
+  a different model after upgrading:
   - OpenAI: `fast` gpt-5.6-luna -> gpt-6-luna, `cheap` gpt-5.4-mini ->
     gpt-6-luna, `balanced` gpt-5.6-terra -> gpt-6.1-sol, `best` gpt-5.6-sol ->
     gpt-6-astra, `reasoning` gpt-5.5-pro -> gpt-6-astra.
-  - Anthropic: `fast`/`cheap` claude-haiku-4-5 -> claude-haiku-5-5,
-    `balanced` claude-sonnet-5 -> claude-sonnet-5-5, `best`/`reasoning`
+  - Anthropic: `fast` and `cheap` claude-haiku-4-5 -> claude-haiku-5-5,
+    `balanced` claude-sonnet-5 -> claude-sonnet-5-5, `best` and `reasoning`
     claude-fable-5 -> claude-fable-5-1.
-  - xAI: `best`/`reasoning` grok-4.5 -> grok-4.7 (`balanced` grok-4.3 and
-    `fast`/`cheap` grok-4-1-fast-non-reasoning unchanged).
+  - xAI: `fast` and `cheap` grok-4-1-fast-non-reasoning ->
+    grok-4.20-0309-non-reasoning (xAI no longer lists the 4.1 Fast models),
+    `best` and `reasoning` grok-4.5 -> grok-4.7. `balanced` stays on grok-4.3.
   - Meta: all presets muse-spark-1.2 -> muse-spark-1.3.
-- Prices: gpt-5.6-sol $5/$30/$0.50 -> $4/$20/$0.40 (OpenAI promotional
-  price, at least through 2026-11-21); gpt-5.6-terra $2.50/$15/$0.25 ->
-  $2/$12/$0.20; gpt-5.6-luna $1/$6/$0.10 -> $0.20/$1.20/$0.02;
-  gpt-4-turbo and gpt-4-turbo-2024-04-09 $5/$15 -> $10/$30; claude-sonnet-5
-  $3/$15 (cache read $0.30, writes $3.75/$6) -> $2/$10 (cache read $0.20,
-  writes $2.50/$4), the former introductory price is now standard; grok-4.5
-  cached input $0.50 -> $0.30.
-- Pricing fallbacks for unknown ids follow the current families
-  (claude-*-opus/sonnet/haiku/fable -> the 5.5/5.1 models, `gpt-6*` ->
-  gpt-6.1-sol, unknown `grok-*` -> grok-4.7, `muse-*` -> muse-spark-1.3 /
-  muse-wonder-1.0). Only `gpt-4o*` ids fall back to gpt-4o now (previously
-  any `gpt-*` id containing an "o").
-- Request shaping for the new generations: GPT-6 models drop sampling
-  parameters; GPT-6 Astra and GPT-6.1 Sol map reasoning `none`/`minimal` to
-  `low` (they reject `none`), and in JavaScript their tool calls go through
-  `/v1/responses`; GPT-6 Sol/Luna tool calls follow the gpt-5.6 handling;
-  GPT-6 and chat-latest use `max_completion_tokens`. Claude Opus/Sonnet/Haiku
-  5.5 never receive a disabled thinking config; Claude Opus 5 uses the
-  adaptive-only surface. The OCaml OpenAI provider also drops
-  frequency/presence penalties on sampling-locked models.
-- The JavaScript price and context-window tables now cover every model in
-  the OCaml tables.
+- Price updates (input / output / cached input, USD per 1M tokens):
+  - gpt-5.6-sol 5 / 30 / 0.50 -> 4 / 20 / 0.40. This is OpenAI's promotional
+    price, which runs until at least 2026-11-21.
+  - gpt-5.6-terra 2.50 / 15 / 0.25 -> 2 / 12 / 0.20
+  - gpt-5.6-luna 1 / 6 / 0.10 -> 0.20 / 1.20 / 0.02
+  - gpt-4-turbo and gpt-4-turbo-2024-04-09 5 / 15 -> 10 / 30
+  - claude-sonnet-5 3 / 15 / 0.30 -> 2 / 10 / 0.20, cache writes
+    3.75 / 6 -> 2.50 / 4. The old introductory price is now the regular one.
+  - grok-4.5 cached input 0.50 -> 0.30
+- Unknown model ids are priced like the current model of their family:
+  Claude Opus/Sonnet/Haiku/Fable fall back to the 5.5 and 5.1 models, `gpt-6*`
+  to gpt-6.1-sol, other `grok-*` ids to grok-4.7, `muse-*` to muse-spark-1.3
+  or muse-wonder-1.0. Before, any `gpt-*` id with an "o" in it was priced as
+  gpt-4o; now only `gpt-4o*` ids are.
+- GPT-6 requests no longer send temperature or top_p. GPT-6 Astra and
+  GPT-6.1 Sol don't accept reasoning `none`, so `off` and `minimal` are sent as
+  `low` for those two. In the JavaScript package, tool calls to Astra and
+  6.1 Sol use the Responses API, which those models require for tools.
+- Claude Opus/Sonnet/Haiku 5.5 and Fable/Mythos 5.1 never get a
+  `thinking: disabled` config, since they always think. Claude Opus 5 is
+  handled like Opus 4.7/4.8.
+- The OCaml OpenAI provider also drops frequency and presence penalties for
+  models that don't accept sampling parameters.
+- The JavaScript price and context-window tables now include every model the
+  OCaml tables have.
 
 ### Added
 
-- Pricing, context windows, and detection for gpt-6-astra, gpt-6.1-sol,
-  gpt-6-sol, gpt-6-luna, gpt-5.6-cyber, gpt-5.5-cyber, gpt-5.3-codex,
-  chat-latest, gpt-5-search-api, claude-fable-5-1, claude-mythos-5-1,
-  claude-opus-5-5, claude-opus-5, claude-sonnet-5-5, claude-haiku-5-5,
-  grok-4.7, grok-4.6, grok-build-0.1, grok-imagine-image-2.0,
-  grok-imagine-image-quality, grok-imagine-video-1.5,
-  grok-imagine-video-1.5-lite, muse-spark-1.3, muse-spark-1.3-contributor,
-  and muse-wonder-1.0. `chat-latest` is detected as OpenAI.
-- Long-context price tiers (OpenAI >272K input, xAI >=200K prompt, Claude
-  Haiku 5.5 >100K prompt) are documented but not modelled; estimates use the
-  standard tier.
+- Pricing, context windows and provider detection for gpt-6-astra,
+  gpt-6.1-sol, gpt-6-sol, gpt-6-luna, gpt-5.6-cyber, gpt-5.5-cyber,
+  gpt-5.3-codex, chat-latest, gpt-5-search-api, claude-fable-5-1,
+  claude-mythos-5-1, claude-opus-5-5, claude-opus-5, claude-sonnet-5-5,
+  claude-haiku-5-5, grok-4.7, grok-4.6, grok-build-0.1,
+  grok-imagine-image-2.0, grok-imagine-image-quality, grok-imagine-video-1.5,
+  grok-imagine-video-1.5-lite, muse-spark-1.3, muse-spark-1.3-contributor
+  and muse-wonder-1.0.
 
-### Deprecated
+### Notes
 
-- Retired on the providers' first-party APIs, still resolvable for pricing
-  and detection: claude-opus-4-1, claude-opus-4, claude-sonnet-4,
-  claude-3-5-haiku and other claude-3 ids; xAI no longer lists
-  grok-4-1-fast-*, grok-code-fast-1, grok-3*, and grok-4-0709.
+- Cost estimates use the standard price. The higher long-context rates
+  (OpenAI above 272K input tokens, xAI at 200K+ prompt tokens, Claude
+  Haiku 5.5 above 100K) are not applied.
+- These ids are retired on the providers' own APIs but still resolve for
+  pricing and detection: claude-opus-4-1, claude-opus-4, claude-sonnet-4,
+  claude-3-5-haiku and the other claude-3 models; grok-4-1-fast-*,
+  grok-code-fast-1, grok-3* and grok-4-0709.
 
 ## 0.14.0 — 2026-08-15
 ### Added

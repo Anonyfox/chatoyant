@@ -536,6 +536,9 @@ let () =
   assert_equal_string "grok-4-1-fast-reasoning"
     (Chatoyant.Core.Preset.adjust_xai_model_for_reasoning ~prefer_reasoning:true
        "grok-4-1-fast-non-reasoning");
+  assert_equal_string "grok-4.20-0309-reasoning"
+    (Chatoyant.Core.Preset.adjust_xai_model_for_reasoning ~prefer_reasoning:true
+       "grok-4.20-0309-non-reasoning");
   assert_equal_string "muse-spark-1.3"
     (Option.get
        (Chatoyant.Core.Preset.resolve_model_preset
@@ -1437,11 +1440,11 @@ let () =
        (Chatoyant.Core.Preset.resolve_model_preset
           ~provider:Chatoyant.Provider.Provider.Anthropic
           Chatoyant.Core.Preset.Reasoning));
-  assert_equal_string "grok-4-1-fast-non-reasoning"
+  assert_equal_string "grok-4.20-0309-non-reasoning"
     (Option.get
        (Chatoyant.Core.Preset.resolve_model_preset
           ~provider:Chatoyant.Provider.Provider.Xai Chatoyant.Core.Preset.Fast));
-  assert_equal_string "grok-4-1-fast-non-reasoning"
+  assert_equal_string "grok-4.20-0309-non-reasoning"
     (Option.get
        (Chatoyant.Core.Preset.resolve_model_preset
           ~provider:Chatoyant.Provider.Provider.Xai Chatoyant.Core.Preset.Cheap));

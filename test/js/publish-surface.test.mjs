@@ -815,7 +815,7 @@ describe("publish package surface", () => {
 
     assert.equal(seen[1].url, "https://api.x.ai/v1/chat/completions");
     assert.equal(seen[1].headers.Authorization, "Bearer xai-key");
-    assert.equal(seen[1].body.model, "grok-4-1-fast-non-reasoning");
+    assert.equal(seen[1].body.model, "grok-4.20-0309-non-reasoning");
     assert.equal(seen[1].body.temperature, 1);
     assert.equal(seen[1].body.reasoning_effort, "high");
     assert.equal(seen[1].body.frequency_penalty, 0.2);

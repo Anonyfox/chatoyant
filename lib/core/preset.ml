@@ -29,10 +29,10 @@ let resolve_model_preset ~provider preset =
   match (preset, provider) with
   | Fast, Openai -> Some "gpt-6-luna"
   | Fast, Anthropic -> Some "claude-haiku-5-5"
-  | Fast, Xai -> Some "grok-4-1-fast-non-reasoning"
+  | Fast, Xai -> Some "grok-4.20-0309-non-reasoning"
   | Cheap, Openai -> Some "gpt-6-luna"
   | Cheap, Anthropic -> Some "claude-haiku-5-5"
-  | Cheap, Xai -> Some "grok-4-1-fast-non-reasoning"
+  | Cheap, Xai -> Some "grok-4.20-0309-non-reasoning"
   | Best, Openai -> Some "gpt-6-astra"
   | Best, Anthropic -> Some "claude-fable-5-1"
   | Best, Xai -> Some "grok-4.7"

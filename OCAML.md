@@ -257,7 +257,7 @@ Model presets resolve as follows:
 
 | Preset | OpenAI | Anthropic | xAI | Meta |
 | --- | --- | --- | --- | --- |
-| fast / cheap | gpt-6-luna | claude-haiku-5-5 | grok-4-1-fast-non-reasoning | muse-spark-1.3 |
+| fast / cheap | gpt-6-luna | claude-haiku-5-5 | grok-4.20-0309-non-reasoning | muse-spark-1.3 |
 | balanced | gpt-6.1-sol | claude-sonnet-5-5 | grok-4.3 | muse-spark-1.3 |
 | best / reasoning | gpt-6-astra | claude-fable-5-1 | grok-4.7 | muse-spark-1.3 |
 

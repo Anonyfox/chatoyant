@@ -2517,7 +2517,7 @@ class Chat {
     const presets = {
       openai: { fast: "gpt-6-luna", cheap: "gpt-6-luna", best: "gpt-6-astra", balanced: "gpt-6.1-sol", reasoning: "gpt-6-astra" },
       anthropic: { fast: "claude-haiku-5-5", cheap: "claude-haiku-5-5", best: "claude-fable-5-1", balanced: "claude-sonnet-5-5", reasoning: "claude-fable-5-1" },
-      xai: { fast: "grok-4-1-fast-non-reasoning", cheap: "grok-4-1-fast-non-reasoning", best: "grok-4.7", balanced: "grok-4.3", reasoning: "grok-4.7" },
+      xai: { fast: "grok-4.20-0309-non-reasoning", cheap: "grok-4.20-0309-non-reasoning", best: "grok-4.7", balanced: "grok-4.3", reasoning: "grok-4.7" },
       // Presets select Muse Spark 1.3; the -contributor variant trains on request
       // data, so presets never select it.
       meta: { fast: "muse-spark-1.3", cheap: "muse-spark-1.3", best: "muse-spark-1.3", balanced: "muse-spark-1.3", reasoning: "muse-spark-1.3" },

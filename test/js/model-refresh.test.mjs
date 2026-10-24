@@ -5,7 +5,7 @@ import { Chat, getPricing, getContextWindow, detectProviderByModel, getModelsFor
 const presets = {
   openai: ["gpt-6-luna", "gpt-6-luna", "gpt-6.1-sol", "gpt-6-astra", "gpt-6-astra"],
   anthropic: ["claude-haiku-5-5", "claude-haiku-5-5", "claude-sonnet-5-5", "claude-fable-5-1", "claude-fable-5-1"],
-  xai: ["grok-4-1-fast-non-reasoning", "grok-4-1-fast-non-reasoning", "grok-4.3", "grok-4.7", "grok-4.7"],
+  xai: ["grok-4.20-0309-non-reasoning", "grok-4.20-0309-non-reasoning", "grok-4.3", "grok-4.7", "grok-4.7"],
   meta: Array(5).fill("muse-spark-1.3"),
 };
 
