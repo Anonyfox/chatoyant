@@ -519,24 +519,24 @@ let () =
        (Chatoyant.Provider.Registry.resolve_by_model ~local_active:true
           "Qwen3-4B-MLX"));
 
-  assert_equal_string "gpt-5.6-terra"
+  assert_equal_string "gpt-6.1-sol"
     (Option.get
        (Chatoyant.Core.Preset.resolve_model_preset
           ~provider:Chatoyant.Provider.Provider.Openai
           Chatoyant.Core.Preset.Balanced));
-  assert_equal_string "claude-fable-5"
+  assert_equal_string "claude-fable-5-1"
     (Option.get
        (Chatoyant.Core.Preset.resolve_model_preset
           ~provider:Chatoyant.Provider.Provider.Anthropic
           Chatoyant.Core.Preset.Best));
-  assert_equal_string "grok-4.5"
+  assert_equal_string "grok-4.7"
     (Option.get
        (Chatoyant.Core.Preset.resolve_model_preset
           ~provider:Chatoyant.Provider.Provider.Xai Chatoyant.Core.Preset.Best));
   assert_equal_string "grok-4-1-fast-reasoning"
     (Chatoyant.Core.Preset.adjust_xai_model_for_reasoning ~prefer_reasoning:true
        "grok-4-1-fast-non-reasoning");
-  assert_equal_string "muse-spark-1.2"
+  assert_equal_string "muse-spark-1.3"
     (Option.get
        (Chatoyant.Core.Preset.resolve_model_preset
           ~provider:Chatoyant.Provider.Provider.Meta Chatoyant.Core.Preset.Best));
@@ -1325,6 +1325,14 @@ let () =
     failwith "fable-5 request must not carry a disabled thinking config";
   if contains_substring "\"temperature\"" fable_body then
     failwith "fable-5 request must not carry temperature";
+  let sonnet55_body =
+    anthropic_body_for ~model:"claude-sonnet-5-5" ~temperature:(Some 0.7)
+      ~reasoning_effort:(Some "none")
+  in
+  assert_true "sonnet 5.5 cannot disable thinking"
+    (not (contains_substring "disabled" sonnet55_body));
+  assert_true "sonnet 5.5 drops sampling"
+    (not (contains_substring "temperature" sonnet55_body));
   let haiku_body =
     anthropic_body_for ~model:"claude-haiku-4-5" ~temperature:(Some 0.2)
       ~reasoning_effort:(Some "low")
@@ -1377,3 +1385,249 @@ let () =
   let local_headers = Chatoyant.Provider.Local.authorization_headers () in
   if not (List.mem ("Authorization", "Bearer local") local_headers) then
     failwith "missing local auth header"
+
+let () =
+  assert_equal_string "gpt-6-luna"
+    (Option.get
+       (Chatoyant.Core.Preset.resolve_model_preset
+          ~provider:Chatoyant.Provider.Provider.Openai
+          Chatoyant.Core.Preset.Fast));
+  assert_equal_string "gpt-6-luna"
+    (Option.get
+       (Chatoyant.Core.Preset.resolve_model_preset
+          ~provider:Chatoyant.Provider.Provider.Openai
+          Chatoyant.Core.Preset.Cheap));
+  assert_equal_string "gpt-6.1-sol"
+    (Option.get
+       (Chatoyant.Core.Preset.resolve_model_preset
+          ~provider:Chatoyant.Provider.Provider.Openai
+          Chatoyant.Core.Preset.Balanced));
+  assert_equal_string "gpt-6-astra"
+    (Option.get
+       (Chatoyant.Core.Preset.resolve_model_preset
+          ~provider:Chatoyant.Provider.Provider.Openai
+          Chatoyant.Core.Preset.Best));
+  assert_equal_string "gpt-6-astra"
+    (Option.get
+       (Chatoyant.Core.Preset.resolve_model_preset
+          ~provider:Chatoyant.Provider.Provider.Openai
+          Chatoyant.Core.Preset.Reasoning));
+  assert_equal_string "claude-haiku-5-5"
+    (Option.get
+       (Chatoyant.Core.Preset.resolve_model_preset
+          ~provider:Chatoyant.Provider.Provider.Anthropic
+          Chatoyant.Core.Preset.Fast));
+  assert_equal_string "claude-haiku-5-5"
+    (Option.get
+       (Chatoyant.Core.Preset.resolve_model_preset
+          ~provider:Chatoyant.Provider.Provider.Anthropic
+          Chatoyant.Core.Preset.Cheap));
+  assert_equal_string "claude-sonnet-5-5"
+    (Option.get
+       (Chatoyant.Core.Preset.resolve_model_preset
+          ~provider:Chatoyant.Provider.Provider.Anthropic
+          Chatoyant.Core.Preset.Balanced));
+  assert_equal_string "claude-fable-5-1"
+    (Option.get
+       (Chatoyant.Core.Preset.resolve_model_preset
+          ~provider:Chatoyant.Provider.Provider.Anthropic
+          Chatoyant.Core.Preset.Best));
+  assert_equal_string "claude-fable-5-1"
+    (Option.get
+       (Chatoyant.Core.Preset.resolve_model_preset
+          ~provider:Chatoyant.Provider.Provider.Anthropic
+          Chatoyant.Core.Preset.Reasoning));
+  assert_equal_string "grok-4-1-fast-non-reasoning"
+    (Option.get
+       (Chatoyant.Core.Preset.resolve_model_preset
+          ~provider:Chatoyant.Provider.Provider.Xai
+          Chatoyant.Core.Preset.Fast));
+  assert_equal_string "grok-4-1-fast-non-reasoning"
+    (Option.get
+       (Chatoyant.Core.Preset.resolve_model_preset
+          ~provider:Chatoyant.Provider.Provider.Xai
+          Chatoyant.Core.Preset.Cheap));
+  assert_equal_string "grok-4.3"
+    (Option.get
+       (Chatoyant.Core.Preset.resolve_model_preset
+          ~provider:Chatoyant.Provider.Provider.Xai
+          Chatoyant.Core.Preset.Balanced));
+  assert_equal_string "grok-4.7"
+    (Option.get
+       (Chatoyant.Core.Preset.resolve_model_preset
+          ~provider:Chatoyant.Provider.Provider.Xai
+          Chatoyant.Core.Preset.Best));
+  assert_equal_string "grok-4.7"
+    (Option.get
+       (Chatoyant.Core.Preset.resolve_model_preset
+          ~provider:Chatoyant.Provider.Provider.Xai
+          Chatoyant.Core.Preset.Reasoning));
+  assert_equal_string "muse-spark-1.3"
+    (Option.get
+       (Chatoyant.Core.Preset.resolve_model_preset
+          ~provider:Chatoyant.Provider.Provider.Meta
+          Chatoyant.Core.Preset.Fast));
+  assert_equal_string "muse-spark-1.3"
+    (Option.get
+       (Chatoyant.Core.Preset.resolve_model_preset
+          ~provider:Chatoyant.Provider.Provider.Meta
+          Chatoyant.Core.Preset.Cheap));
+  assert_equal_string "muse-spark-1.3"
+    (Option.get
+       (Chatoyant.Core.Preset.resolve_model_preset
+          ~provider:Chatoyant.Provider.Provider.Meta
+          Chatoyant.Core.Preset.Balanced));
+  assert_equal_string "muse-spark-1.3"
+    (Option.get
+       (Chatoyant.Core.Preset.resolve_model_preset
+          ~provider:Chatoyant.Provider.Provider.Meta
+          Chatoyant.Core.Preset.Best));
+  assert_equal_string "muse-spark-1.3"
+    (Option.get
+       (Chatoyant.Core.Preset.resolve_model_preset
+          ~provider:Chatoyant.Provider.Provider.Meta
+          Chatoyant.Core.Preset.Reasoning));
+  let check_price model input output cached write_5m write_1h =
+    let pricing = Option.get (Chatoyant.Tokens.Pricing.get model) in
+    assert_true (model ^ " input") (pricing.input_per_million = input);
+    assert_true (model ^ " output") (pricing.output_per_million = output);
+    assert_true (model ^ " cached") (pricing.cached_per_million = cached);
+    assert_true (model ^ " cache write 5m")
+      (pricing.cache_write_per_million = write_5m);
+    assert_true (model ^ " cache write 1h")
+      (pricing.cache_write_1h_per_million = write_1h)
+  in
+  check_price "gpt-6-astra" 10.0 50.0 (Some 1.0) None None;
+  check_price "gpt-6.1-sol" 2.0 10.0 (Some 0.1) None None;
+  check_price "gpt-6-sol" 2.0 10.0 (Some 0.2) None None;
+  check_price "gpt-6-luna" 0.1 0.5 (Some 0.01) None None;
+  check_price "gpt-5.6-cyber" 12.5 75.0 (Some 1.25) None None;
+  check_price "gpt-5.5-cyber" 12.5 75.0 (Some 1.25) None None;
+  check_price "gpt-5.3-codex" 1.75 14.0 (Some 0.175) None None;
+  check_price "chat-latest" 5.0 30.0 (Some 0.5) None None;
+  check_price "gpt-5-search-api" 1.25 10.0 (Some 0.125) None None;
+  check_price "claude-fable-5-1" 10.0 50.0 (Some 0.25) (Some 12.5) (Some 20.0);
+  check_price "claude-mythos-5-1" 10.0 50.0 (Some 0.25) (Some 12.5) (Some 20.0);
+  check_price "claude-opus-5-5" 4.0 20.0 (Some 0.2) (Some 5.0) (Some 8.0);
+  check_price "claude-opus-5" 5.0 25.0 (Some 0.5) (Some 6.25) (Some 10.0);
+  check_price "claude-sonnet-5-5" 2.0 10.0 (Some 0.1) (Some 2.5) (Some 4.0);
+  check_price "claude-haiku-5-5" 0.1 0.5 (Some 0.01) (Some 0.125) (Some 0.2);
+  check_price "grok-4.7" 2.0 6.0 (Some 0.5) None None;
+  check_price "grok-4.6" 2.0 6.0 (Some 0.5) None None;
+  check_price "grok-build-0.1" 1.0 2.0 (Some 0.2) None None;
+  check_price "muse-spark-1.3" 1.25 4.25 (Some 0.15) None None;
+  check_price "muse-spark-1.3-contributor" 0.1 0.2 (Some 0.002) None None;
+  check_price "muse-wonder-1.0" 4.0 20.0 (Some 0.2) None None;
+  check_price "gpt-5.6-sol" 4.0 20.0 (Some 0.4) None None;
+  check_price "gpt-5.6-terra" 2.0 12.0 (Some 0.2) None None;
+  check_price "gpt-5.6-luna" 0.2 1.2 (Some 0.02) None None;
+  check_price "gpt-4-turbo" 10.0 30.0 None None None;
+  check_price "gpt-4-turbo-2024-04-09" 10.0 30.0 None None None;
+  check_price "claude-sonnet-5" 2.0 10.0 (Some 0.2) (Some 2.5) (Some 4.0);
+  check_price "grok-4.5" 2.0 6.0 (Some 0.3) None None;
+  check_price "claude-opus-9" 4.0 20.0 (Some 0.2) (Some 5.0) (Some 8.0);
+  check_price "gpt-6-foo" 2.0 10.0 (Some 0.1) None None;
+  assert_equal_int 1_050_000
+    (Option.get (Chatoyant.Tokens.Context_window.get "gpt-6-astra"));
+  assert_equal_int 1_050_000
+    (Option.get (Chatoyant.Tokens.Context_window.get "gpt-6.1-sol"));
+  assert_equal_int 1_050_000
+    (Option.get (Chatoyant.Tokens.Context_window.get "gpt-6-sol"));
+  assert_equal_int 1_050_000
+    (Option.get (Chatoyant.Tokens.Context_window.get "gpt-6-luna"));
+  assert_equal_int 1_000_000
+    (Option.get (Chatoyant.Tokens.Context_window.get "claude-fable-5-1"));
+  assert_equal_int 1_000_000
+    (Option.get (Chatoyant.Tokens.Context_window.get "claude-mythos-5-1"));
+  assert_equal_int 1_000_000
+    (Option.get (Chatoyant.Tokens.Context_window.get "claude-opus-5-5"));
+  assert_equal_int 1_000_000
+    (Option.get (Chatoyant.Tokens.Context_window.get "claude-opus-5"));
+  assert_equal_int 1_000_000
+    (Option.get (Chatoyant.Tokens.Context_window.get "claude-sonnet-5-5"));
+  assert_equal_int 1_000_000
+    (Option.get (Chatoyant.Tokens.Context_window.get "claude-haiku-5-5"));
+  assert_equal_int 1_048_576
+    (Option.get (Chatoyant.Tokens.Context_window.get "muse-spark-1.3"));
+  assert_equal_int 1_048_576
+    (Option.get
+       (Chatoyant.Tokens.Context_window.get "muse-spark-1.3-contributor"));
+  assert_equal_int 1_048_576
+    (Option.get (Chatoyant.Tokens.Context_window.get "muse-wonder-1.0"));
+  assert_equal_int 400_000
+    (Option.get (Chatoyant.Tokens.Context_window.get "gpt-5.6-cyber"));
+  assert_equal_int 400_000
+    (Option.get (Chatoyant.Tokens.Context_window.get "gpt-5.3-codex"));
+  assert_equal_int 400_000
+    (Option.get (Chatoyant.Tokens.Context_window.get "chat-latest"));
+  assert_equal_int 500_000
+    (Option.get (Chatoyant.Tokens.Context_window.get "grok-4.7"));
+  assert_equal_int 500_000
+    (Option.get (Chatoyant.Tokens.Context_window.get "grok-4.6"));
+  assert_equal_int 256_000
+    (Option.get (Chatoyant.Tokens.Context_window.get "grok-build-0.1"));
+  assert_equal_provider Chatoyant.Provider.Provider.Openai
+    (Option.get (Chatoyant.Provider.Registry.detect_by_model "chat-latest"));
+  assert_equal_provider Chatoyant.Provider.Provider.Openai
+    (Option.get (Chatoyant.Provider.Registry.detect_by_model "gpt-6-astra"));
+  assert_equal_provider Chatoyant.Provider.Provider.Anthropic
+    (Option.get
+       (Chatoyant.Provider.Registry.detect_by_model "claude-haiku-5-5"));
+  assert_equal_provider Chatoyant.Provider.Provider.Xai
+    (Option.get (Chatoyant.Provider.Registry.detect_by_model "grok-4.7"));
+  assert_equal_provider Chatoyant.Provider.Provider.Meta
+    (Option.get
+       (Chatoyant.Provider.Registry.detect_by_model "muse-wonder-1.0"));
+  let video =
+    Option.get (Chatoyant.Tokens.Pricing.get "grok-imagine-video-1.5")
+  in
+  assert_true "video per second" (video.per_second = Some 0.08)
+
+let () =
+  let module Openai_provider =
+    Chatoyant.Provider.Openai.Make_provider
+      (Fake_anthropic_http)
+      (struct
+        let api_key = "test"
+        let base_url = "https://example.test/v1"
+        let timeout_ms = Some 1_000
+      end)
+  in
+  let body_for model effort =
+    Fake_anthropic_http.last_request := None;
+    (* The fake returns Anthropic JSON; only the captured request matters. *)
+    ignore
+      (Openai_provider.generate []
+         {
+           Chatoyant.Provider.Provider.model;
+           temperature = Some 0.7;
+           max_tokens = Some 128;
+           top_p = Some 0.9;
+           stop = [];
+           frequency_penalty = Some 0.2;
+           presence_penalty = Some 0.3;
+           web_search = None;
+           thinking_budget = None;
+           reasoning_effort = Some effort;
+           timeout_ms = Some 1_000;
+           tools = [];
+           tool_choice = None;
+           extra = None;
+         });
+    match !Fake_anthropic_http.last_request with
+    | Some { body = Json json; _ } -> Chatoyant.Runtime.Json.to_string json
+    | _ -> failwith "expected a captured OpenAI request body"
+  in
+  List.iter
+    (fun model ->
+      let body = body_for model "none" in
+      List.iter
+        (fun key ->
+          assert_true (model ^ " drops " ^ key)
+            (not (contains_substring key body)))
+        [ "temperature"; "top_p"; "frequency_penalty"; "presence_penalty" ];
+      assert_contains "\"effort\":\"low\"" (body_for model "minimal"))
+    [ "gpt-6-astra"; "gpt-6.1-sol"; "gpt-6-sol"; "gpt-6-luna" ];
+  assert_contains "\"effort\":\"low\"" (body_for "gpt-6-astra" "none");
+  assert_contains "\"effort\":\"low\"" (body_for "gpt-6.1-sol" "none");
+  assert_contains "\"effort\":\"none\"" (body_for "gpt-6-luna" "none")

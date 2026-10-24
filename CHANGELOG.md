@@ -4,6 +4,27 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Changed
+
+- Refresh OpenAI, Anthropic, xAI, and Meta presets and token/media prices
+  using the verified 2026-10-24 figures; preserve retired model IDs.
+- Shape GPT-6 sampling, reasoning effort, token limits, and tool requests;
+  route Astra/6.1 Sol tool calls through Responses. Treat Claude 5.5
+  Opus/Sonnet/Haiku thinking as always on.
+- Refresh conservative pricing family fallbacks and document unmodelled
+  long-context pricing tiers.
+
+### Added
+
+- GPT-6 Astra, 6.1 Sol, Sol, Luna, Cyber 5.6/5.5, Codex 5.3,
+  chat-latest, and GPT-5 Search API pricing and model recognition.
+- Claude Fable/Mythos 5.1, Opus 5.5/5, Sonnet/Haiku 5.5,
+  Grok 4.7/4.6/Build and Imagine 2.0/quality/1.5/lite,
+  Muse Spark 1.3/contributor and Wonder 1.0, with context windows
+  where specified and regression coverage in OCaml and JavaScript.
+
 ## 0.14.0 — 2026-08-15
 ### Added
 

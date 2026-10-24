@@ -3113,10 +3113,23 @@ let provider_extra_fields (options : Provider.options) =
 
 let provider_reasoning_json (options : Provider.options) =
   Option.map
-    (fun effort -> Chatoyant_runtime.Json.Object [ ("effort", string effort) ])
+    (fun effort ->
+      let has prefix =
+        let n = String.length prefix in
+        String.length options.model >= n
+        && String.sub options.model 0 n = prefix
+      in
+      let effort =
+        if
+          (effort = "minimal" && has "gpt-6")
+          || (effort = "none" && (has "gpt-6-astra" || has "gpt-6.1-sol"))
+        then "low"
+        else effort
+      in
+      Chatoyant_runtime.Json.Object [ ("effort", string effort) ])
     options.reasoning_effort
 
-(* The gpt-5 (5.0), gpt-5.5, gpt-5.6, and o-series generations accept only
+(* The gpt-5 (5.0), gpt-5.5, gpt-5.6, gpt-6, and o-series generations accept only
    default sampling: temperature and top_p are rejected with a 400 on both
    /v1/chat/completions and /v1/responses. The 5.1-5.4 generations accept
    them. *)
@@ -3131,7 +3144,8 @@ let sampling_locked model =
     && model.[1] >= '0'
     && model.[1] <= '9'
   in
-  o_series || model = "gpt-5" || has "gpt-5-" || has "gpt-5.5" || has "gpt-5.6"
+  o_series || model = "gpt-5" || has "gpt-5-" || has "gpt-5.5"
+  || has "gpt-5.6" || has "gpt-6"
 
 module Make_provider
     (Http : Chatoyant_runtime.Effect.HTTP)
@@ -3147,6 +3161,10 @@ struct
 
   let generate messages (options : Provider.options) =
     let allow_sampling = not (sampling_locked options.model) in
+    let options =
+      if allow_sampling then options
+      else { options with frequency_penalty = None; presence_penalty = None }
+    in
     let request =
       {
         responses_model = options.model;

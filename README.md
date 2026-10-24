@@ -48,6 +48,25 @@ _chatoyant_ /shuh-TOY-uhnt/ - having a changeable lustre.
 Model presets are available for quick intent-based calls: `fast`, `cheap`,
 `balanced`, `best`, and `reasoning`.
 
+| Preset | OpenAI | Anthropic | xAI | Meta |
+| --- | --- | --- | --- | --- |
+| fast / cheap | gpt-6-luna | claude-haiku-5-5 | grok-4-1-fast-non-reasoning | muse-spark-1.3 |
+| balanced | gpt-6.1-sol | claude-sonnet-5-5 | grok-4.3 | muse-spark-1.3 |
+| best / reasoning | gpt-6-astra | claude-fable-5-1 | grok-4.7 | muse-spark-1.3 |
+
+Also recognized: gpt-6-sol, gpt-5.6-cyber, gpt-5.5-cyber, gpt-5.3-codex,
+chat-latest, gpt-5-search-api, claude-mythos-5-1, claude-opus-5-5,
+claude-opus-5, grok-4.6, grok-build-0.1, muse-spark-1.3-contributor,
+muse-wonder-1.0, grok-imagine-image-2.0, grok-imagine-image-quality,
+grok-imagine-video-1.5, and grok-imagine-video-1.5-lite.
+
+OpenAI prices use the short-context tier (up to 272K input tokens); higher
+long-context rates are not modelled. GPT-5.6 Sol uses OpenAI's promotional
+price, at least through 2026-11-21. Haiku 5.5 prompts above 100K tokens
+and Grok Build prompts at or above 200K tokens have higher rates not modelled here.
+
+Retired on first-party APIs (ids still resolve for pricing/detection): claude-opus-4-1, claude-opus-4, claude-sonnet-4, claude-3-5-haiku/claude-3-*; xAI no longer lists grok-4-1-fast-*, grok-code-fast-1, grok-3*, grok-4-0709.
+
 ## OCaml Quick Start
 
 ```ocaml
@@ -55,7 +74,7 @@ open Chatoyant
 
 let () =
   Eio_main.run @@ fun env ->
-  let ai = Chatoyant.openai ~model:"gpt-5.6-luna" env in
+  let ai = Chatoyant.openai ~model:"gpt-6-luna" env in
   match Chatoyant.gen_text ai "Say hello in three words." with
   | Ok text -> print_endline text
   | Error err -> prerr_endline (Chatoyant.Error.provider err)
@@ -94,7 +113,7 @@ end
 let () =
   Eio_main.run @@ fun env ->
   let ai =
-    Chatoyant.openai ~model:"gpt-5.6-luna" ~tools:[ Calculate.tool ] env
+    Chatoyant.openai ~model:"gpt-6-luna" ~tools:[ Calculate.tool ] env
   in
   ignore (Chatoyant.gen_text ai "Divide 83 by 3.")
 ```

@@ -1355,24 +1355,28 @@ let anthropic_tool_of_provider_tool (tool : Provider.tool_definition) =
     tool_cache_control = None;
   }
 
-(* Request-shaping family. The Claude 4.7+/Sonnet 5 generation rejects
-   [budget_tokens] and the sampling parameters with a 400, and Fable 5
-   additionally rejects an explicit disabled thinking config; older models
-   keep the legacy surface. *)
+(* Request-shaping family. Claude Opus 4.7+/5 and Sonnet 5 reject
+   [budget_tokens] and sampling parameters. Fable/Mythos 5 and
+   Opus/Sonnet/Haiku 5.5 also reject disabled thinking configs; older
+   models keep the legacy surface. *)
 type model_family =
   | Legacy_family
   | Adaptive_preferred (* Opus 4.6 / Sonnet 4.6: adaptive recommended *)
   | Adaptive_only (* Opus 4.7 / 4.8 / Sonnet 5: no budget, no sampling *)
-  | Always_on_thinking (* Fable 5 / Mythos 5: thinking cannot be disabled *)
+  | Always_on_thinking (* Fable/Mythos 5 and Opus/Sonnet/Haiku 5.5: always on *)
 
 let model_family model =
   let has prefix =
     let n = String.length prefix in
     String.length model >= n && String.sub model 0 n = prefix
   in
-  if has "claude-fable-5" || has "claude-mythos-5" then Always_on_thinking
+  if
+    has "claude-fable-5" || has "claude-mythos-5" || has "claude-opus-5-5"
+    || has "claude-sonnet-5-5" || has "claude-haiku-5-5"
+  then Always_on_thinking
   else if
-    has "claude-opus-4-8" || has "claude-opus-4-7" || has "claude-sonnet-5"
+    has "claude-opus-5" || has "claude-opus-4-8" || has "claude-opus-4-7"
+    || has "claude-sonnet-5"
   then Adaptive_only
   else if has "claude-opus-4-6" || has "claude-sonnet-4-6" then
     Adaptive_preferred

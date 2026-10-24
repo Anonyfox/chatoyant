@@ -1,5 +1,24 @@
 let all =
   [
+    ("gpt-6-astra", 1_050_000);
+    ("gpt-6.1-sol", 1_050_000);
+    ("gpt-6-sol", 1_050_000);
+    ("gpt-6-luna", 1_050_000);
+    ("claude-fable-5-1", 1_000_000);
+    ("claude-mythos-5-1", 1_000_000);
+    ("claude-opus-5-5", 1_000_000);
+    ("claude-opus-5", 1_000_000);
+    ("claude-sonnet-5-5", 1_000_000);
+    ("claude-haiku-5-5", 1_000_000);
+    ("muse-spark-1.3", 1_048_576);
+    ("muse-spark-1.3-contributor", 1_048_576);
+    ("muse-wonder-1.0", 1_048_576);
+    ("gpt-5.6-cyber", 400_000);
+    ("gpt-5.3-codex", 400_000);
+    ("chat-latest", 400_000);
+    ("grok-4.7", 500_000);
+    ("grok-4.6", 500_000);
+    ("grok-build-0.1", 256_000);
     ("gpt-5.6-sol", 1_050_000);
     ("gpt-5.6-terra", 1_050_000);
     ("gpt-5.6-luna", 1_050_000);
@@ -67,6 +86,7 @@ let all =
     ("claude-sonnet-4-5", 200_000);
     ("claude-haiku-4-5-20251001", 200_000);
     ("claude-haiku-4-5", 200_000);
+    (* retired on the provider's first-party API as of 2026-10; kept so existing ids still resolve *)
     ("claude-opus-4-1-20250805", 200_000);
     ("claude-opus-4-1", 200_000);
     ("claude-sonnet-4-20250514", 200_000);
@@ -86,6 +106,7 @@ let all =
     ("grok-4.20-0309-reasoning", 1_000_000);
     ("grok-4.20-0309-non-reasoning", 1_000_000);
     ("grok-4.20-multi-agent-0309", 1_000_000);
+    (* retired on the provider's first-party API as of 2026-10; kept so existing ids still resolve *)
     ("grok-4-1-fast-reasoning", 2_000_000);
     ("grok-4-1-fast-non-reasoning", 2_000_000);
     ("grok-4-fast-reasoning", 2_000_000);

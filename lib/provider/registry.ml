@@ -12,7 +12,7 @@ let all =
     {
       id = Provider.Openai;
       name = "OpenAI";
-      signatures = [ "gpt"; "o1"; "o3"; "o4"; "chatgpt" ];
+      signatures = [ "gpt"; "o1"; "o3"; "o4"; "chatgpt"; "chat-latest" ];
       env_key = "OPENAI_API_KEY";
       legacy_env_key = Some "API_KEY_OPENAI";
       base_url = Some "https://api.openai.com/v1";

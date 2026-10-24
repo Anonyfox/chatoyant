@@ -27,24 +27,24 @@ let string_of_model_preset = function
 
 let resolve_model_preset ~provider preset =
   match (preset, provider) with
-  | Fast, Openai -> Some "gpt-5.6-luna"
-  | Fast, Anthropic -> Some "claude-haiku-4-5"
+  | Fast, Openai -> Some "gpt-6-luna"
+  | Fast, Anthropic -> Some "claude-haiku-5-5"
   | Fast, Xai -> Some "grok-4-1-fast-non-reasoning"
-  | Cheap, Openai -> Some "gpt-5.4-mini"
-  | Cheap, Anthropic -> Some "claude-haiku-4-5"
+  | Cheap, Openai -> Some "gpt-6-luna"
+  | Cheap, Anthropic -> Some "claude-haiku-5-5"
   | Cheap, Xai -> Some "grok-4-1-fast-non-reasoning"
-  | Best, Openai -> Some "gpt-5.6-sol"
-  | Best, Anthropic -> Some "claude-fable-5"
-  | Best, Xai -> Some "grok-4.5"
-  | Balanced, Openai -> Some "gpt-5.6-terra"
-  | Balanced, Anthropic -> Some "claude-sonnet-5"
+  | Best, Openai -> Some "gpt-6-astra"
+  | Best, Anthropic -> Some "claude-fable-5-1"
+  | Best, Xai -> Some "grok-4.7"
+  | Balanced, Openai -> Some "gpt-6.1-sol"
+  | Balanced, Anthropic -> Some "claude-sonnet-5-5"
   | Balanced, Xai -> Some "grok-4.3"
-  | Reasoning, Openai -> Some "gpt-5.5-pro"
-  | Reasoning, Anthropic -> Some "claude-fable-5"
-  | Reasoning, Xai -> Some "grok-4.5"
-  (* Meta serves one standard-tier family; the discounted -contributor
+  | Reasoning, Openai -> Some "gpt-6-astra"
+  | Reasoning, Anthropic -> Some "claude-fable-5-1"
+  | Reasoning, Xai -> Some "grok-4.7"
+  (* Meta presets select Muse Spark 1.3 at the standard tier; the discounted -contributor
      variant trains on request data, so presets never select it. *)
-  | (Fast | Cheap | Best | Balanced | Reasoning), Meta -> Some "muse-spark-1.2"
+  | (Fast | Cheap | Best | Balanced | Reasoning), Meta -> Some "muse-spark-1.3"
   | _, (Local | Openrouter) -> None
 
 let temperature_of_creativity = function
@@ -86,7 +86,7 @@ let starts_with ~prefix value =
 let supports_openai_reasoning model =
   List.exists
     (fun prefix -> starts_with ~prefix model)
-    [ "gpt-5"; "o1"; "o3"; "o4" ]
+    [ "gpt-6"; "chat-latest"; "gpt-5"; "o1"; "o3"; "o4" ]
 
 let adjust_xai_model_for_reasoning ~prefer_reasoning model =
   match (model, prefer_reasoning) with

@@ -821,7 +821,7 @@ let compatibility_surface : js_value =
 const PROVIDERS = Object.freeze({
   openai: {
     name: "OpenAI",
-    signatures: ["gpt", "o1", "o3", "o4", "chatgpt"],
+    signatures: ["gpt", "o1", "o3", "o4", "chatgpt", "chat-latest"],
     envKey: "OPENAI_API_KEY",
     envKeyLegacy: "API_KEY_OPENAI",
     baseUrl: "https://api.openai.com/v1",
@@ -865,6 +865,7 @@ const PROVIDERS = Object.freeze({
 const PROVIDER_IDS = Object.freeze(Object.keys(PROVIDERS));
 
 const OPENAI_MODELS = Object.freeze([
+  "gpt-6-astra", "gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-cyber", "gpt-5.5-cyber", "gpt-5.3-codex", "chat-latest", "gpt-5-search-api",
   "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna",
   "gpt-5.5", "gpt-5.5-pro",
   "gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano", "gpt-5.4-pro",
@@ -881,12 +882,14 @@ const OPENAI_MODELS = Object.freeze([
   "gpt-oss-120b", "gpt-oss-20b", "gpt-image-1", "gpt-image-1-mini", "chatgpt-4o-latest",
 ]);
 const ANTHROPIC_MODELS = Object.freeze([
+  "claude-fable-5-1", "claude-mythos-5-1", "claude-opus-5-5", "claude-opus-5", "claude-sonnet-5-5", "claude-haiku-5-5",
   "claude-fable-5",
   "claude-opus-4-8", "claude-opus-4-7", "claude-sonnet-5",
   "claude-opus-4-6", "claude-sonnet-4-6",
   "claude-opus-4-5-20251101", "claude-opus-4-5",
   "claude-sonnet-4-5-20250929", "claude-sonnet-4-5",
   "claude-haiku-4-5-20251001", "claude-haiku-4-5",
+  // retired on the provider's first-party API as of 2026-10; kept so existing ids still resolve
   "claude-opus-4-1-20250805", "claude-opus-4-1",
   "claude-sonnet-4-20250514", "claude-sonnet-4-0",
   "claude-opus-4-20250514", "claude-opus-4-0",
@@ -894,14 +897,17 @@ const ANTHROPIC_MODELS = Object.freeze([
   "claude-3-opus-20240229", "claude-3-haiku-20240307",
 ]);
 const XAI_MODELS = Object.freeze([
+  "grok-4.7", "grok-4.6", "grok-build-0.1", "grok-imagine-image-2.0", "grok-imagine-image-quality", "grok-imagine-video-1.5", "grok-imagine-video-1.5-lite",
   "grok-4.5", "grok-4.3",
   "grok-4.20-0309-reasoning", "grok-4.20-0309-non-reasoning", "grok-4.20-multi-agent-0309",
+  // retired on the provider's first-party API as of 2026-10; kept so existing ids still resolve
   "grok-4-1-fast-reasoning", "grok-4-1-fast-non-reasoning",
   "grok-4-fast-reasoning", "grok-4-fast-non-reasoning", "grok-4-0709", "grok-4",
   "grok-3", "grok-3-mini", "grok-2-vision-1212", "grok-2-image-1212",
   "grok-code-fast-1", "grok-imagine-image", "grok-imagine-image-pro", "grok-imagine-video",
 ]);
 const META_MODELS = Object.freeze([
+  "muse-spark-1.3", "muse-spark-1.3-contributor", "muse-wonder-1.0",
   "muse-spark-1.2", "muse-spark-1.1", "muse-spark-1.2-contributor",
 ]);
 const MODELS_BY_PROVIDER = Object.freeze({
@@ -914,58 +920,267 @@ const MODELS_BY_PROVIDER = Object.freeze({
 });
 
 const PRICING = Object.freeze({
-  "gpt-5.6-sol": { input: 5, output: 30, cached: 0.5 },
-  "gpt-5.6-terra": { input: 2.5, output: 15, cached: 0.25 },
-  "gpt-5.6-luna": { input: 1, output: 6, cached: 0.1 },
+  // OpenAI bills >272K input at a higher long-context tier not modelled here.
+  "gpt-6-astra": { input: 10, output: 50, cached: 1 },
+  "gpt-6.1-sol": { input: 2, output: 10, cached: 0.1 },
+  "gpt-6-sol": { input: 2, output: 10, cached: 0.2 },
+  "gpt-6-luna": { input: 0.1, output: 0.5, cached: 0.01 },
+  "gpt-5.6-cyber": { input: 12.5, output: 75, cached: 1.25 },
+  "gpt-5.5-cyber": { input: 12.5, output: 75, cached: 1.25 },
+  "gpt-5.3-codex": { input: 1.75, output: 14, cached: 0.175 },
+  "chat-latest": { input: 5, output: 30, cached: 0.5 },
+  "gpt-5-search-api": { input: 1.25, output: 10, cached: 0.125 },
+  "claude-fable-5-1": { input: 10, output: 50, cached: 0.25, cacheWrite5m: 12.5, cacheWrite1h: 20 },
+  "claude-mythos-5-1": { input: 10, output: 50, cached: 0.25, cacheWrite5m: 12.5, cacheWrite1h: 20 },
+  "claude-opus-5-5": { input: 4, output: 20, cached: 0.2, cacheWrite5m: 5, cacheWrite1h: 8 },
+  "claude-opus-5": { input: 5, output: 25, cached: 0.5, cacheWrite5m: 6.25, cacheWrite1h: 10 },
+  "claude-sonnet-5-5": { input: 2, output: 10, cached: 0.1, cacheWrite5m: 2.5, cacheWrite1h: 4 },
+  // Prompts >100K tokens bill 0.50/2.50/0.05/0.625/1, not modelled.
+  "claude-haiku-5-5": { input: 0.1, output: 0.5, cached: 0.01, cacheWrite5m: 0.125, cacheWrite1h: 0.2 },
+  "grok-4.7": { input: 2, output: 6, cached: 0.5 },
+  "grok-4.6": { input: 2, output: 6, cached: 0.5 },
+  // >=200K prompt tokens bill 2x, not modelled.
+  "grok-build-0.1": { input: 1, output: 2, cached: 0.2 },
+  "muse-spark-1.3": { input: 1.25, output: 4.25, cached: 0.15 },
+  "muse-spark-1.3-contributor": { input: 0.1, output: 0.2, cached: 0.002 },
+  "muse-wonder-1.0": { input: 4, output: 20, cached: 0.2 },
+  "grok-imagine-image-2.0": { input: 0, output: 0, perImage: 0.04 },
+  "grok-imagine-image-quality": { input: 0, output: 0, perImage: 0.05 },
+  "grok-imagine-video-1.5": { input: 0, output: 0, perSecond: 0.08 },
+  "grok-imagine-video-1.5-lite": { input: 0, output: 0, perSecond: 0.02 },
+  // OpenAI promotional price, at least through 2026-11-21.
+  "gpt-5.6-sol": { input: 4, output: 20, cached: 0.4 },
+  "gpt-5.6-terra": { input: 2, output: 12, cached: 0.2 },
+  "gpt-5.6-luna": { input: 0.2, output: 1.2, cached: 0.02 },
   "gpt-5.5": { input: 5, output: 30, cached: 0.5 },
   "gpt-5.5-pro": { input: 30, output: 180 },
   "gpt-5.4": { input: 2.5, output: 15, cached: 0.25 },
   "gpt-5.4-mini": { input: 0.75, output: 4.5, cached: 0.075 },
+  "gpt-5.4-nano": { input: 0.2, output: 1.25, cached: 0.02 },
+  "gpt-5.4-pro": { input: 30, output: 180 },
+  "gpt-5.2": { input: 1.75, output: 14, cached: 0.175 },
+  "gpt-5.2-pro": { input: 21, output: 168 },
+  "gpt-5.2-codex": { input: 1.75, output: 14, cached: 0.175 },
+  "gpt-5.1": { input: 1.25, output: 10, cached: 0.125 },
+  "gpt-5.1-codex": { input: 1.25, output: 10, cached: 0.125 },
+  "gpt-5.1-codex-max": { input: 1.25, output: 10, cached: 0.125 },
+  "gpt-5.1-codex-mini": { input: 0.25, output: 2, cached: 0.025 },
   "gpt-5": { input: 1.25, output: 10, cached: 0.125 },
+  "gpt-5-pro": { input: 15, output: 120 },
   "gpt-5-mini": { input: 0.25, output: 2, cached: 0.025 },
+  "gpt-5-nano": { input: 0.05, output: 0.4, cached: 0.005 },
+  "gpt-5-codex": { input: 1.25, output: 10, cached: 0.125 },
+  "gpt-5-image": { input: 10, output: 10, cached: 1.25 },
+  "gpt-5-image-mini": { input: 2.5, output: 2, cached: 0.25 },
+  "gpt-4o": { input: 2.5, output: 10, cached: 1.25 },
+  "gpt-4o-2024-11-20": { input: 2.5, output: 10, cached: 1.25 },
+  "gpt-4o-2024-08-06": { input: 2.5, output: 10, cached: 1.25 },
+  "gpt-4o-2024-05-13": { input: 5, output: 15 },
+  "gpt-4o-mini": { input: 0.15, output: 0.6, cached: 0.075 },
+  "gpt-4o-mini-2024-07-18": { input: 0.15, output: 0.6, cached: 0.075 },
   "gpt-4.1": { input: 2, output: 8, cached: 0.5 },
   "gpt-4.1-mini": { input: 0.4, output: 1.6, cached: 0.1 },
-  "gpt-4o": { input: 2.5, output: 10, cached: 1.25 },
-  "gpt-4o-mini": { input: 0.15, output: 0.6, cached: 0.075 },
+  "gpt-4.1-nano": { input: 0.1, output: 0.4, cached: 0.025 },
+  "gpt-4-turbo": { input: 10, output: 30 },
+  "gpt-4-turbo-2024-04-09": { input: 10, output: 30 },
+  "gpt-4-turbo-preview": { input: 5, output: 15 },
+  "gpt-4": { input: 30, output: 60 },
+  "gpt-4-0613": { input: 30, output: 60 },
+  "gpt-4-32k": { input: 60, output: 120 },
+  "gpt-3.5-turbo": { input: 0.5, output: 1.5 },
+  "gpt-3.5-turbo-0125": { input: 0.5, output: 1.5 },
+  "gpt-3.5-turbo-16k": { input: 3, output: 4 },
+  "o1": { input: 15, output: 60, cached: 7.5 },
+  "o1-2024-12-17": { input: 15, output: 60, cached: 7.5 },
+  "o1-preview": { input: 15, output: 60 },
+  "o1-mini": { input: 3, output: 12 },
+  "o1-pro": { input: 150, output: 600 },
   "o3": { input: 2, output: 8, cached: 0.5 },
+  "o3-2025-04-16": { input: 2, output: 8, cached: 0.5 },
+  "o3-mini": { input: 1.1, output: 4.4, cached: 0.55 },
+  "o3-mini-2025-01-31": { input: 1.1, output: 4.4, cached: 0.55 },
+  "o3-pro": { input: 20, output: 80 },
+  "o3-deep-research": { input: 10, output: 40, cached: 2.5 },
   "o4-mini": { input: 1.1, output: 4.4, cached: 0.275 },
+  "o4-mini-deep-research": { input: 2, output: 8 },
+  "gpt-oss-120b": { input: 0.039, output: 0.19 },
+  "gpt-oss-20b": { input: 0.03, output: 0.14 },
+  "text-embedding-3-small": { input: 0.02, output: 0 },
+  "text-embedding-3-large": { input: 0.13, output: 0 },
+  "text-embedding-ada-002": { input: 0.1, output: 0 },
   "claude-fable-5": { input: 10, output: 50, cached: 1, cacheWrite5m: 12.5 },
   "claude-opus-4-8": { input: 5, output: 25, cached: 0.5, cacheWrite5m: 6.25 },
   "claude-opus-4-7": { input: 5, output: 25, cached: 0.5, cacheWrite5m: 6.25 },
-  // List price; an introductory $2/$10 per MTok applies through 2026-08-31.
-  "claude-sonnet-5": { input: 3, output: 15, cached: 0.3, cacheWrite5m: 3.75 },
+  // Standard price, including the former introductory discount.
+  "claude-sonnet-5": { input: 2, output: 10, cached: 0.2, cacheWrite5m: 2.5, cacheWrite1h: 4 },
   "claude-opus-4-6": { input: 5, output: 25, cached: 0.5, cacheWrite5m: 6.25 },
   "claude-sonnet-4-6": { input: 3, output: 15, cached: 0.3, cacheWrite5m: 3.75 },
+  "claude-opus-4-5-20251101": { input: 5, output: 25, cached: 0.5, cacheWrite5m: 6.25, cacheWrite1h: 10 },
+  "claude-opus-4-5": { input: 5, output: 25, cached: 0.5, cacheWrite5m: 6.25, cacheWrite1h: 10 },
+  "claude-sonnet-4-5-20250929": { input: 3, output: 15, cached: 0.3, cacheWrite5m: 3.75, cacheWrite1h: 6 },
   "claude-sonnet-4-5": { input: 3, output: 15, cached: 0.3, cacheWrite5m: 3.75 },
+  "claude-haiku-4-5-20251001": { input: 1, output: 5, cached: 0.1, cacheWrite5m: 1.25, cacheWrite1h: 2 },
   "claude-haiku-4-5": { input: 1, output: 5, cached: 0.1, cacheWrite5m: 1.25 },
+  // retired on the provider's first-party API as of 2026-10; kept so existing ids still resolve
+  "claude-opus-4-1-20250805": { input: 15, output: 75, cached: 1.5, cacheWrite5m: 18.75, cacheWrite1h: 30 },
+  "claude-opus-4-1": { input: 15, output: 75, cached: 1.5, cacheWrite5m: 18.75, cacheWrite1h: 30 },
+  "claude-sonnet-4-20250514": { input: 3, output: 15, cached: 0.3, cacheWrite5m: 3.75, cacheWrite1h: 6 },
+  "claude-sonnet-4-0": { input: 3, output: 15, cached: 0.3, cacheWrite5m: 3.75, cacheWrite1h: 6 },
+  "claude-opus-4-20250514": { input: 15, output: 75, cached: 1.5, cacheWrite5m: 18.75, cacheWrite1h: 30 },
+  "claude-opus-4-0": { input: 15, output: 75, cached: 1.5, cacheWrite5m: 18.75, cacheWrite1h: 30 },
+  "claude-3-5-sonnet-20241022": { input: 3, output: 15, cached: 0.3, cacheWrite5m: 3.75, cacheWrite1h: 6 },
+  "claude-3-5-sonnet-20240620": { input: 3, output: 15, cached: 0.3, cacheWrite5m: 3.75, cacheWrite1h: 6 },
+  "claude-3-5-haiku-20241022": { input: 0.8, output: 4, cached: 0.08, cacheWrite5m: 1, cacheWrite1h: 1.6 },
+  "claude-3-opus-20240229": { input: 15, output: 75, cached: 1.5, cacheWrite5m: 18.75, cacheWrite1h: 30 },
+  "claude-3-haiku-20240307": { input: 0.25, output: 1.25, cached: 0.03, cacheWrite5m: 0.3, cacheWrite1h: 0.5 },
   "muse-spark-1.2": { input: 1.25, output: 4.25, cached: 0.15 },
   "muse-spark-1.1": { input: 1.25, output: 4.25, cached: 0.15 },
   // Discounted tier that permits Meta to train on request data.
   "muse-spark-1.2-contributor": { input: 0.1, output: 0.2, cached: 0.002 },
-  "grok-4.5": { input: 2, output: 6, cached: 0.5 },
+  "grok-4.5": { input: 2, output: 6, cached: 0.3 },
   "grok-4.3": { input: 1.25, output: 2.5, cached: 0.2 },
-  "grok-4": { input: 3, output: 15, cached: 0.75 },
+  "grok-4.20-0309-reasoning": { input: 1.25, output: 2.5, cached: 0.2 },
+  "grok-4.20-0309-non-reasoning": { input: 1.25, output: 2.5, cached: 0.2 },
+  "grok-4.20-multi-agent-0309": { input: 1.25, output: 2.5, cached: 0.2 },
+  // retired on the provider's first-party API as of 2026-10; kept so existing ids still resolve
   "grok-4-1-fast-reasoning": { input: 0.2, output: 1.5, cached: 0.05 },
   "grok-4-1-fast-non-reasoning": { input: 0.2, output: 0.5, cached: 0.05 },
+  "grok-4-fast-reasoning": { input: 0.2, output: 0.5, cached: 0.05 },
+  "grok-4-fast-non-reasoning": { input: 0.2, output: 0.5, cached: 0.05 },
+  // retired on the provider's first-party API as of 2026-10; kept so existing ids still resolve
+  "grok-4-0709": { input: 3, output: 15, cached: 0.75 },
+  "grok-4": { input: 3, output: 15, cached: 0.75 },
+  // retired on the provider's first-party API as of 2026-10; kept so existing ids still resolve
+  "grok-code-fast-1": { input: 0.2, output: 1.5, cached: 0.02 },
+  "grok-3": { input: 3, output: 15, cached: 0.75 },
+  "grok-3-mini": { input: 0.3, output: 0.5, cached: 0.07 },
+  "grok-2-vision-1212": { input: 2, output: 10 },
   "grok-imagine-image": { input: 0, output: 0, perImage: 0.02 },
   "grok-imagine-image-pro": { input: 0, output: 0, perImage: 0.07 },
   "grok-imagine-video": { input: 0, output: 0, perSecond: 0.05 },
+  "grok-embedding-1": { input: 0, output: 0 },
 });
 
 const CONTEXT_WINDOWS = Object.freeze({
-  "gpt-5.6-sol": 1050000, "gpt-5.6-terra": 1050000, "gpt-5.6-luna": 1050000,
+  "gpt-6-astra": 1050000,
+  "gpt-6.1-sol": 1050000,
+  "gpt-6-sol": 1050000,
+  "gpt-6-luna": 1050000,
+  "claude-fable-5-1": 1000000,
+  "claude-mythos-5-1": 1000000,
+  "claude-opus-5-5": 1000000,
+  "claude-opus-5": 1000000,
+  "claude-sonnet-5-5": 1000000,
+  "claude-haiku-5-5": 1000000,
+  "muse-spark-1.3": 1048576,
+  "muse-spark-1.3-contributor": 1048576,
+  "muse-wonder-1.0": 1048576,
+  "gpt-5.6-cyber": 400000,
+  "gpt-5.3-codex": 400000,
+  "chat-latest": 400000,
+  "grok-4.7": 500000,
+  "grok-4.6": 500000,
+  "grok-build-0.1": 256000,
+  "gpt-5.6-sol": 1050000,
+  "gpt-5.6-terra": 1050000,
+  "gpt-5.6-luna": 1050000,
   "gpt-5.5": 1050000,
-  "gpt-5.4": 1050000, "gpt-5.4-mini": 400000, "gpt-5": 400000, "gpt-5-mini": 400000,
-  "gpt-4.1": 1047576, "gpt-4.1-mini": 1047576,
-  "gpt-4o": 128000, "gpt-4o-mini": 128000,
-  "o3": 200000, "o4-mini": 200000,
+  "gpt-5.4": 1050000,
+  "gpt-5.4-mini": 400000,
+  "gpt-5.4-nano": 400000,
+  "gpt-5.4-pro": 1050000,
+  "gpt-5.2": 400000,
+  "gpt-5.2-pro": 400000,
+  "gpt-5.2-codex": 400000,
+  "gpt-5.1": 400000,
+  "gpt-5.1-codex": 400000,
+  "gpt-5.1-codex-max": 400000,
+  "gpt-5.1-codex-mini": 400000,
+  "gpt-5": 400000,
+  "gpt-5-pro": 400000,
+  "gpt-5-mini": 400000,
+  "gpt-5-nano": 400000,
+  "gpt-5-codex": 400000,
+  "gpt-5-image": 400000,
+  "gpt-5-image-mini": 400000,
+  "gpt-4o": 128000,
+  "gpt-4o-2024-11-20": 128000,
+  "gpt-4o-2024-08-06": 128000,
+  "gpt-4o-2024-05-13": 128000,
+  "gpt-4o-mini": 128000,
+  "gpt-4o-mini-2024-07-18": 128000,
+  "gpt-4.1": 1047576,
+  "gpt-4.1-mini": 1047576,
+  "gpt-4.1-nano": 1047576,
+  "gpt-4-turbo": 128000,
+  "gpt-4-turbo-2024-04-09": 128000,
+  "gpt-4-turbo-preview": 128000,
+  "gpt-4": 8192,
+  "gpt-4-0613": 8192,
+  "gpt-4-32k": 32768,
+  "gpt-3.5-turbo": 16385,
+  "gpt-3.5-turbo-0125": 16385,
+  "gpt-3.5-turbo-16k": 16385,
+  "o1": 200000,
+  "o1-2024-12-17": 200000,
+  "o1-preview": 128000,
+  "o1-mini": 128000,
+  "o1-pro": 200000,
+  "o3": 200000,
+  "o3-2025-04-16": 200000,
+  "o3-mini": 200000,
+  "o3-mini-2025-01-31": 200000,
+  "o3-pro": 200000,
+  "o3-deep-research": 200000,
+  "o4-mini": 200000,
+  "o4-mini-deep-research": 200000,
+  "gpt-oss-120b": 131072,
+  "gpt-oss-20b": 131072,
   "claude-fable-5": 1000000,
-  "claude-opus-4-8": 1000000, "claude-opus-4-7": 1000000, "claude-sonnet-5": 1000000,
-  "claude-opus-4-6": 1000000, "claude-sonnet-4-6": 1000000,
-  "claude-sonnet-4-5": 200000, "claude-haiku-4-5": 200000,
-  "muse-spark-1.2": 1048576, "muse-spark-1.1": 1048576, "muse-spark-1.2-contributor": 1048576,
-  "grok-4.5": 500000, "grok-4.3": 1000000,
-  "grok-4": 256000, "grok-4-1-fast-reasoning": 2000000, "grok-4-1-fast-non-reasoning": 2000000,
+  "claude-opus-4-8": 1000000,
+  "claude-opus-4-7": 1000000,
+  "claude-sonnet-5": 1000000,
+  "claude-opus-4-6": 1000000,
+  "claude-sonnet-4-6": 1000000,
+  "claude-opus-4-5-20251101": 200000,
+  "claude-opus-4-5": 200000,
+  "claude-sonnet-4-5-20250929": 200000,
+  "claude-sonnet-4-5": 200000,
+  "claude-haiku-4-5-20251001": 200000,
+  "claude-haiku-4-5": 200000,
+  // retired on the provider's first-party API as of 2026-10; kept so existing ids still resolve
+  "claude-opus-4-1-20250805": 200000,
+  "claude-opus-4-1": 200000,
+  "claude-sonnet-4-20250514": 200000,
+  "claude-sonnet-4-0": 200000,
+  "claude-opus-4-20250514": 200000,
+  "claude-opus-4-0": 200000,
+  "claude-3-5-sonnet-20241022": 200000,
+  "claude-3-5-sonnet-20240620": 200000,
+  "claude-3-5-haiku-20241022": 200000,
+  "claude-3-opus-20240229": 200000,
+  "claude-3-haiku-20240307": 200000,
+  "muse-spark-1.2": 1048576,
+  "muse-spark-1.1": 1048576,
+  "muse-spark-1.2-contributor": 1048576,
+  "grok-4.5": 500000,
+  "grok-4.3": 1000000,
+  "grok-4.20-0309-reasoning": 1000000,
+  "grok-4.20-0309-non-reasoning": 1000000,
+  "grok-4.20-multi-agent-0309": 1000000,
+  // retired on the provider's first-party API as of 2026-10; kept so existing ids still resolve
+  "grok-4-1-fast-reasoning": 2000000,
+  "grok-4-1-fast-non-reasoning": 2000000,
+  "grok-4-fast-reasoning": 2000000,
+  "grok-4-fast-non-reasoning": 2000000,
+  // retired on the provider's first-party API as of 2026-10; kept so existing ids still resolve
+  "grok-4-0709": 256000,
+  "grok-4": 256000,
+  // retired on the provider's first-party API as of 2026-10; kept so existing ids still resolve
+  "grok-code-fast-1": 256000,
+  "grok-3": 131072,
+  "grok-3-mini": 131072,
+  "grok-2-vision-1212": 32768,
 });
 
 const TOKEN_RATIOS = Object.freeze({ english: 4, code: 3.5, cjk: 1.5, mixed: 3.8 });
@@ -1418,7 +1633,7 @@ async function providerCreateResponse(provider, messages, options = {}) {
   const apiKey = chat._apiKey(provider, options);
   if (!apiKey) throw ProviderError.missingApiKey(provider);
   const baseUrl = chat._baseUrl(provider, options);
-  const reasoningEffort = chat._providerReasoningEffort(provider, options.reasoning);
+  const reasoningEffort = chat._providerReasoningEffort(provider, options.reasoning, resolvedModel);
   return chat._callOpenAIResponses(chat._messages, options, {
     provider,
     model: resolvedModel,
@@ -2300,12 +2515,12 @@ class Chat {
 
   _resolvePreset(model, provider = "openai") {
     const presets = {
-      openai: { fast: "gpt-5.6-luna", cheap: "gpt-5.4-mini", best: "gpt-5.6-sol", balanced: "gpt-5.6-terra", reasoning: "gpt-5.5-pro" },
-      anthropic: { fast: "claude-haiku-4-5", cheap: "claude-haiku-4-5", best: "claude-fable-5", balanced: "claude-sonnet-5", reasoning: "claude-fable-5" },
-      xai: { fast: "grok-4-1-fast-non-reasoning", cheap: "grok-4-1-fast-non-reasoning", best: "grok-4.5", balanced: "grok-4.3", reasoning: "grok-4.5" },
-      // One standard-tier family; the -contributor variant trains on request
+      openai: { fast: "gpt-6-luna", cheap: "gpt-6-luna", best: "gpt-6-astra", balanced: "gpt-6.1-sol", reasoning: "gpt-6-astra" },
+      anthropic: { fast: "claude-haiku-5-5", cheap: "claude-haiku-5-5", best: "claude-fable-5-1", balanced: "claude-sonnet-5-5", reasoning: "claude-fable-5-1" },
+      xai: { fast: "grok-4-1-fast-non-reasoning", cheap: "grok-4-1-fast-non-reasoning", best: "grok-4.7", balanced: "grok-4.3", reasoning: "grok-4.7" },
+      // Presets select Muse Spark 1.3; the -contributor variant trains on request
       // data, so presets never select it.
-      meta: { fast: "muse-spark-1.2", cheap: "muse-spark-1.2", best: "muse-spark-1.2", balanced: "muse-spark-1.2", reasoning: "muse-spark-1.2" },
+      meta: { fast: "muse-spark-1.3", cheap: "muse-spark-1.3", best: "muse-spark-1.3", balanced: "muse-spark-1.3", reasoning: "muse-spark-1.3" },
     };
     return presets[provider]?.[model] || presets.openai[model] || model;
   }
@@ -2332,9 +2547,10 @@ class Chat {
 
   // Muse Spark always reasons: reasoning_effort "none" is rejected with a
   // 400, so reasoning "off" means omitting the field for Meta.
-  _providerReasoningEffort(provider, value) {
+  _providerReasoningEffort(provider, value, model = "") {
     const effort = this._reasoningEffort(value);
     if (provider === "meta" && effort === "none") return undefined;
+    if (provider === "openai" && ((effort === "minimal" && model.startsWith("gpt-6")) || (effort === "none" && (model.startsWith("gpt-6-astra") || model.startsWith("gpt-6.1-sol"))))) return "low";
     return effort;
   }
 
@@ -2354,12 +2570,11 @@ class Chat {
     return toolChoice;
   }
 
-  // Request-shaping family: the Claude 4.7+/Sonnet 5 generation rejects
-  // budget_tokens and sampling parameters with a 400, and Fable 5 additionally
-  // rejects an explicit disabled thinking config.
+  // Claude Opus 4.7+/5 and Sonnet 5 reject budgets and sampling.
+  // Fable/Mythos 5 and Opus/Sonnet/Haiku 5.5 also reject disabled thinking.
   _anthropicFamily(model = "") {
-    if (model.startsWith("claude-fable-5") || model.startsWith("claude-mythos-5")) return "always-on";
-    if (model.startsWith("claude-opus-4-8") || model.startsWith("claude-opus-4-7") || model.startsWith("claude-sonnet-5")) {
+    if (model.startsWith("claude-fable-5") || model.startsWith("claude-mythos-5") || model.startsWith("claude-opus-5-5") || model.startsWith("claude-sonnet-5-5") || model.startsWith("claude-haiku-5-5")) return "always-on";
+    if (model.startsWith("claude-opus-5") || model.startsWith("claude-opus-4-8") || model.startsWith("claude-opus-4-7") || model.startsWith("claude-sonnet-5")) {
       return "adaptive-only";
     }
     if (model.startsWith("claude-opus-4-6") || model.startsWith("claude-sonnet-4-6")) return "adaptive-preferred";
@@ -2384,7 +2599,7 @@ class Chat {
     if (!requested) {
       // Sonnet 5 runs adaptive thinking when the field is omitted; an explicit
       // reasoning "off" keeps the no-thinking behavior. Fable 5 rejects a
-      // disabled config, so the field is simply omitted there.
+      // disabled config, as do Opus/Sonnet/Haiku 5.5; omit it for those families.
       if (effort === "none" && family !== "always-on") return { type: "disabled" };
       return undefined;
     }
@@ -2655,21 +2870,21 @@ class Chat {
     }
   }
 
-  // gpt-5.6 models apply a server-side reasoning default that /v1/chat/completions
+  // GPT-6 Sol/Luna and gpt-5.6 models apply a server-side reasoning default that /v1/chat/completions
   // rejects in combination with function tools ("Function tools with
   // reasoning_effort are not supported ... use /v1/responses or set
   // reasoning_effort to 'none'"). Earlier generations accept both.
   _openaiToolsRejectReasoning(model = "") {
-    return model.startsWith("gpt-5.6");
+    return model.startsWith("gpt-5.6") || model.startsWith("gpt-6-sol") || model.startsWith("gpt-6-luna");
   }
 
   // The gpt-5.x and o-series generations reject the legacy max_tokens parameter
   // on /v1/chat/completions; older chat models predate max_completion_tokens.
   _openaiMaxTokensParam(model = "") {
-    return /^gpt-5|^o\d/.test(model) ? "max_completion_tokens" : "max_tokens";
+    return /^gpt-[56]|^chat-latest|^o\d/.test(model) ? "max_completion_tokens" : "max_tokens";
   }
 
-  // The gpt-5 (5.0), gpt-5.5, gpt-5.6, and o-series generations accept only
+  // The gpt-5 (5.0), gpt-5.5, gpt-5.6, gpt-6, and o-series generations accept only
   // default sampling: temperature, top_p, frequency_penalty, and
   // presence_penalty are all rejected with a 400 — on /v1/chat/completions
   // and /v1/responses alike. The 5.1–5.4 generations accept them.
@@ -2678,7 +2893,7 @@ class Chat {
       /^o\d/.test(model) ||
       /^gpt-5($|-)/.test(model) ||
       model.startsWith("gpt-5.5") ||
-      model.startsWith("gpt-5.6")
+      model.startsWith("gpt-5.6") || model.startsWith("gpt-6")
     );
   }
 
@@ -2820,14 +3035,13 @@ class Chat {
     const apiKey = this._apiKey(provider, options);
     if (!apiKey && provider !== "local") throw new Error(`Missing API key for ${provider}`);
     const baseUrl = this._baseUrl(provider, options);
-    const reasoningEffort = this._providerReasoningEffort(provider, options.reasoning);
+    const reasoningEffort = this._providerReasoningEffort(provider, options.reasoning, model);
     const tools = this._toolDefinitions(provider);
     if (
       provider === "openai" &&
       tools?.length &&
-      reasoningEffort &&
-      reasoningEffort !== "none" &&
-      this._openaiToolsRejectReasoning(model)
+      (model.startsWith("gpt-6-astra") || model.startsWith("gpt-6.1-sol") ||
+        (reasoningEffort && reasoningEffort !== "none" && this._openaiToolsRejectReasoning(model)))
     ) {
       return this._callOpenAIResponses(messages, options, { model, apiKey, baseUrl, reasoningEffort });
     }
@@ -2901,6 +3115,8 @@ class Chat {
     };
   }
 
+  // TODO: Responses streaming is not supported here. Route Astra/6.1 Sol
+  // streaming tool calls through Responses once that streaming adapter exists.
   async *_streamOpenAICompatible(provider, messages, options = {}) {
     const model = this._resolvedModel(options, provider);
     const apiKey = this._apiKey(provider, options);
@@ -2924,7 +3140,7 @@ class Chat {
     if (streamMaxTokens !== undefined) {
       body[this._maxTokensParam(provider, model)] = streamMaxTokens;
     }
-    const reasoningEffort = this._providerReasoningEffort(provider, options.reasoning);
+    const reasoningEffort = this._providerReasoningEffort(provider, options.reasoning, model);
     if (reasoningEffort) body.reasoning_effort = reasoningEffort;
     if (provider === "xai" && options.webSearch) {
       body.search_parameters = options.searchParameters || options.search_parameters || {};

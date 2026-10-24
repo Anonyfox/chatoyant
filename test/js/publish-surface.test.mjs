@@ -68,12 +68,12 @@ describe("publish package surface", () => {
       else process.env.LOCAL_BASE_URL = previous;
     }
 
-    assert.equal(new Chat({ model: "best" }).model, "gpt-5.6-sol");
-    assert.equal(new Chat({ model: "cheap" }).model, "gpt-5.4-mini");
-    assert.equal(new Chat({ model: "best", provider: "anthropic" }).model, "claude-fable-5");
-    assert.equal(new Chat({ model: "balanced", provider: "anthropic" }).model, "claude-sonnet-5");
+    assert.equal(new Chat({ model: "best" }).model, "gpt-6-astra");
+    assert.equal(new Chat({ model: "cheap" }).model, "gpt-6-luna");
+    assert.equal(new Chat({ model: "best", provider: "anthropic" }).model, "claude-fable-5-1");
+    assert.equal(new Chat({ model: "balanced", provider: "anthropic" }).model, "claude-sonnet-5-5");
     assert.equal(new Chat({ model: "balanced", provider: "xai" }).model, "grok-4.3");
-    assert.equal(new Chat({ model: "best", provider: "xai" }).model, "grok-4.5");
+    assert.equal(new Chat({ model: "best", provider: "xai" }).model, "grok-4.7");
   });
 
   it("keeps gpt-5.6 function tools working around the reasoning lock", async () => {
@@ -373,7 +373,7 @@ describe("publish package surface", () => {
 
   it("shapes Meta Model API (Muse Spark) requests per its wire rules", async () => {
     assert.equal(detectProviderByModel("muse-spark-1.2"), "meta");
-    assert.deepEqual([...META_MODELS], ["muse-spark-1.2", "muse-spark-1.1", "muse-spark-1.2-contributor"]);
+    assert.deepEqual([...META_MODELS], ["muse-spark-1.3", "muse-spark-1.3-contributor", "muse-wonder-1.0", "muse-spark-1.2", "muse-spark-1.1", "muse-spark-1.2-contributor"]);
     assert.equal(CONTEXT_WINDOWS["muse-spark-1.2"], 1048576);
 
     const originalFetch = globalThis.fetch;

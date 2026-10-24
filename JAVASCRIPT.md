@@ -55,7 +55,7 @@ Anthropic image and document blocks, xAI image parts):
 import { Chat, OpenAI } from "chatoyant";
 
 // URLs, data: URIs, { data, mediaType } base64 objects, or provider file ids
-const chat = new Chat({ model: "gpt-5.6-terra" })
+const chat = new Chat({ model: "gpt-6.1-sol" })
   .user("What is in this photo, and what does the spec say?", {
     images: ["https://example.com/photo.jpg"],
     files: [{ fileId }],
@@ -102,6 +102,25 @@ it is priced and recognized but never selected by a preset.
 
 Intent presets resolve to provider-specific model names:
 
+| Preset | OpenAI | Anthropic | xAI | Meta |
+| --- | --- | --- | --- | --- |
+| fast / cheap | gpt-6-luna | claude-haiku-5-5 | grok-4-1-fast-non-reasoning | muse-spark-1.3 |
+| balanced | gpt-6.1-sol | claude-sonnet-5-5 | grok-4.3 | muse-spark-1.3 |
+| best / reasoning | gpt-6-astra | claude-fable-5-1 | grok-4.7 | muse-spark-1.3 |
+
+Also recognized: gpt-6-sol, gpt-5.6-cyber, gpt-5.5-cyber, gpt-5.3-codex,
+chat-latest, gpt-5-search-api, claude-mythos-5-1, claude-opus-5-5,
+claude-opus-5, grok-4.6, grok-build-0.1, muse-spark-1.3-contributor,
+muse-wonder-1.0, grok-imagine-image-2.0, grok-imagine-image-quality,
+grok-imagine-video-1.5, and grok-imagine-video-1.5-lite.
+
+OpenAI prices use the short-context tier (up to 272K input tokens); higher
+long-context rates are not modelled. GPT-5.6 Sol uses OpenAI's promotional
+price, at least through 2026-11-21. Haiku 5.5 prompts above 100K tokens
+and Grok Build prompts at or above 200K tokens have higher rates not modelled here.
+
+Retired on first-party APIs (ids still resolve for pricing/detection): claude-opus-4-1, claude-opus-4, claude-sonnet-4, claude-3-5-haiku/claude-3-*; xAI no longer lists grok-4-1-fast-*, grok-code-fast-1, grok-3*, grok-4-0709.
+
 ```ts
 await genText("Hello", { model: "fast" });
 await genText("Hello", { model: "balanced" });
@@ -114,7 +133,7 @@ Unified options map to provider request fields where supported:
 
 ```ts
 await genText("Explain CRDTs", {
-  model: "gpt-5.6-terra",
+  model: "gpt-6.1-sol",
   reasoning: "high",
   creativity: "balanced",
   maxTokens: 1000,

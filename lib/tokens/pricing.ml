@@ -7,9 +7,50 @@ let p ?cached ?cache_write_5m ?cache_write_1h ?per_image ?per_second ~input
 
 let all =
   [
-    ("gpt-5.6-sol", p ~input:5.0 ~output:30.0 ~cached:0.5 ());
-    ("gpt-5.6-terra", p ~input:2.5 ~output:15.0 ~cached:0.25 ());
-    ("gpt-5.6-luna", p ~input:1.0 ~output:6.0 ~cached:0.1 ());
+    (* OpenAI bills >272K input at a higher long-context tier not modelled here. *)
+    ("gpt-6-astra", p ~input:10.0 ~output:50.0 ~cached:1.0 ());
+    ("gpt-6.1-sol", p ~input:2.0 ~output:10.0 ~cached:0.1 ());
+    ("gpt-6-sol", p ~input:2.0 ~output:10.0 ~cached:0.2 ());
+    ("gpt-6-luna", p ~input:0.1 ~output:0.5 ~cached:0.01 ());
+    ("gpt-5.6-cyber", p ~input:12.5 ~output:75.0 ~cached:1.25 ());
+    ("gpt-5.5-cyber", p ~input:12.5 ~output:75.0 ~cached:1.25 ());
+    ("gpt-5.3-codex", p ~input:1.75 ~output:14.0 ~cached:0.175 ());
+    ("chat-latest", p ~input:5.0 ~output:30.0 ~cached:0.5 ());
+    ("gpt-5-search-api", p ~input:1.25 ~output:10.0 ~cached:0.125 ());
+    ( "claude-fable-5-1",
+      p ~input:10.0 ~output:50.0 ~cached:0.25 ~cache_write_5m:12.5
+        ~cache_write_1h:20.0 () );
+    ( "claude-mythos-5-1",
+      p ~input:10.0 ~output:50.0 ~cached:0.25 ~cache_write_5m:12.5
+        ~cache_write_1h:20.0 () );
+    ( "claude-opus-5-5",
+      p ~input:4.0 ~output:20.0 ~cached:0.2 ~cache_write_5m:5.0
+        ~cache_write_1h:8.0 () );
+    ( "claude-opus-5",
+      p ~input:5.0 ~output:25.0 ~cached:0.5 ~cache_write_5m:6.25
+        ~cache_write_1h:10.0 () );
+    ( "claude-sonnet-5-5",
+      p ~input:2.0 ~output:10.0 ~cached:0.1 ~cache_write_5m:2.5
+        ~cache_write_1h:4.0 () );
+    (* Prompts >100K tokens bill 0.50/2.50/0.05/0.625/1, not modelled. *)
+    ( "claude-haiku-5-5",
+      p ~input:0.1 ~output:0.5 ~cached:0.01 ~cache_write_5m:0.125
+        ~cache_write_1h:0.2 () );
+    ("grok-4.7", p ~input:2.0 ~output:6.0 ~cached:0.5 ());
+    ("grok-4.6", p ~input:2.0 ~output:6.0 ~cached:0.5 ());
+    (* >=200K prompt tokens bill 2x, not modelled. *)
+    ("grok-build-0.1", p ~input:1.0 ~output:2.0 ~cached:0.2 ());
+    ("muse-spark-1.3", p ~input:1.25 ~output:4.25 ~cached:0.15 ());
+    ("muse-spark-1.3-contributor", p ~input:0.1 ~output:0.2 ~cached:0.002 ());
+    ("muse-wonder-1.0", p ~input:4.0 ~output:20.0 ~cached:0.2 ());
+    ("grok-imagine-image-2.0", p ~input:0.0 ~output:0.0 ~per_image:0.04 ());
+    ("grok-imagine-image-quality", p ~input:0.0 ~output:0.0 ~per_image:0.05 ());
+    ("grok-imagine-video-1.5", p ~input:0.0 ~output:0.0 ~per_second:0.08 ());
+    ("grok-imagine-video-1.5-lite", p ~input:0.0 ~output:0.0 ~per_second:0.02 ());
+    (* OpenAI promotional price, at least through 2026-11-21. *)
+    ("gpt-5.6-sol", p ~input:4.0 ~output:20.0 ~cached:0.4 ());
+    ("gpt-5.6-terra", p ~input:2.0 ~output:12.0 ~cached:0.2 ());
+    ("gpt-5.6-luna", p ~input:0.2 ~output:1.2 ~cached:0.02 ());
     ("gpt-5.5", p ~input:5.0 ~output:30.0 ~cached:0.5 ());
     ("gpt-5.5-pro", p ~input:30.0 ~output:180.0 ());
     ("gpt-5.4", p ~input:2.5 ~output:15.0 ~cached:0.25 ());
@@ -39,8 +80,8 @@ let all =
     ("gpt-4.1", p ~input:2.0 ~output:8.0 ~cached:0.5 ());
     ("gpt-4.1-mini", p ~input:0.4 ~output:1.6 ~cached:0.1 ());
     ("gpt-4.1-nano", p ~input:0.1 ~output:0.4 ~cached:0.025 ());
-    ("gpt-4-turbo", p ~input:5.0 ~output:15.0 ());
-    ("gpt-4-turbo-2024-04-09", p ~input:5.0 ~output:15.0 ());
+    ("gpt-4-turbo", p ~input:10.0 ~output:30.0 ());
+    ("gpt-4-turbo-2024-04-09", p ~input:10.0 ~output:30.0 ());
     ("gpt-4-turbo-preview", p ~input:5.0 ~output:15.0 ());
     ("gpt-4", p ~input:30.0 ~output:60.0 ());
     ("gpt-4-0613", p ~input:30.0 ~output:60.0 ());
@@ -75,10 +116,10 @@ let all =
     ( "claude-opus-4-7",
       p ~input:5.0 ~output:25.0 ~cached:0.5 ~cache_write_5m:6.25
         ~cache_write_1h:10.0 () );
-    (* List price; an introductory $2/$10 per MTok applies through 2026-08-31. *)
+    (* Standard price, including the former introductory discount. *)
     ( "claude-sonnet-5",
-      p ~input:3.0 ~output:15.0 ~cached:0.3 ~cache_write_5m:3.75
-        ~cache_write_1h:6.0 () );
+      p ~input:2.0 ~output:10.0 ~cached:0.2 ~cache_write_5m:2.5
+        ~cache_write_1h:4.0 () );
     ( "claude-opus-4-6",
       p ~input:5.0 ~output:25.0 ~cached:0.5 ~cache_write_5m:6.25
         ~cache_write_1h:10.0 () );
@@ -103,6 +144,7 @@ let all =
     ( "claude-haiku-4-5",
       p ~input:1.0 ~output:5.0 ~cached:0.1 ~cache_write_5m:1.25
         ~cache_write_1h:2.0 () );
+    (* retired on the provider's first-party API as of 2026-10; kept so existing ids still resolve *)
     ( "claude-opus-4-1-20250805",
       p ~input:15.0 ~output:75.0 ~cached:1.5 ~cache_write_5m:18.75
         ~cache_write_1h:30.0 () );
@@ -139,11 +181,12 @@ let all =
     ("muse-spark-1.2", p ~input:1.25 ~output:4.25 ~cached:0.15 ());
     ("muse-spark-1.1", p ~input:1.25 ~output:4.25 ~cached:0.15 ());
     ("muse-spark-1.2-contributor", p ~input:0.1 ~output:0.2 ~cached:0.002 ());
-    ("grok-4.5", p ~input:2.0 ~output:6.0 ~cached:0.5 ());
+    ("grok-4.5", p ~input:2.0 ~output:6.0 ~cached:0.3 ());
     ("grok-4.3", p ~input:1.25 ~output:2.5 ~cached:0.2 ());
     ("grok-4.20-0309-reasoning", p ~input:1.25 ~output:2.5 ~cached:0.2 ());
     ("grok-4.20-0309-non-reasoning", p ~input:1.25 ~output:2.5 ~cached:0.2 ());
     ("grok-4.20-multi-agent-0309", p ~input:1.25 ~output:2.5 ~cached:0.2 ());
+    (* retired on the provider's first-party API as of 2026-10; kept so existing ids still resolve *)
     ("grok-4-1-fast-reasoning", p ~input:0.2 ~output:0.5 ~cached:0.05 ());
     ("grok-4-1-fast-non-reasoning", p ~input:0.2 ~output:0.5 ~cached:0.05 ());
     ("grok-4-fast-reasoning", p ~input:0.2 ~output:0.5 ~cached:0.05 ());
@@ -180,13 +223,13 @@ let family_model model =
   if
     starts_with ~prefix:"claude" lower
     && (contains lower "fable" || contains lower "mythos")
-  then Some "claude-fable-5"
+  then Some "claude-fable-5-1"
   else if starts_with ~prefix:"claude" lower && contains lower "opus" then
-    Some "claude-opus-4-8"
+    Some "claude-opus-5-5"
   else if starts_with ~prefix:"claude" lower && contains lower "sonnet" then
-    Some "claude-sonnet-5"
+    Some "claude-sonnet-5-5"
   else if starts_with ~prefix:"claude" lower && contains lower "haiku" then
-    Some "claude-haiku-4-5"
+    Some "claude-haiku-5-5"
   else if starts_with ~prefix:"gpt-" lower && contains lower "-nano" then
     Some "gpt-5.4-nano"
   else if starts_with ~prefix:"gpt-" lower && contains lower "-mini" then
@@ -195,8 +238,8 @@ let family_model model =
     Some "gpt-5.4-pro"
   else if starts_with ~prefix:"gpt-" lower && contains lower "-codex" then
     Some "gpt-5.2-codex"
-  else if starts_with ~prefix:"gpt-" lower && contains lower "o" then
-    Some "gpt-4o"
+  else if starts_with ~prefix:"gpt-6" lower then Some "gpt-6.1-sol"
+  else if starts_with ~prefix:"gpt-4o" lower then Some "gpt-4o"
   else if starts_with ~prefix:"gpt-" lower then Some "gpt-5.4"
   else if starts_with ~prefix:"o" lower && contains lower "-mini" then
     Some "o4-mini"
@@ -214,14 +257,27 @@ let family_model model =
     Some "grok-3-mini"
   else if starts_with ~prefix:"grok-" lower && contains lower "code" then
     Some "grok-code-fast-1"
+  else if starts_with ~prefix:"grok-imagine-image-quality" lower then
+    Some "grok-imagine-image-quality"
+  else if starts_with ~prefix:"grok-imagine-image-2.0" lower then
+    Some "grok-imagine-image-2.0"
+  else if starts_with ~prefix:"grok-imagine-video-1.5-lite" lower then
+    Some "grok-imagine-video-1.5-lite"
+  else if starts_with ~prefix:"grok-imagine-video-1.5" lower then
+    Some "grok-imagine-video-1.5"
   else if starts_with ~prefix:"grok-imagine-image-pro" lower then
     Some "grok-imagine-image-pro"
   else if starts_with ~prefix:"grok-imagine-image" lower then
     Some "grok-imagine-image"
   else if starts_with ~prefix:"grok-imagine-video" lower then
     Some "grok-imagine-video"
-  else if starts_with ~prefix:"grok-" lower then Some "grok-4.5"
+  else if starts_with ~prefix:"grok-" lower then Some "grok-4.7"
   else if starts_with ~prefix:"chatgpt" lower then Some "o1-pro"
+  else if starts_with ~prefix:"muse-wonder" lower then Some "muse-wonder-1.0"
+  else if starts_with ~prefix:"muse-spark" lower then
+    Some
+      (if contains lower "contributor" then "muse-spark-1.3-contributor"
+       else "muse-spark-1.3")
   else None
 
 let provider_max_model model =
