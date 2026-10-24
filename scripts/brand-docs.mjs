@@ -170,6 +170,7 @@ for await (const file of walk(OUT)) {
       author: { "@type": "Person", name: "Anonyfox", url: "https://anonyfox.com" },
     };
     head.push(`<script type="application/ld+json">${JSON.stringify(ld)}</script>`);
+    head.push(`<meta name="msvalidate.01" content="87D8EC84DD2BC0419BCA605CBBD5E36F"/>`);
   }
 
   const ids = new Map();
@@ -259,5 +260,13 @@ await writeFile(
     "",
   ].join("\n"),
 );
+
+// Search engine ownership files (Google, Bing, IndexNow key), copied byte-for-byte after
+// branding and the sitemap so they are neither rewritten nor listed.
+const VERIFY = join(ROOT, "doc", "site-verification");
+if (existsSync(VERIFY)) {
+  for (const name of await readdir(VERIFY)) await cp(join(VERIFY, name), join(OUT, name));
+}
+await writeFile(join(OUT, ".nojekyll"), "");
 
 console.log(`brand-docs: built ${OUT} (${urls.length} pages, sitemap.xml, robots.txt, llms.txt)`);
