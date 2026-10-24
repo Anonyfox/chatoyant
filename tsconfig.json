@@ -11,7 +11,6 @@
     "noUnusedParameters": true,
     "exactOptionalPropertyTypes": false,
     "allowSyntheticDefaultImports": true,
-    "baseUrl": ".",
     "paths": {
       "chatoyant": ["./dist/index.d.ts"]
     }
