@@ -3144,8 +3144,8 @@ let sampling_locked model =
     && model.[1] >= '0'
     && model.[1] <= '9'
   in
-  o_series || model = "gpt-5" || has "gpt-5-" || has "gpt-5.5"
-  || has "gpt-5.6" || has "gpt-6"
+  o_series || model = "gpt-5" || has "gpt-5-" || has "gpt-5.5" || has "gpt-5.6"
+  || has "gpt-6"
 
 module Make_provider
     (Http : Chatoyant_runtime.Effect.HTTP)

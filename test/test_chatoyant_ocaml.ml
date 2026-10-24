@@ -1440,13 +1440,11 @@ let () =
   assert_equal_string "grok-4-1-fast-non-reasoning"
     (Option.get
        (Chatoyant.Core.Preset.resolve_model_preset
-          ~provider:Chatoyant.Provider.Provider.Xai
-          Chatoyant.Core.Preset.Fast));
+          ~provider:Chatoyant.Provider.Provider.Xai Chatoyant.Core.Preset.Fast));
   assert_equal_string "grok-4-1-fast-non-reasoning"
     (Option.get
        (Chatoyant.Core.Preset.resolve_model_preset
-          ~provider:Chatoyant.Provider.Provider.Xai
-          Chatoyant.Core.Preset.Cheap));
+          ~provider:Chatoyant.Provider.Provider.Xai Chatoyant.Core.Preset.Cheap));
   assert_equal_string "grok-4.3"
     (Option.get
        (Chatoyant.Core.Preset.resolve_model_preset
@@ -1455,8 +1453,7 @@ let () =
   assert_equal_string "grok-4.7"
     (Option.get
        (Chatoyant.Core.Preset.resolve_model_preset
-          ~provider:Chatoyant.Provider.Provider.Xai
-          Chatoyant.Core.Preset.Best));
+          ~provider:Chatoyant.Provider.Provider.Xai Chatoyant.Core.Preset.Best));
   assert_equal_string "grok-4.7"
     (Option.get
        (Chatoyant.Core.Preset.resolve_model_preset
@@ -1465,13 +1462,11 @@ let () =
   assert_equal_string "muse-spark-1.3"
     (Option.get
        (Chatoyant.Core.Preset.resolve_model_preset
-          ~provider:Chatoyant.Provider.Provider.Meta
-          Chatoyant.Core.Preset.Fast));
+          ~provider:Chatoyant.Provider.Provider.Meta Chatoyant.Core.Preset.Fast));
   assert_equal_string "muse-spark-1.3"
     (Option.get
        (Chatoyant.Core.Preset.resolve_model_preset
-          ~provider:Chatoyant.Provider.Provider.Meta
-          Chatoyant.Core.Preset.Cheap));
+          ~provider:Chatoyant.Provider.Provider.Meta Chatoyant.Core.Preset.Cheap));
   assert_equal_string "muse-spark-1.3"
     (Option.get
        (Chatoyant.Core.Preset.resolve_model_preset
@@ -1480,8 +1475,7 @@ let () =
   assert_equal_string "muse-spark-1.3"
     (Option.get
        (Chatoyant.Core.Preset.resolve_model_preset
-          ~provider:Chatoyant.Provider.Provider.Meta
-          Chatoyant.Core.Preset.Best));
+          ~provider:Chatoyant.Provider.Provider.Meta Chatoyant.Core.Preset.Best));
   assert_equal_string "muse-spark-1.3"
     (Option.get
        (Chatoyant.Core.Preset.resolve_model_preset
@@ -1492,9 +1486,11 @@ let () =
     assert_true (model ^ " input") (pricing.input_per_million = input);
     assert_true (model ^ " output") (pricing.output_per_million = output);
     assert_true (model ^ " cached") (pricing.cached_per_million = cached);
-    assert_true (model ^ " cache write 5m")
+    assert_true
+      (model ^ " cache write 5m")
       (pricing.cache_write_per_million = write_5m);
-    assert_true (model ^ " cache write 1h")
+    assert_true
+      (model ^ " cache write 1h")
       (pricing.cache_write_1h_per_million = write_1h)
   in
   check_price "gpt-6-astra" 10.0 50.0 (Some 1.0) None None;
@@ -1576,8 +1572,7 @@ let () =
   assert_equal_provider Chatoyant.Provider.Provider.Xai
     (Option.get (Chatoyant.Provider.Registry.detect_by_model "grok-4.7"));
   assert_equal_provider Chatoyant.Provider.Provider.Meta
-    (Option.get
-       (Chatoyant.Provider.Registry.detect_by_model "muse-wonder-1.0"));
+    (Option.get (Chatoyant.Provider.Registry.detect_by_model "muse-wonder-1.0"));
   let video =
     Option.get (Chatoyant.Tokens.Pricing.get "grok-imagine-video-1.5")
   in
@@ -1591,8 +1586,7 @@ let () =
         let api_key = "test"
         let base_url = "https://example.test/v1"
         let timeout_ms = Some 1_000
-      end)
-  in
+      end) in
   let body_for model effort =
     Fake_anthropic_http.last_request := None;
     (* The fake returns Anthropic JSON; only the captured request matters. *)
@@ -1623,7 +1617,8 @@ let () =
       let body = body_for model "none" in
       List.iter
         (fun key ->
-          assert_true (model ^ " drops " ^ key)
+          assert_true
+            (model ^ " drops " ^ key)
             (not (contains_substring key body)))
         [ "temperature"; "top_p"; "frequency_penalty"; "presence_penalty" ];
       assert_contains "\"effort\":\"low\"" (body_for model "minimal"))
