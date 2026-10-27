@@ -25,6 +25,9 @@ const OUT = join(ROOT, "_site");
 const CSS_SRC = join(ROOT, "doc/odoc-brand.css");
 const ODOC_CSS = join(OUT, "odoc.support/odoc.css");
 const INDEX = join(OUT, "index.html");
+const GUIDE = join(OUT, "chatoyant/ocaml_llm_guide.html");
+const GUIDE_TITLE = "Call GPT-6, Claude 5.5 and Grok 4.7 from OCaml (Eio) | Chatoyant";
+const GUIDE_DESCRIPTION = "Call OpenAI, Anthropic and xAI from OCaml with Eio: compiled examples, model presets, tools, JSON schemas, streaming limits and token costs.";
 const PACKAGE_INDEX = join(OUT, "chatoyant/index.html");
 
 const SITE = "https://anonyfox.github.io/chatoyant/";
@@ -134,6 +137,8 @@ for await (const file of walk(OUT)) {
     html = html
       .replace("<title>index</title>", "<title>Chatoyant: OCaml-first LLM SDK</title>")
       .replace("<h2>OCaml package documentation</h2>", HERO);
+  } else if (file === GUIDE) {
+    html = html.replace(/<title>[^<]*<\/title>/, `<title>${GUIDE_TITLE}</title>`);
   } else if (file === PACKAGE_INDEX) {
     html = html.replace(
       /<title>[^<]*<\/title>/,
@@ -141,8 +146,13 @@ for await (const file of walk(OUT)) {
     );
   }
 
+  if (file === PACKAGE_INDEX) {
+    html = html.replace('<div class="odoc-content">',
+      '<div class="odoc-content"><p><a href="ocaml_llm_guide.html">Call GPT-6, Claude 5.5 and Grok 4.7 from OCaml with Eio</a>: install, provider calls, tools, schemas and request costs.</p>');
+  }
+
   const title = plain(html.match(/<title>([\s\S]*?)<\/title>/)?.[1] ?? "Chatoyant");
-  const description = file === INDEX ? SUMMARY : describe(html, title);
+  const description = file === INDEX ? SUMMARY : file === GUIDE ? GUIDE_DESCRIPTION : describe(html, title);
   const fav = relative(dirname(file), join(OUT, FAVICON)).split(sep).join("/");
   const head = [
     `<link rel="canonical" href="${url}"/>`,
@@ -269,6 +279,7 @@ await writeFile(
     `- [README](${blob("README.md")}): overview, install, providers, package size table`,
     `- [JAVASCRIPT.md](${blob("JAVASCRIPT.md")}): JavaScript and TypeScript guide for the npm package`,
     `- [OCAML.md](${blob("OCAML.md")}): OCaml guide (Eio runtime, ppx codecs, typed tools)`,
+    `- [OCaml LLM guide](${SITE}chatoyant/ocaml_llm_guide.html): GPT-6, Claude 5.5 and Grok 4.7 with Eio`,
     `- [API reference](${SITE}chatoyant/): odoc reference for every OCaml library in the package`,
     "",
     "## API entry modules",

@@ -1,0 +1,6 @@
+; Build-only example: the entry point is inside an unapplied functor.
+
+(executable
+ (name guide_entry)
+ (modules guide_steps guide_entry)
+ (libraries chatoyant eio.unix))

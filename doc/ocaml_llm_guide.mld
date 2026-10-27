@@ -1,0 +1,230 @@
+{0 Call GPT-6, Claude 5.5 and Grok 4.7 from OCaml with Eio}
+
+As of 27 October 2026, install chatoyant with [opam install chatoyant] and use [Chatoyant_native] inside [Eio_main.run] to call GPT-6, Claude 5.5 and Grok 4.7 from OCaml. Create one [Chat] per provider and set [OPENAI_API_KEY], [ANTHROPIC_API_KEY] and [XAI_API_KEY] in the process environment.
+
+This guide targets the API in this repository. Model access depends on your provider account. The examples use explicit model IDs so a preset change cannot silently change their selection.
+
+{1 Install and build}
+
+Install [chatoyant] and [eio_main] with opam: [opam install chatoyant eio_main]. Use OCaml 5.3 or later. Set each API key in the environment of the program; keep secrets out of source files.
+
+Save the OCaml blocks below, in order, as [guide.ml]. Add a [dune] file with [(executable (name guide) (libraries chatoyant eio_main))]. Build with [dune build guide.exe] and run with [dune exec ./guide.exe]. The final entry point makes three paid requests. The other functions are examples you can call explicitly.
+
+The repository keeps the function definitions in [examples/ocaml_llm_guide/guide_steps.ml] and the entry point in [guide_entry.ml]. They are compiled during the default build without executing requests. The entry point is also checked against an explicit Eio runner signature when [eio_main] is unavailable.
+
+{1 A minimal call for each provider}
+
+Use [ask_text] when you only need text. Both the native module and the aggregate [Chatoyant.Chat] expose this API. Each chat retains its conversation history; reuse it for follow-up turns.
+
+{[
+module Chat = Chatoyant_native.Chat
+
+let print_text = function
+  | Ok text -> print_endline text
+  | Error error -> prerr_endline (Chatoyant.Error.provider error)
+
+let openai_call env =
+  let chat = Chat.openai ~model:"gpt-6.1-sol" env () in
+  Chat.ask_text ~max_tokens:128 "Explain Eio cancellation in one sentence." chat
+  |> print_text
+
+let anthropic_call env =
+  let chat = Chat.anthropic ~model:"claude-sonnet-5-5" env () in
+  Chat.ask_text ~max_tokens:128 "Explain Eio cancellation in one sentence." chat
+  |> print_text
+
+let xai_call env =
+  let chat = Chat.xai ~model:"grok-4.7" env () in
+  Chat.ask_text ~max_tokens:128 "Explain Eio cancellation in one sentence." chat
+  |> print_text
+]}
+
+OpenAI uses the Responses API. Anthropic uses its Messages API. xAI has its own native provider constructor. [~api_key] can override environment lookup on each constructor.
+
+{1 Model presets}
+
+These are the mappings in {{:https://github.com/Anonyfox/chatoyant/blob/main/lib/core/preset.ml}lib/core/preset.ml}. Presets select model IDs; they are not measured latency or quality guarantees.
+
+{t
+| Preset | OpenAI | Anthropic | xAI | Meta |
+| fast | gpt-6-luna | claude-haiku-5-5 | grok-4.20-0309-non-reasoning | muse-spark-1.3 |
+| cheap | gpt-6-luna | claude-haiku-5-5 | grok-4.20-0309-non-reasoning | muse-spark-1.3 |
+| balanced | gpt-6.1-sol | claude-sonnet-5-5 | grok-4.3 | muse-spark-1.3 |
+| best | gpt-6-astra | claude-fable-5-1 | grok-4.7 | muse-spark-1.3 |
+| reasoning | gpt-6-astra | claude-fable-5-1 | grok-4.7 | muse-spark-1.3 |
+}
+
+Resolve presets explicitly before passing [~model]. Local and OpenRouter have no preset mapping. Selecting the [Reasoning] model preset is separate from setting the request's [Options.reasoning] effort.
+
+{[
+let balanced_openai env =
+  let model =
+    Chatoyant.Core.Preset.resolve_model_preset
+      ~provider:Chatoyant.Provider.Provider.Openai
+      Chatoyant.Core.Preset.Balanced
+    |> Option.get
+  in
+  Chat.openai ~model env ()
+]}
+
+{1 Switch providers with the same application code}
+
+Pass a [Chat.t] to application functions. Choose the constructor and model at the boundary. Creating another chat starts a separate history; it does not transfer the old conversation. [Chat.clone] and [Chat.fork] retain the original provider.
+
+{[
+let summarize chat text =
+  Chat.ask_text ~max_tokens:256 ("Summarize this text:\n" ^ text) chat
+
+let switch_provider env provider text =
+  let chat =
+    match provider with
+    | `Openai -> Chat.openai ~model:"gpt-6.1-sol" env ()
+    | `Anthropic -> Chat.anthropic ~model:"claude-sonnet-5-5" env ()
+    | `Xai -> Chat.xai ~model:"grok-4.7" env ()
+  in
+  summarize chat text
+]}
+
+For independent requests with a reusable client, [Chatoyant.gen_text] forks the supplied client before appending messages. Direct [Chat.ask_text] calls mutate history.
+
+{1 Streaming: what the native API supports}
+
+[Chat.stream_accumulate] consumes a list of already decoded frames. It does not open an HTTP stream or deliver tokens as they arrive. [Chat.generate] and [Chat.ask_text] return after generation. The native HTTP effect buffers response bodies, so adding a stream flag does not provide live token delivery.
+
+For a custom transport, decode provider SSE events with [Chatoyant.Provider.Openai.responses_stream_events_of_chunks], [Chatoyant.Provider.Anthropic.stream_events_of_chunks] or [Chatoyant.Provider.Xai.responses_stream_events_of_chunks]. Map those events to [Core.Stream.frame] values before accumulation. A UI that requires live updates needs a transport that exposes chunks and incremental event decoding.
+
+The following function accepts those normalized frames, prints their text deltas and records the accumulated result in the chat. Its input is already buffered; it makes no network request.
+
+{[
+let accumulate_stream chat (frames : Chatoyant.Core.Stream.frame list) =
+  List.iter
+    (fun (frame : Chatoyant.Core.Stream.frame) ->
+      Option.iter
+        (fun text ->
+          print_string text;
+          flush stdout)
+        frame.content_delta)
+    frames;
+  Chat.stream_accumulate frames chat
+]}
+
+{1 Let the model call a tool}
+
+A typed tool carries argument and result schemas. The SDK decodes model arguments before calling the handler and sends the result back into its generation loop. This example computes a square locally. It does not grant access to external systems. Tool selection remains the model's decision.
+
+{[
+type square_args = { value : int }
+
+let square_args_codec =
+  let open Chatoyant.Schema.Codec in
+  object1
+    (field "value" (int ()) ~get:(fun args -> args.value))
+    (fun value -> { value })
+
+let square_tool =
+  Chatoyant.Core.Tool.create_typed ~name:"square"
+    ~description:"Square an integer." ~args:square_args_codec
+    ~result:(Chatoyant.Schema.Codec.int ()) (fun _context args ->
+      Ok (args.value * args.value))
+
+let tool_call env =
+  let chat = Chat.openai ~model:"gpt-6.1-sol" env () in
+  Chat.ask_text ~tools:[ square_tool ] ~max_tokens:256
+    "Use square to calculate the square of 12." chat
+]}
+
+Use bounded inputs for arithmetic in production. The default tool loop allows 50 iterations; [Options.max_tool_iterations] changes that bound. Handlers return [Error message] for application failures.
+
+{1 Structured output with a schema}
+
+A codec defines the JSON Schema and the OCaml decoder together. This schema requires an object with a string [language] and a boolean [uses_eio]. [gen_data] returns the decoded record or a provider error.
+
+{[
+type project = { language : string; uses_eio : bool }
+
+let project_codec =
+  let open Chatoyant.Schema.Codec in
+  object2
+    (field "language" (string ()) ~get:(fun p -> p.language))
+    (field "uses_eio" (bool ()) ~get:(fun p -> p.uses_eio))
+    (fun language uses_eio -> { language; uses_eio })
+
+let structured_output env =
+  let client = Chatoyant.openai ~model:"gpt-6.1-sol" env in
+  Chatoyant.gen_data ~name:"project" ~strict:true ~codec:project_codec
+    ~max_tokens:256 client "Describe an OCaml project using Eio."
+]}
+
+OpenAI sends Responses structured output settings. OpenAI-compatible providers use [response_format]. Anthropic receives a schema instruction with local validation. A schema does not guarantee factual accuracy. [chatoyant.ppx] can derive codecs for larger record types.
+
+{1 Tokens and cost for a request}
+
+Use [ask] instead of [ask_text] to retain metadata. [usage_source] distinguishes provider-reported usage from estimates. [cost.actual_usd] is optional; do not replace a missing billed amount with a claim that the estimate is the invoice.
+
+{[
+let request_accounting env =
+  let chat = Chat.openai ~model:"gpt-6.1-sol" env () in
+  match Chat.ask ~max_tokens:128 "What is an Eio switch?" chat with
+  | Error error -> prerr_endline (Chatoyant.Error.provider error)
+  | Ok result ->
+      Printf.printf
+        "%s\ninput=%d output=%d cached=%d source=%s estimated=$%.6f\n"
+        result.content result.usage.input_tokens result.usage.output_tokens
+        result.usage.cached_tokens
+        (Chatoyant.Tokens.Cost.source_to_string result.usage_source)
+        result.cost.estimated_usd;
+      Option.iter (Printf.printf "provider cost=$%.6f\n") result.cost.actual_usd
+]}
+
+These USD rates per million tokens are the rows in {{:https://github.com/Anonyfox/chatoyant/blob/main/lib/tokens/pricing.ml}lib/tokens/pricing.ml}. They are the SDK's accounting inputs as of this guide's date.
+
+{t
+| Model | Input | Output | Cached input | Cache write 5m | Cache write 1h |
+| gpt-6.1-sol | 2.00 | 10.00 | 0.10 | unavailable | unavailable |
+| claude-sonnet-5-5 | 2.00 | 10.00 | 0.10 | 2.50 | 4.00 |
+| grok-4.7 | 2.00 | 6.00 | 0.50 | unavailable | unavailable |
+}
+
+For 1,000 uncached input tokens and 200 output tokens, these rows give $0.004 for GPT-6.1 Sol or Claude Sonnet 5.5 and $0.0032 for Grok 4.7. This arithmetic excludes caching and additional charges. OpenAI input above 272K uses a higher tier that this table does not model. Pricing lookup can fall back to family estimates for unknown IDs; use exact IDs when auditing costs.
+
+{1 Pin the Anthropic API version}
+
+The default header is [anthropic-version: 2023-06-01]. Pass [?anthropic_version] to the Anthropic constructor to pin it explicitly. This header is separate from the Claude model ID. [~beta_headers] accepts optional beta feature headers.
+
+{[
+let pinned_anthropic env =
+  Chat.anthropic ~model:"claude-sonnet-5-5" ~anthropic_version:"2023-06-01" env
+    ()
+]}
+
+{1 Errors and missing keys}
+
+Constructors accept omitted keys. A missing key produces [Missing_api_key] on generation rather than raising at construction. Explicit [~api_key] takes precedence over environment lookup. Treat keys as secrets when logging diagnostics.
+
+{[
+let handle_text_result = function
+  | Ok text -> print_endline text
+  | Error (Chatoyant.Provider.Provider.Missing_api_key { env_key; _ }) ->
+      Printf.eprintf "Set %s before generating.\n" env_key
+  | Error (Chatoyant.Provider.Provider.Http_error { status; _ }) ->
+      Printf.eprintf "Provider returned HTTP %d.\n" status
+  | Error error -> prerr_endline (Chatoyant.Error.provider error)
+]}
+
+Other variants include [Decode_error], [Unsupported] and [Runtime_error]. Inspect the error before retrying. An HTTP error retains its status and body. Transport failures are surfaced through provider errors; [Error.http] renders errors from direct native HTTP helper calls. Eio cancellation and exceptions from application code still need application-level handling.
+
+{1 Run the minimal calls}
+
+Place this entry point after the definitions above. It calls the providers sequentially. Avoid sharing a mutable chat between concurrent fibers without coordinating access.
+
+{[
+let () =
+  Eio_main.run (fun env ->
+      openai_call env;
+      anthropic_call env;
+      xai_call env)
+]}
+
+{1 Related documentation}
+
+Use {!module:Chatoyant_native} for the complete Eio API and {{!module:Chatoyant}Chatoyant aggregate API} for the aggregate entry point. The same SDK ships as a zero-dependency npm package; see {{:https://github.com/Anonyfox/chatoyant/blob/main/JAVASCRIPT.md}JAVASCRIPT.md} for JavaScript and TypeScript usage.
