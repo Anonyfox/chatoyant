@@ -11,6 +11,9 @@
 //   - writes robots.txt, sitemap.xml and llms.txt.
 // Run after `dune build @doc`; ./_site is what gets deployed to GitHub Pages.
 
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+const exec = promisify(execFile);
 import { existsSync } from "node:fs";
 import { chmod, cp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
@@ -210,13 +213,37 @@ const css = (await readFile(ODOC_CSS, "utf8")).replace(
 );
 await writeFile(ODOC_CSS, `${css}\n/* chatoyant-brand */\n${brand}`);
 
+// Resolve odoc module paths (including nested modules) to their source file.
+const tracked = (await exec("git", ["ls-files", "lib", "doc", "*.md"], { cwd: ROOT, encoding: "utf8" })).stdout.trim().split("\n");
+const dateCache = new Map();
+async function lastCommit(files) {
+  const key = files.join("\0");
+  if (!dateCache.has(key)) dateCache.set(key,
+    (await exec("git", ["log", "-1", "--format=%cs", "--", ...files], { cwd: ROOT, encoding: "utf8" })).stdout.trim());
+  return dateCache.get(key);
+}
+const fallbackDate = await lastCommit(["lib/", "doc/"]);
+async function lastmod(url) {
+  const parts = decodeURIComponent(url.slice(SITE.length)).split("/").filter(p => p && p !== "index.html");
+  for (const part of parts.slice(1).reverse()) {
+    const name = part.replace(/\.html$/, "").toLowerCase();
+    for (const ext of ["mli", "ml"]) {
+      const source = tracked.find(f => f.startsWith("lib/") && f.split("/").at(-1).toLowerCase() === `${name}.${ext}`);
+      if (source) return (await lastCommit([source])) || fallbackDate;
+    }
+  }
+  const name = (parts.at(-1) || "readme").replace(/^(page-)|\.html$/g, "").toLowerCase();
+  const source = tracked.find(f => /\.(mld|md)$/i.test(f) && f.split("/").at(-1).replace(/\.(mld|md)$/i, "").toLowerCase() === name);
+  return source ? (await lastCommit([source])) || fallbackDate : fallbackDate;
+}
+
 // Crawler and LLM entry points.
 urls.sort((a, b) => a.length - b.length || a.localeCompare(b));
 await writeFile(
   join(OUT, "sitemap.xml"),
   '<?xml version="1.0" encoding="UTF-8"?>\n' +
     '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
-    urls.map((u) => `  <url><loc>${escapeAttr(u)}</loc></url>\n`).join("") +
+    (await Promise.all(urls.map(async (u) => `  <url><loc>${escapeAttr(u)}</loc><lastmod>${await lastmod(u)}</lastmod></url>\n`))).join("") +
     "</urlset>\n",
 );
 await writeFile(join(OUT, "robots.txt"), `User-agent: *\nAllow: /\n\nSitemap: ${SITE}sitemap.xml\n`);
