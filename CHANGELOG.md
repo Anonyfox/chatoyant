@@ -4,7 +4,7 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## 0.16.0 — 2026-10-27
 
 ### Added
 
@@ -18,6 +18,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Docs
 
+- New guide: [Call GPT-6, Claude 5.5 and Grok 4.7 from OCaml with Eio](https://anonyfox.github.io/chatoyant/chatoyant/ocaml_llm_guide.html). Its code blocks are compiled from `examples/ocaml_llm_guide`.
 - Docs site: every page now has `lang`, a canonical URL, a description and
   Open Graph tags; the build also writes `robots.txt`, `sitemap.xml` and
   `llms.txt`. Logo served as a 7.5 KB WebP instead of the 565 KB PNG, solid
