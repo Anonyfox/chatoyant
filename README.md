@@ -36,22 +36,27 @@ _chatoyant_ /shuh-TOY-uhnt/ - having a changeable lustre.
 
 ## Package Size Next To Other JS LLM Libraries
 
-Chatoyant ships every provider client, the JSON Schema validator and the
-token/cost tables in one npm package with no runtime dependencies. Numbers
-below come from `npm view <pkg> version dist.unpackedSize dependencies` on
-2026-10-24. Unpacked size is the published tarball only; transitive
-dependencies and separate provider packages are not counted.
+Measured on 2026-10-27 with Node v20.19.2 and npm 11.21.1. Each case uses
+fresh production installs of registry latest versions. Install sizes count
+node_modules file bytes (1 MB = 1024 KB); bundles use a one-request script, esbuild 0.25
+(minified ESM for Node 20), and gzip level 9.
 
-| Package | Version | Unpacked size | Direct runtime deps |
-| --- | --- | ---: | ---: |
-| `chatoyant` | 0.15.0 | 0.6 MB | 0 |
-| `ai` (Vercel AI SDK) | 7.0.152 | 8.4 MB | 3 |
-| `langchain` | 1.5.19 | 3.3 MB | 4 |
-| `@langchain/core` | 1.3.0 | 7.6 MB | 7 |
-| `openai` | 7.43.0 | 22.9 MB | 0 |
-| `@anthropic-ai/sdk` | 1.3.0 | 15.7 MB | 3 |
+| SDK | Versions | Installed packages | node_modules | Minified bundle | Gzip |
+| --- | --- | ---: | ---: | ---: | ---: |
+| chatoyant | chatoyant@0.16.0 | 1 | 0.6 MB | 215.2 KB | 54.1 KB |
+| openai | openai@7.45.0 | 1 | 22.1 MB | 376.5 KB | 83.1 KB |
+| @anthropic-ai/sdk | @anthropic-ai/sdk@1.3.0 | 8 | 16.1 MB | 384.6 KB | 91.1 KB |
+| ai + @ai-sdk/openai | ai@7.0.154, @ai-sdk/openai@4.0.103 | 12 | 21.9 MB | 885.3 KB | 198.6 KB |
+| langchain + @langchain/openai | langchain@1.5.20, @langchain/core@1.3.0, @langchain/openai@1.7.1 | 25 | 76.5 MB | 1495.3 KB | 349.0 KB |
 
-The bundled ESM entry (`dist/index.js`) of 0.15.0 is 56.7 KB with `gzip -9`.
+Chatoyant has the smallest install and bundles in this sample; openai ties its
+installed package count. The openai and Anthropic cases each cover one provider;
+chatoyant includes all six provider adapters plus JSON Schema validation and
+token/cost tables. One root import still pulls all adapters into the bundle.
+
+See [Smallest JavaScript LLM SDK: measured sizes](https://anonyfox.github.io/chatoyant/chatoyant/js_llm_sdk_size.html)
+for the method, source scripts, measured JSON and a typechecked example.
+Rerun with `node scripts/measure-sdk-size.mjs`.
 
 ## Provider Routing
 

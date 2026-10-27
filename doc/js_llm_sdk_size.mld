@@ -1,0 +1,119 @@
+{0 Smallest JavaScript LLM SDK: install and bundle size measured}
+
+As of 27 October 2026, chatoyant is the smallest of the five JavaScript LLM SDK setups measured here. A fresh install puts 0.6 MB into node_modules, and a script that sends one request bundles to 215.2 KB minified, 54.1 KB with gzip. The official openai package, which covers one provider, installs 22.1 MB and bundles the same kind of script to 83.1 KB gzipped.
+
+{1 Measured sizes}
+
+Sizes use 1 KB = 1024 bytes and 1 MB = 1024 KB. Installed package counts include the requested packages and everything they pull in. Exact byte counts are in the JSON snapshot linked below.
+
+{t
+| SDK | Versions | Installed packages | node_modules | Minified bundle | Gzip |
+| [chatoyant] | [chatoyant@0.16.0] | 1 | 0.6 MB | 215.2 KB | 54.1 KB |
+| [openai] | [openai@7.45.0] | 1 | 22.1 MB | 376.5 KB | 83.1 KB |
+| [@anthropic-ai/sdk] | [@anthropic-ai/sdk@1.3.0] | 8 | 16.1 MB | 384.6 KB | 91.1 KB |
+| [ai + @ai-sdk/openai] | [ai@7.0.154, @ai-sdk/openai@4.0.103] | 12 | 21.9 MB | 885.3 KB | 198.6 KB |
+| [langchain + @langchain/openai] | [langchain@1.5.20, @langchain/core@1.3.0, @langchain/openai@1.7.1] | 25 | 76.5 MB | 1495.3 KB | 349.0 KB |
+}
+
+Chatoyant and openai both install a single package. This sample does not establish which SDK is smallest across the entire registry or for every application.
+
+The [openai] and [@anthropic-ai/sdk] cases each cover one provider. The chatoyant bundle includes all six adapters: OpenAI, Anthropic, xAI, Meta Muse, OpenRouter and local. It also includes JSON Schema validation and token/cost tables. The AI SDK and LangChain cases use their OpenAI integrations.
+
+Download the {{:https://github.com/Anonyfox/chatoyant/blob/main/doc/data/sdk-size-2026-10-27.json}measured JSON snapshot} to inspect the exact versions and byte counts.
+
+{1 Method and rerunning}
+
+The run used Node v20.19.2 and npm 11.21.1 on 27 October 2026. The {{:https://github.com/Anonyfox/chatoyant/blob/main/scripts/measure-sdk-size.mjs}measurement script} resolves each requested package's registry latest version, then installs each SDK case in a fresh temporary directory with [npm install --omit=dev --ignore-scripts --no-audit --no-fund].
+
+A separate fresh production install supplies the install measurements, excluding esbuild. The script sums regular-file byte sizes recursively under node_modules, including its hidden files. It counts package-lock entries whose paths start with node_modules/. This measures file contents rather than filesystem allocation or compressed npm download size.
+
+For each case, esbuild 0.25 bundles the one-request script below using [--bundle --minify --format=esm --platform=node --target=node20]. The bundle's byte length supplies the minified column; Node's gzip implementation at level 9 supplies the gzip column. The scripts are bundled without executing requests. These sizes exclude the Node runtime and application code beyond the shown scripts.
+
+Run [node scripts/measure-sdk-size.mjs] from the repository root. Add [--json] for machine-readable output. Reruns resolve latest versions again and can produce different results.
+
+{1 The five bundled scripts}
+
+chatoyant
+
+{[
+import { genText } from "chatoyant";
+console.log(await genText("Hello", { model: "gpt-6.1-sol" }));
+]}
+
+openai
+
+{[
+import OpenAI from "openai";
+const r = await new OpenAI().responses.create({ model: "gpt-6.1-sol", input: "Hello" });
+console.log(r.output_text);
+]}
+
+[@anthropic-ai/sdk]
+
+{[
+import Anthropic from "@anthropic-ai/sdk";
+const r = await new Anthropic().messages.create({ model: "claude-sonnet-5-5", max_tokens: 256, messages: [{ role: "user", content: "Hello" }] });
+console.log(r.content);
+]}
+
+[ai + @ai-sdk/openai]
+
+{[
+import { generateText } from "ai";
+import { openai } from "@ai-sdk/openai";
+const r = await generateText({ model: openai("gpt-6.1-sol"), prompt: "Hello" });
+console.log(r.text);
+]}
+
+[langchain + @langchain/openai]
+
+{[
+import { ChatOpenAI } from "@langchain/openai";
+const r = await new ChatOpenAI({ model: "gpt-6.1-sol" }).invoke("Hello");
+console.log(r.content);
+]}
+
+{1 What the size buys}
+
+Chatoyant's root import includes:
+
+- Provider adapters for OpenAI, Anthropic, xAI, Meta Muse, OpenRouter and local OpenAI-compatible servers.
+- JSON Schema validation and the Schema API used for structured output.
+- Token estimation and model cost tables, alongside the generation and chat APIs.
+
+{1 A TypeScript example}
+
+Install with [npm install chatoyant]. Set OPENAI_API_KEY in your environment. Save the following as [example.mts] and run it with a TypeScript runner such as [npx tsx example.mts]. It makes two provider requests.
+
+The same code lives in {{:https://github.com/Anonyfox/chatoyant/blob/main/test/typed/js_llm_sdk_size.ts}test/typed/js_llm_sdk_size.ts} and is typechecked by [npm run test:types] in CI. Typechecking does not execute the requests.
+
+{[
+import { genData, genText, Schema } from "chatoyant";
+
+const text = await genText("Explain what an LLM SDK does in one sentence.", {
+  model: "gpt-6.1-sol",
+  maxTokens: 128,
+});
+console.log(text);
+
+class Person extends Schema {
+  name = Schema.String();
+  age = Schema.Integer({ minimum: 0 });
+}
+
+const person = await genData("Extract: Alice is 30 years old.", Person, {
+  model: "gpt-6.1-sol",
+  maxTokens: 128,
+});
+console.log(person);
+]}
+
+{1 Tradeoffs}
+
+One root import still pulls all provider adapters into this measured bundle. Choosing only genText does not reduce it to an OpenAI-only client. The package has a single root export path; provider subpath imports are unavailable.
+
+This comparison measures size, not provider feature coverage or integration ecosystems. Check the APIs your application needs before choosing by byte count. The repository does not measure other SDKs' ecosystem sizes.
+
+{1 Related documentation}
+
+See {{:https://github.com/Anonyfox/chatoyant/blob/main/JAVASCRIPT.md}JAVASCRIPT.md} for the JavaScript API and {{:ocaml_llm_guide.html}the OCaml LLM guide} for native Eio usage.

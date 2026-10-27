@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Docs
+
+- Add a measured JavaScript LLM SDK size guide with a typechecked example, a JSON snapshot and `scripts/measure-sdk-size.mjs` for reruns.
+
 ## 0.16.0 — 2026-10-27
 
 ### Added
