@@ -400,3 +400,25 @@ module Make_provider
       val timeout_ms : int option
       val beta_headers : string list
     end) : Provider.CHAT
+
+(** Wraps an HTTP effect so every request sends the given [anthropic-version]
+    header. Use it with {!Make_client} to pin a newer API version; the default
+    stays [2023-06-01]. *)
+
+module Http_with_version
+    (Http : Chatoyant_runtime.Effect.HTTP)
+    (Version : sig
+      val anthropic_version : string
+    end) : Chatoyant_runtime.Effect.HTTP
+
+(** Provider with a custom Anthropic API version. *)
+
+module Make_provider_with_version
+    (Http : Chatoyant_runtime.Effect.HTTP)
+    (Config : sig
+      val api_key : string
+      val base_url : string
+      val timeout_ms : int option
+      val beta_headers : string list
+      val anthropic_version : string
+    end) : Provider.CHAT

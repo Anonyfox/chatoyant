@@ -236,6 +236,7 @@ module Provider : sig
     ?max_response_size:int ->
     ?base_url:string ->
     ?timeout_ms:int ->
+    ?anthropic_version:string ->
     ?beta_headers:string list ->
     net:_ Eio.Net.t ->
     clock:_ Eio.Time.clock ->
@@ -333,6 +334,7 @@ module Chat : sig
     ?max_response_size:int ->
     ?base_url:string ->
     ?timeout_ms:int ->
+    ?anthropic_version:string ->
     ?beta_headers:string list ->
     ?model:string ->
     ?defaults:Chatoyant_core.Options.t ->
@@ -505,6 +507,7 @@ val anthropic :
   ?max_response_size:int ->
   ?base_url:string ->
   ?timeout_ms:int ->
+  ?anthropic_version:string ->
   ?beta_headers:string list ->
   ?model:string ->
   ?defaults:Chatoyant_core.Options.t ->

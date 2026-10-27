@@ -1215,6 +1215,32 @@ let () =
       | Chatoyant.Provider.Anthropic.Text text :: _ ->
           assert_equal_string "Hello from Claude" text
       | _ -> failwith "expected client text response"));
+  assert (
+    List.assoc "anthropic-version"
+      (Option.get !Fake_anthropic_http.last_request).headers
+    = "2023-06-01");
+  let module Custom =
+    Chatoyant.Provider.Anthropic.Make_client
+      (Chatoyant.Provider.Anthropic.Http_with_version
+         (Fake_anthropic_http)
+         (struct
+           let anthropic_version = "2026-10-26"
+         end))
+  in
+  let custom_config =
+    {
+      Custom.api_key = "test-key";
+      base_url = Custom.default_base_url;
+      timeout_ms = Some 1_000;
+      beta_headers = [];
+    }
+  in
+  ignore (Custom.create_message custom_config client_request);
+  assert (
+    List.assoc "anthropic-version"
+      (Option.get !Fake_anthropic_http.last_request).headers
+    = "2026-10-26");
+  ignore (Anthropic_client.create_message client_config client_request);
   (match !Fake_anthropic_http.last_request with
   | None -> failwith "Anthropic client did not send request"
   | Some request ->
@@ -1497,6 +1523,7 @@ let () =
       (pricing.cache_write_1h_per_million = write_1h)
   in
   check_price "gpt-6-astra" 10.0 50.0 (Some 1.0) None None;
+  check_price "gpt-6.1-terra" 1.0 5.0 (Some 0.05) None None;
   check_price "gpt-6.1-sol" 2.0 10.0 (Some 0.1) None None;
   check_price "gpt-6-sol" 2.0 10.0 (Some 0.2) None None;
   check_price "gpt-6-luna" 0.1 0.5 (Some 0.01) None None;
@@ -1625,7 +1652,16 @@ let () =
             (not (contains_substring key body)))
         [ "temperature"; "top_p"; "frequency_penalty"; "presence_penalty" ];
       assert_contains "\"effort\":\"low\"" (body_for model "minimal"))
-    [ "gpt-6-astra"; "gpt-6.1-sol"; "gpt-6-sol"; "gpt-6-luna" ];
+    [ "gpt-6.1-terra"; "gpt-6-astra"; "gpt-6.1-sol"; "gpt-6-sol"; "gpt-6-luna" ];
   assert_contains "\"effort\":\"low\"" (body_for "gpt-6-astra" "none");
   assert_contains "\"effort\":\"low\"" (body_for "gpt-6.1-sol" "none");
+  assert_contains "\"effort\":\"none\"" (body_for "gpt-6.1-terra" "none");
   assert_contains "\"effort\":\"none\"" (body_for "gpt-6-luna" "none")
+
+let () =
+  assert_equal_int 1_050_000
+    (Option.get (Chatoyant.Tokens.Context_window.get "gpt-6.1-terra"));
+  assert (
+    Chatoyant.Provider.Registry.detect_by_model "gpt-6.1-terra"
+    = Some Chatoyant.Provider.Provider.Openai);
+  ()

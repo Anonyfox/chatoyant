@@ -23,6 +23,7 @@ describe("2026-10 model refresh", () => {
     assert.deepEqual(getPricing("gpt-5.6-terra"), { input: 2, output: 12, cached: 0.2 });
     assert.deepEqual(getPricing("gpt-5.6-luna"), { input: 0.2, output: 1.2, cached: 0.02 });
     assert.deepEqual(getPricing("gpt-6-astra"), { input: 10, output: 50, cached: 1 });
+    assert.deepEqual(getPricing("gpt-6.1-terra"), { input: 1, output: 5, cached: 0.05 });
     assert.deepEqual(getPricing("gpt-6.1-sol"), { input: 2, output: 10, cached: 0.1 });
     assert.deepEqual(getPricing("gpt-6-luna"), { input: 0.1, output: 0.5, cached: 0.01 });
     assert.deepEqual(getPricing("claude-sonnet-5"), { input: 2, output: 10, cached: 0.2, cacheWrite5m: 2.5, cacheWrite1h: 4 });
@@ -37,6 +38,7 @@ describe("2026-10 model refresh", () => {
   it("recognizes new models, contexts, and the precise chat-latest signature", () => {
     for (const [model, provider, context] of [
       ["gpt-6-astra", "openai", 1050000],
+      ["gpt-6.1-terra", "openai", 1050000],
       ["claude-opus-5-5", "anthropic", 1000000],
       ["grok-4.7", "xai", 500000],
       ["muse-wonder-1.0", "meta", 1048576],
@@ -63,7 +65,7 @@ describe("2026-10 model refresh", () => {
       return new Response(JSON.stringify(response), { status: 200, headers: { "content-type": "application/json" } });
     };
     try {
-      for (const model of ["gpt-6-astra", "gpt-6.1-sol"]) {
+      for (const model of ["gpt-6-astra", "gpt-6.1-sol", "gpt-6.1-terra"]) {
         for (const reasoning of [undefined, "off", "minimal", "high"]) {
           const chat = new Chat({ model, apiKey: "test" }).user("hello");
           chat.addTool(createTool({ name: "lookup", description: "Look up data", parameters: {}, execute: async () => "ok" }));
@@ -71,10 +73,10 @@ describe("2026-10 model refresh", () => {
           const request = seen.at(-1);
           assert.ok(request.url.endsWith("/responses"));
           assert.equal(request.body.tools[0].name, "lookup");
-          assert.equal(request.body.reasoning?.effort, reasoning === "high" ? "high" : reasoning === undefined ? undefined : "low");
+          assert.equal(request.body.reasoning?.effort, reasoning === "high" ? "high" : reasoning === undefined ? undefined : model === "gpt-6.1-terra" && reasoning === "off" ? "none" : "low");
         }
       }
-      for (const model of ["gpt-6-luna", "gpt-6-sol"]) {
+      for (const model of ["gpt-6-luna", "gpt-6-sol", "gpt-6.1-terra"]) {
         await new Chat({ model, apiKey: "test" }).user("hello").generateWithResult({
           temperature: 0.5, topP: 0.7, frequencyPenalty: 0.2, presencePenalty: 0.2, maxTokens: 123, reasoning: "off",
         });

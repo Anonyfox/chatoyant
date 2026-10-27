@@ -32,6 +32,7 @@ val anthropic :
   ?max_response_size:int ->
   ?base_url:string ->
   ?timeout_ms:int ->
+  ?anthropic_version:string ->
   ?beta_headers:string list ->
   ?model:string ->
   ?defaults:Core.Options.t ->

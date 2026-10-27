@@ -6,6 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+### Added
+
+- OpenAI `gpt-6.1-terra`: pricing, context window, detection and request shaping in OCaml and JavaScript; presets are unchanged.
+- Optional OCaml `?anthropic_version` on the native Anthropic constructors, plus `Anthropic.Http_with_version` for functor users. The default remains `2023-06-01`.
+- Sitemap URLs include source-specific git modification dates; documentation CI fetches full history.
+
+### Changed
+
+- CI tests Node 22 and 24 and removes the deprecated setup-ocaml `dune-cache` input.
+
 ### Docs
 
 - Docs site: every page now has `lang`, a canonical URL, a description and

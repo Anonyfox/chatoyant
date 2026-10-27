@@ -749,16 +749,18 @@ module Provider = struct
 
   let anthropic ?https ?max_response_size
       ?(base_url = Anthropic_defaults.default_base_url) ?timeout_ms
-      ?(beta_headers = []) ~net ~clock ~api_key () =
+      ?(anthropic_version = "2023-06-01") ?(beta_headers = []) ~net ~clock
+      ~api_key () =
     let module Http = (val http ?https ?max_response_size ~net ~clock ()) in
     let module Provider =
-      Chatoyant_provider.Anthropic.Make_provider
+      Chatoyant_provider.Anthropic.Make_provider_with_version
         (Http)
         (struct
           let api_key = api_key
           let base_url = base_url
           let timeout_ms = timeout_ms
           let beta_headers = beta_headers
+          let anthropic_version = anthropic_version
         end) in
     (module Provider : Chatoyant_provider.Provider.CHAT)
 
@@ -1023,15 +1025,15 @@ module Chat = struct
     in
     with_provider ?model ?defaults ~clock provider
 
-  let anthropic ?https ?max_response_size ?base_url ?timeout_ms ?beta_headers
-      ?model ?defaults env ?api_key () =
+  let anthropic ?https ?max_response_size ?base_url ?timeout_ms
+      ?anthropic_version ?beta_headers ?model ?defaults env ?api_key () =
     let net = env#net in
     let clock = env#clock in
     let provider =
       match api_key_or_env "ANTHROPIC_API_KEY" api_key with
       | Some api_key ->
           Provider.anthropic ?https ?max_response_size ?base_url ?timeout_ms
-            ?beta_headers ~net ~clock ~api_key ()
+            ?anthropic_version ?beta_headers ~net ~clock ~api_key ()
       | None -> missing_api_key_provider Anthropic "ANTHROPIC_API_KEY"
     in
     with_provider ?model ?defaults ~clock provider
@@ -1189,10 +1191,10 @@ let openai ?https ?max_response_size ?base_url ?timeout_ms ?model ?defaults
     env ?api_key ()
   |> add_default_messages ?system ?tools
 
-let anthropic ?https ?max_response_size ?base_url ?timeout_ms ?beta_headers
-    ?model ?defaults ?api_key ?system ?tools env =
-  Chat.anthropic ?https ?max_response_size ?base_url ?timeout_ms ?beta_headers
-    ?model ?defaults env ?api_key ()
+let anthropic ?https ?max_response_size ?base_url ?timeout_ms ?anthropic_version
+    ?beta_headers ?model ?defaults ?api_key ?system ?tools env =
+  Chat.anthropic ?https ?max_response_size ?base_url ?timeout_ms
+    ?anthropic_version ?beta_headers ?model ?defaults env ?api_key ()
   |> add_default_messages ?system ?tools
 
 let xai ?https ?max_response_size ?base_url ?timeout_ms ?model ?defaults

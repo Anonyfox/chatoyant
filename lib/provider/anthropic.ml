@@ -1498,3 +1498,35 @@ struct
     | Ok response -> Ok (generation_of_response response)
     | Error error -> Error (Provider.Runtime_error error.error_message)
 end
+
+(* Keep the original config records and functors source-compatible. *)
+module Http_with_version
+    (Http : Chatoyant_runtime.Effect.HTTP)
+    (Version : sig
+      val anthropic_version : string
+    end) =
+struct
+  include Http
+
+  let send (request : request) =
+    let headers =
+      List.map
+        (fun (name, value) ->
+          if String.lowercase_ascii name = "anthropic-version" then
+            (name, Version.anthropic_version)
+          else (name, value))
+        request.headers
+    in
+    Http.send { request with headers }
+end
+
+module Make_provider_with_version
+    (Http : Chatoyant_runtime.Effect.HTTP)
+    (Config : sig
+      val api_key : string
+      val base_url : string
+      val timeout_ms : int option
+      val beta_headers : string list
+      val anthropic_version : string
+    end) =
+  Make_provider (Http_with_version (Http) (Config)) (Config)
