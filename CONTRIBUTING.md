@@ -30,6 +30,14 @@ make help       # list all targets
 Under the hood, `dune build @runtest @melange` runs the native OCaml tests and
 emits the Melange JavaScript; `scripts/build-npm.mjs` bundles it with esbuild.
 
+## API surface gate
+
+`npm run test:api` checks the public JS declarations and OCaml interfaces against
+committed snapshots. It also checks built declaration copies when present.
+Removals and signature changes are breaking changes and need the maintainer’s yes.
+For additions, run `npm run api:update` and commit the updated snapshots for review.
+The gate runs first in `npm test` and is part of `npm run release:check`.
+
 ## Formatting
 
 Code is formatted with `ocamlformat` (pinned in `.ocamlformat`):

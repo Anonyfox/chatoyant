@@ -12,7 +12,7 @@
  (name chatoyant)
  (synopsis "OCaml-first LLM SDK with Melange-generated JavaScript")
  (description
-  "Chatoyant is an OCaml-first SDK for LLM providers. It exposes an Eio native API, typed JSON Schema and tool definitions, raw provider clients for OpenAI/Anthropic/xAI/OpenRouter/local inference, and a Melange-generated JavaScript package.")
+  "Chatoyant is an OCaml-first SDK for LLM providers. It exposes an Eio native API, typed JSON Schema and tool definitions, raw provider clients for OpenAI/Anthropic/xAI/Meta/OpenRouter/local inference, and a Melange-generated JavaScript package.")
  (license MIT)
  (tags
   (llm ai openai anthropic xai openrouter json-schema eio melange typesafe))
