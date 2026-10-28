@@ -8,6 +8,9 @@
 # secret required. Configure the trusted publisher once at npmjs.com.
 # The opam-repository submission is a separate, deliberate step: see
 # opam-release.yml.
+#
+# Nothing publishes unless release-verify.yml (build, tests, odoc, npm build,
+# node tests, tsc, version consistency, npm pack --dry-run) passes on the tag.
 
 name: Publish npm package
 
@@ -29,7 +32,13 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  verify:
+    uses: ./.github/workflows/release-verify.yml
+    with:
+      ref: ${{ inputs.tag || github.ref_name }}
+
   publish:
+    needs: verify
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

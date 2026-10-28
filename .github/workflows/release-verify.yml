@@ -1,0 +1,85 @@
+# Release verification: the same gate `make release-*` runs locally
+# (`npm run release:check`), plus odoc, run in CI against an exact ref.
+#
+# publish.yml and opam-release.yml call this workflow and make their publish
+# job `needs:` it, so a v* tag only reaches npm or opam-repository after these
+# checks pass on that tag. It can also be dispatched by hand on any branch or
+# tag to rehearse a release; a manual run publishes nothing.
+
+name: Release verify
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: "Git ref to verify (tag, branch or SHA)"
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref to verify (e.g. v0.16.0 or main); defaults to the selected branch"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: release verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: "5.3.x"
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+
+      # --with-test pulls eio_main; --with-doc pulls odoc.
+      - name: Install dependencies
+        run: |
+          opam install . --deps-only --with-test --with-doc -y
+          npm ci
+
+      # Tag runs also check the tag against the files. Branch runs check that
+      # package.json, dune-project, chatoyant.opam and CHANGELOG.md agree.
+      - name: Version consistency
+        env:
+          REF: ${{ inputs.ref || github.ref_name }}
+        run: |
+          REF="${REF#refs/tags/}"
+          if [[ "$REF" == v[0-9]* ]]; then
+            node scripts/check-version-sync.mjs --tag "$REF"
+          else
+            node scripts/check-version-sync.mjs
+          fi
+
+      - name: dune build
+        run: opam exec -- dune build
+
+      - name: dune test
+        run: opam exec -- dune test
+
+      - name: odoc
+        run: opam exec -- dune build @doc
+
+      # build:ocaml (+ @melange @integration), build:npm, node tests, tsc and
+      # the official JSON Schema suite.
+      - name: npm build, node tests and tsc
+        run: opam exec -- npm test
+
+      - name: Lint opam metadata and doc links
+        run: opam exec -- npm run lint
+
+      - name: npm pack --dry-run
+        run: npm pack --dry-run
