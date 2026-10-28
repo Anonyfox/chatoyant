@@ -8,6 +8,7 @@
 //   - adds lang, canonical, description, Open Graph tags, favicon, a main
 //     landmark, permalink labels and a footer backlink to every page,
 //   - replaces the bare package-list landing with a short intro block,
+//   - adds measured-number panels under the intro of the two intent pages,
 //   - writes robots.txt, sitemap.xml and llms.txt.
 // Run after `dune build @doc`; ./_site is what gets deployed to GitHub Pages.
 
@@ -135,6 +136,94 @@ function describe(html, title) {
   return text;
 }
 
+// Measured-number panels injected at the end of an intent page's preamble, so
+// they sit under the opening answer on every screen size. Every number is read
+// from a committed source at build time: the SDK size snapshot in doc/data and
+// the price and context-window tables in lib/tokens. Nothing is retyped here.
+const fmtMB = (b) => `${(b / 1024 / 1024).toFixed(1)} MB`;
+const fmtKB = (b) => `${(b / 1024).toFixed(1)} KB`;
+const fmtDate = (iso) =>
+  new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+
+function bars(title, rows, key, fmt) {
+  const max = Math.max(...rows.map((r) => r[key]));
+  return `<div class="chatoyant-bars" role="group" aria-label="${escapeAttr(title)}"><h3>${title}</h3>` +
+    rows.map((r) =>
+      `<div class="chatoyant-bar${r.name === "chatoyant" || r.highlight ? " is-us" : ""}">` +
+      `<span class="chatoyant-bar-label">${escapeAttr(r.name)}${r.detail ? ` <small>${escapeAttr(r.detail)}</small>` : ""}</span>` +
+      `<span class="chatoyant-bar-track" aria-hidden="true"><span class="chatoyant-bar-fill" style="width:${((r[key] / max) * 100).toFixed(2)}%"></span></span>` +
+      `<span class="chatoyant-bar-value">${fmt(r[key])}</span></div>`).join("") +
+    "</div>";
+}
+
+async function sizeFigure() {
+  const dir = join(ROOT, "doc/data");
+  const latest = (await readdir(dir)).filter((f) => /^sdk-size-\d{4}-\d{2}-\d{2}\.json$/.test(f)).sort().at(-1);
+  if (!latest) throw new Error("brand-docs: no doc/data/sdk-size-*.json snapshot");
+  const data = JSON.parse(await readFile(join(dir, latest), "utf8"));
+  const rows = data.rows;
+  const us = rows.find((r) => r.name === "chatoyant");
+  const others = rows.filter((r) => r !== us);
+  const range = (key, fmt) => {
+    const v = others.map((r) => r[key]);
+    return `${fmt(Math.min(...v))} to ${fmt(Math.max(...v))}`;
+  };
+  return '<section class="chatoyant-figure" aria-labelledby="size-at-a-glance">' +
+    `<h2 class="chatoyant-figure-title" id="size-at-a-glance">One text call, five SDKs, measured ${fmtDate(data.date)}</h2>` +
+    `<p class="chatoyant-figure-lede">chatoyant installs <strong>${fmtMB(us.installBytes)}</strong> and bundles to ` +
+    `<strong>${fmtKB(us.gzipBytes)}</strong> gzip. The other four install ${range("installBytes", fmtMB)} ` +
+    `and bundle to ${range("gzipBytes", fmtKB)}.</p>` +
+    bars("Install size (node_modules)", rows, "installBytes", fmtMB) +
+    bars("Bundle, minified and gzipped", rows, "gzipBytes", fmtKB) +
+    `<p class="chatoyant-figure-note">Fresh <code>npm install</code> on Node ${escapeAttr(data.node)}, esbuild bundle of one call. ` +
+    `Source: <a href="https://github.com/Anonyfox/chatoyant/blob/main/doc/data/${latest}">doc/data/${latest}</a>.</p>` +
+    "</section>";
+}
+
+async function costFigure() {
+  const pricing = await readFile(join(ROOT, "lib/tokens/pricing.ml"), "utf8");
+  const windows = await readFile(join(ROOT, "lib/tokens/context_window.ml"), "utf8");
+  const models = [
+    ["OpenAI", "gpt-6.1-sol"],
+    ["Anthropic", "claude-sonnet-5-5"],
+    ["xAI", "grok-4.7"],
+  ];
+  const IN = 1000, OUT = 200;
+  const cards = models.map(([provider, id]) => {
+    const esc = id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const row = pricing.match(new RegExp(`\\(\\s*"${esc}",\\s*p\\s+([^)]*)\\(\\)\\s*\\)`))?.[1];
+    const ctx = windows.match(new RegExp(`\\("${esc}",\\s*([\\d_]+)\\)`))?.[1];
+    if (!row || !ctx) throw new Error(`brand-docs: ${id} missing from pricing.ml or context_window.ml`);
+    const rate = (k) => Number(row.match(new RegExp(`~${k}:([\\d.]+)`))?.[1]);
+    const input = rate("input"), output = rate("output"), cached = rate("cached");
+    const cost = (IN * input + OUT * output) / 1e6;
+    const tokens = Number(ctx.replace(/_/g, ""));
+    return { provider, id, input, output, cached, cost, tokens };
+  });
+  const usd = (n) => `$${n.toFixed(2)}`;
+  const rows = cards.map((c) => ({
+    name: `${c.provider} ${c.id}`,
+    detail: `${usd(c.input)} in, ${usd(c.output)} out, ${usd(c.cached)} cached per 1M; ${c.tokens.toLocaleString("en-US")}-token context`,
+    cost: c.cost,
+    highlight: true,
+  }));
+  return '<section class="chatoyant-figure" aria-labelledby="cost-at-a-glance">' +
+    '<h2 class="chatoyant-figure-title" id="cost-at-a-glance">The three models in this guide, side by side</h2>' +
+    `<p class="chatoyant-figure-lede">Estimated cost of one request with ${IN.toLocaleString("en-US")} uncached input and ${OUT} output tokens, ` +
+    "from the rates chatoyant uses for its own cost accounting.</p>" +
+    bars(`Cost of ${IN.toLocaleString("en-US")} input + ${OUT} output tokens`, rows, "cost", (n) => `$${n.toFixed(4)}`) +
+    '<p class="chatoyant-figure-note">USD per million tokens. Source: ' +
+    '<a href="https://github.com/Anonyfox/chatoyant/blob/main/lib/tokens/pricing.ml">lib/tokens/pricing.ml</a> and ' +
+    '<a href="https://github.com/Anonyfox/chatoyant/blob/main/lib/tokens/context_window.ml">context_window.ml</a>. ' +
+    "Caching discounts and long-context tiers are not included.</p>" +
+    "</section>";
+}
+
+const FIGURES = new Map([
+  [join(OUT, "chatoyant/js_llm_sdk_size.html"), await sizeFigure()],
+  [join(OUT, "chatoyant/ocaml_llm_guide.html"), await costFigure()],
+]);
+
 const urls = [];
 for await (const file of walk(OUT)) {
   await chmod(file, 0o644);
@@ -150,6 +239,11 @@ for await (const file of walk(OUT)) {
       .replace("<h2>OCaml package documentation</h2>", HERO);
   } else if (GUIDES.has(file)) {
     html = html.replace(/<title>[^<]*<\/title>/, `<title>${GUIDES.get(file).title}</title>`);
+    if (FIGURES.has(file)) {
+      const at = html.indexOf("</header>");
+      if (at < 0) throw new Error(`brand-docs: no preamble in ${file}`);
+      html = html.slice(0, at) + FIGURES.get(file) + html.slice(at);
+    }
   } else if (file === PACKAGE_INDEX) {
     html = html.replace(
       /<title>[^<]*<\/title>/,
@@ -217,6 +311,8 @@ for await (const file of walk(OUT)) {
       /<a href="#([^"]+)" class="anchor"><\/a>/g,
       (_, id) => `<a href="#${id}" class="anchor" aria-label="Permalink to ${escapeAttr(decode(id))}"></a>`,
     )
+    // Wide tables scroll inside their own box instead of widening the page.
+    .replace(/<table class="odoc-table">[\s\S]*?<\/table>/g, (t) => `<div class="chatoyant-table-scroll">${t}</div>`)
     .replace(/<meta name="description"[^>]*>\s*/g, "")
     .replace("</head>", `${head.join("")}</head>`);
   if (html.includes("</body>") && !html.includes("chatoyant-footer")) {

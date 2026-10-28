@@ -19,3 +19,6 @@ _site/
 # Editor / OS
 .DS_Store
 .claude/
+
+# Visual-review screenshots (local only)
+.review/

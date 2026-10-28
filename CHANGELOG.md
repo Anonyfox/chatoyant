@@ -9,6 +9,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Docs
 
 - Add a measured JavaScript LLM SDK size guide with a typechecked example, a JSON snapshot and `scripts/measure-sdk-size.mjs` for reruns.
+- Docs site: bar charts under the intro of the SDK size page (from `doc/data`) and the OCaml guide (per-request cost from `lib/tokens/pricing.ml`); tables and long inline code no longer widen phone layouts, and the footer stays at the bottom on narrow screens.
 
 ## 0.16.0 — 2026-10-27
 

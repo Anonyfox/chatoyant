@@ -42,6 +42,8 @@ nav.odoc-nav a,
 /* Footer backlink, injected on every page. */
 .chatoyant-footer {
   grid-column: 1 / -1; /* span odoc's sidebar + content columns */
+  grid-row: 100; /* always last: auto-placement put it in the empty
+                    search-bar cell at the top of the phone layout */
   justify-self: stretch;
   margin-top: 4rem;
   padding: 1.5rem 1rem 1rem;
@@ -128,5 +130,161 @@ nav.odoc-nav a,
 
   .search-snake:before {
     animation: none;
+  }
+}
+
+/* Narrow screens: keep every block inside the viewport. Long inline code
+ * (paths, model IDs) wraps, wide tables and code scroll in their own box
+ * instead of widening the page, which made phones zoom the page out. */
+.odoc-content,
+.odoc-preamble {
+  min-width: 0;
+}
+
+.odoc p code,
+.odoc li code {
+  overflow-wrap: anywhere;
+}
+
+.chatoyant-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 1em 0;
+}
+
+.chatoyant-table-scroll table.odoc-table {
+  margin: 0;
+}
+
+.chatoyant-table-scroll code {
+  overflow-wrap: normal; /* break at spaces only, never inside a package name */
+}
+
+.odoc-content pre {
+  max-width: 100%;
+}
+
+@media only screen and (max-width: 110ex) {
+  .odoc-preamble,
+  .odoc-content {
+    overflow-wrap: break-word;
+  }
+
+  .odoc-tocs .odoc-toc.odoc-local-toc ul {
+    columns: 2;
+    column-gap: 1rem;
+  }
+
+  .odoc-tocs .odoc-toc.odoc-local-toc li {
+    break-inside: avoid;
+  }
+}
+
+/* Measured-number panels on the intent pages (built by brand-docs.mjs from
+ * doc/data and lib/tokens). Plain bars, solid colours, white page. */
+.chatoyant-figure {
+  margin: 1.5rem 0 0.5rem;
+  padding: 1rem 1.1rem 0.9rem;
+  border: 1px solid var(--chatoyant-line);
+  border-left: 4px solid var(--odoc-blue);
+  border-radius: 6px;
+}
+
+.chatoyant-figure h2.chatoyant-figure-title {
+  margin: 0 0 0.25rem;
+  padding: 0;
+  border: 0;
+  font-size: 1.05rem;
+  line-height: 1.4;
+}
+
+.chatoyant-figure-lede {
+  margin: 0 0 0.9rem;
+  font-size: 0.95rem;
+}
+
+.chatoyant-figure-lede strong {
+  color: var(--odoc-blue);
+}
+
+.chatoyant-bars {
+  margin: 0 0 1rem;
+}
+
+.chatoyant-bars h3 {
+  margin: 0 0 0.4rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--chatoyant-muted);
+}
+
+.chatoyant-bar {
+  display: grid;
+  grid-template-columns: minmax(7.5rem, 13rem) 1fr 4.6rem;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0.2rem 0;
+  font-size: 0.85rem;
+  line-height: 1.35;
+}
+
+.chatoyant-bar-label {
+  overflow-wrap: anywhere;
+}
+
+.chatoyant-bar-track {
+  height: 0.8rem;
+  border-radius: 3px;
+  background: var(--chatoyant-line);
+}
+
+.chatoyant-bar-fill {
+  display: block;
+  height: 100%;
+  min-width: 3px;
+  border-radius: 3px;
+  background: var(--chatoyant-muted);
+}
+
+.chatoyant-bar.is-us .chatoyant-bar-label,
+.chatoyant-bar.is-us .chatoyant-bar-value {
+  font-weight: 700;
+  color: var(--odoc-blue);
+}
+
+.chatoyant-bar.is-us .chatoyant-bar-fill {
+  background: var(--odoc-blue);
+}
+
+.chatoyant-bar-value {
+  font-family: "Fira Mono", monospace;
+  font-size: 0.8rem;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.chatoyant-figure-note {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--chatoyant-muted);
+}
+
+.chatoyant-bar-label small {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--chatoyant-muted);
+}
+
+@media only screen and (max-width: 480px) {
+  .chatoyant-bar {
+    grid-template-columns: 1fr 4.4rem;
+    gap: 0.15rem 0.5rem;
+  }
+
+  .chatoyant-bar-label {
+    grid-column: 1 / -1;
   }
 }
