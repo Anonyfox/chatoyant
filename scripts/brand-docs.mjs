@@ -312,7 +312,10 @@ for await (const file of walk(OUT)) {
       (_, id) => `<a href="#${id}" class="anchor" aria-label="Permalink to ${escapeAttr(decode(id))}"></a>`,
     )
     // Wide tables scroll inside their own box instead of widening the page.
-    .replace(/<table class="odoc-table">[\s\S]*?<\/table>/g, (t) => `<div class="chatoyant-table-scroll">${t}</div>`)
+    // Package names in cells may break after a "/" or before a version "@".
+    .replace(/<table class="odoc-table">[\s\S]*?<\/table>/g, (t) =>
+      `<div class="chatoyant-table-scroll">${t.replace(/<code>([^<]*)<\/code>/g, (_, c) =>
+        `<code>${c.replace(/\//g, "/<wbr>").replace(/(?<=\w)@/g, "<wbr>@")}</code>`)}</div>`)
     .replace(/<meta name="description"[^>]*>\s*/g, "")
     .replace("</head>", `${head.join("")}</head>`);
   if (html.includes("</body>") && !html.includes("chatoyant-footer")) {

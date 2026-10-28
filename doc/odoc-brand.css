@@ -156,8 +156,8 @@ nav.odoc-nav a,
   margin: 0;
 }
 
-.chatoyant-table-scroll code {
-  overflow-wrap: normal; /* break at spaces only, never inside a package name */
+.odoc .chatoyant-table-scroll code {
+  overflow-wrap: normal; /* break at spaces and package-path <wbr>s only */
 }
 
 .odoc-content pre {
