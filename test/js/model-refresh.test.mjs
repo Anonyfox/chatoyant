@@ -18,6 +18,14 @@ describe("2026-10 model refresh", () => {
     }
   });
 
+  it("matches OCaml for 1h cache writes and Grok 4.1 Fast output (2026-10-29 parity fix)", () => {
+    assert.deepEqual(getPricing("grok-4-1-fast-reasoning"), { input: 0.2, output: 0.5, cached: 0.05 });
+    assert.deepEqual(getPricing("claude-sonnet-4-5"), { input: 3, output: 15, cached: 0.3, cacheWrite5m: 3.75, cacheWrite1h: 6 });
+    assert.equal(getPricing("claude-haiku-4-5").cacheWrite1h, 2);
+    assert.equal(getPricing("claude-opus-4-8").cacheWrite1h, 10);
+    assert.equal(getPricing("claude-fable-5").cacheWrite1h, 20);
+  });
+
   it("exposes refreshed token, cache, and media prices", () => {
     assert.deepEqual(getPricing("gpt-5.6-sol"), { input: 4, output: 20, cached: 0.4 });
     assert.deepEqual(getPricing("gpt-5.6-terra"), { input: 2, output: 12, cached: 0.2 });

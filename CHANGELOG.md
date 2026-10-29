@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+### Fixed
+
+- JS `getPricing`: `grok-4-1-fast-reasoning` output is $0.50 per 1M tokens (was $1.50), and seven older Claude models (Fable 5, Opus 4.6 to 4.8, Sonnet 4.5/4.6, Haiku 4.5) now carry their 1-hour cache-write price, matching the OCaml tables.
+
+### Tests
+
+- `npm run test:models` (`scripts/check-model-parity.mjs`) compares every OCaml and JS pricing row, context window and preset and fails CI on any drift. `--json` prints the merged table.
+
 ### Docs
 
 - Add a measured JavaScript LLM SDK size guide with a typechecked example, a JSON snapshot and `scripts/measure-sdk-size.mjs` for reruns.
