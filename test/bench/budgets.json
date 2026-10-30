@@ -1,0 +1,41 @@
+{
+  "_doc": "Run --update on main several times; commit lower maxRatio. --allow-raise requires a reason in the commit. Initial budgets use the worst of five runs.",
+  "headroom": 2.5,
+  "benchmarks": {
+    "json-schema-construct-validate": {
+      "maxRatio": 290,
+      "measuredRatio": 114.78827409263761,
+      "measuredOn": "2026-10-30"
+    },
+    "json-schema-reused-validate": {
+      "maxRatio": 300,
+      "measuredRatio": 117.36877400146666,
+      "measuredOn": "2026-10-30"
+    },
+    "token-estimation": {
+      "maxRatio": 55,
+      "measuredRatio": 21.761286978785364,
+      "measuredOn": "2026-10-30"
+    },
+    "cost-calculation": {
+      "maxRatio": 25,
+      "measuredRatio": 9.905886031579115,
+      "measuredOn": "2026-10-30"
+    },
+    "message-roundtrip": {
+      "maxRatio": 0.096,
+      "measuredRatio": 0.03837189494753757,
+      "measuredOn": "2026-10-30"
+    },
+    "schema-conversion": {
+      "maxRatio": 14,
+      "measuredRatio": 5.232802236328062,
+      "measuredOn": "2026-10-30"
+    },
+    "split-fit": {
+      "maxRatio": 1400,
+      "measuredRatio": 542.0448061627222,
+      "measuredOn": "2026-10-30"
+    }
+  }
+}

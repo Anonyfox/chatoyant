@@ -38,14 +38,15 @@
     "lint": "npm run lint:opam && npm run lint:docs",
     "test:api": "node scripts/check-api-surface.mjs",
     "api:update": "node scripts/check-api-surface.mjs --update",
-    "test": "npm run test:api && npm run test:models && npm run build && npm run test:node && npm run test:types && npm run test:json-schema-suite",
+    "test": "npm run test:api && npm run test:models && npm run build && npm run test:node && npm run test:bench && npm run test:types && npm run test:json-schema-suite",
     "check": "npm run release:check",
     "version:check": "node scripts/check-version-sync.mjs",
     "release:check": "npm run version:check && npm test && npm run lint && npm run pack:dry-run",
     "prepublishOnly": "npm run release:check",
     "typecheck": "npm run test:types",
     "pack:dry-run": "npm run build && npm pack --dry-run",
-    "test:models": "node scripts/check-model-parity.mjs"
+    "test:models": "node scripts/check-model-parity.mjs",
+    "test:bench": "node scripts/bench.mjs"
   },
   "keywords": [
     "llm",
