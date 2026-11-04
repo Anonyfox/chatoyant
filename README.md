@@ -34,6 +34,18 @@ _chatoyant_ /shuh-TOY-uhnt/ - having a changeable lustre.
   checks, package metadata checks, and the official JSON Schema suite against
   the bundled npm package.
 
+## Guides
+
+Full API docs live at [anonyfox.github.io/chatoyant](https://anonyfox.github.io/chatoyant/chatoyant/index.html).
+Start with one of these:
+
+- [Call GPT-6, Claude 5.5 and Grok 4.7 from OCaml (Eio)](https://anonyfox.github.io/chatoyant/chatoyant/ocaml_llm_guide.html):
+  install, first call, sessions, tools and cost tracking with the native API.
+- [Structured LLM output with JSON Schema in OCaml and TypeScript](https://anonyfox.github.io/chatoyant/chatoyant/structured_outputs.html):
+  typed results that are validated before your code sees them.
+- [Smallest JavaScript LLM SDK: measured sizes](https://anonyfox.github.io/chatoyant/chatoyant/js_llm_sdk_size.html):
+  install and bundle sizes next to openai, Anthropic, Vercel AI SDK and LangChain.
+
 ## Package Size Next To Other JS LLM Libraries
 
 Measured on 2026-10-27 with Node v20.19.2 and npm 11.21.1. Each case uses
