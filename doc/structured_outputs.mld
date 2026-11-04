@@ -1,0 +1,132 @@
+{0 Structured LLM output with JSON Schema in OCaml and TypeScript}
+
+As of 4 November 2026, use [Chatoyant.gen_data ~codec] in OCaml and [genData(prompt, schema, options)] in JavaScript or TypeScript to request typed, schema-validated JSON objects from an LLM. OCaml returns a decoded record in a result; JS resolves to a plain object whose type is inferred from the schema. The examples below use xAI with the same invoice fields in both languages.
+
+{1 Install}
+
+For OCaml, run [opam install chatoyant eio_main] with OCaml 5.3 or later. Link [chatoyant] and [eio.unix] in your dune executable. Run native requests inside [Eio_main.run].
+
+For JS or TS, run [npm install chatoyant@0.16.1]. Set [XAI_API_KEY] in the process environment for these examples. Keep keys out of source files.
+
+{1 Define a schema}
+
+OCaml uses a codec to connect a record type to its schema and decoder.
+
+{[
+type invoice = { vendor : string; total_cents : int }
+
+let invoice_codec =
+  let open Chatoyant.Schema.Codec in
+  object2
+    (field "vendor" (string ()) ~get:(fun invoice -> invoice.vendor))
+    (field "total_cents" (int ()) ~get:(fun invoice -> invoice.total_cents))
+    (fun vendor total_cents -> { vendor; total_cents })
+]}
+
+TypeScript uses a [Schema] class. Its fields describe the returned object's properties; the result is a plain object, not an [Invoice] instance.
+
+{[
+import { genData, JsonSchema, Schema } from "chatoyant";
+
+export class Invoice extends Schema {
+  vendor = Schema.String();
+  total_cents = Schema.Integer();
+}
+]}
+
+Both schemas require [vendor] as a string and [total_cents] as an integer. These constraints check shape and types. They do not establish whether the invoice matches the source text.
+
+{1 One typed request}
+
+OCaml:
+
+{[
+let extract_invoice env =
+  let client = Chatoyant.xai ~model:"grok-4.7" env in
+  let result =
+    Chatoyant.gen_data ~name:"invoice" ~strict:true ~codec:invoice_codec
+      ~max_tokens:256 client "Extract invoice: Acme charged 1250 cents."
+  in
+  match result with
+  | Ok invoice ->
+      Printf.printf "%s: %d cents\n" invoice.vendor invoice.total_cents
+  | Error error -> prerr_endline (Chatoyant.Error.provider error)
+]}
+
+JavaScript or TypeScript:
+
+{[
+export async function extractInvoice() {
+  const invoice = await genData(
+    "Extract invoice: Acme charged 1250 cents.",
+    Invoice,
+    { model: "grok-4.7", maxTokens: 256 },
+  );
+  const vendor: string = invoice.vendor;
+  const totalCents: number = invoice.total_cents;
+  console.log(`${vendor}: ${totalCents} cents`);
+  return invoice;
+}
+]}
+
+The expected data is an object with [vendor] equal to ["Acme"] and [total_cents] equal to [1250]. A model can still extract incorrect values that satisfy the schema.
+
+The OCaml blocks live verbatim in {{:https://github.com/Anonyfox/chatoyant/tree/main/examples/structured_outputs}examples/structured_outputs}. Its entry point sits inside an unapplied functor, so building does not send requests. The TS blocks live verbatim in {{:https://github.com/Anonyfox/chatoyant/blob/main/test/typed/structured_outputs.ts}test/typed/structured_outputs.ts}; [npm run test:types] compiles them. The exported request function is never called by that check.
+
+{1 Invalid JSON and schema violations}
+
+OCaml parses the response, validates it with [Schema.Value.validate], then calls [Codec.decode]. Malformed JSON, validation failures and codec failures return [Error (Decode_error message)]. The parser also accepts a whole response enclosed in a Markdown code fence. Provider errors pass through unchanged.
+
+With a schema supplied, JS [genData] delegates to [Chat.generateData]. Invalid JSON rejects with an ordinary [Error] containing an expected-JSON message. A schema violation rejects with an ordinary [Error] containing validation details in its message. These are not [SchemaError] instances; [Schema.parse] uses that error class. A missing Anthropic tool response also rejects. Catch the rejected promise in application code.
+
+Neither typed generation path retries to repair invalid output. An application can choose to send a new request after inspecting the failure. The JS no-schema and internal fake-mode paths retain parse-or-text behavior; always supply the schema for this contract.
+
+These steps are implemented in {{:https://github.com/Anonyfox/chatoyant/blob/main/lib/eio/chatoyant_native.ml}native gen_data} and {{:https://github.com/Anonyfox/chatoyant/blob/main/js/chatoyant_internal.ml}JS generateData}.
+
+{1 Validate arbitrary JSON without an LLM}
+
+The standalone validator accepts JSON Schema documents, including schemas authored outside chatoyant. These examples reuse the invoice schema. Replace that schema value with your own parsed JSON Schema document when needed.
+
+OCaml:
+
+{[
+let validate_invoice_json text =
+  match Chatoyant.Runtime.Json.parse text with
+  | Error message -> Error message
+  | Ok json -> (
+      let schema = Chatoyant.Schema.Codec.to_json_schema invoice_codec in
+      match Chatoyant.Schema.Json_schema.validate_json schema json with
+      | Error error -> Error error.message
+      | Ok report -> Ok report)
+]}
+
+A malformed input string returns a parse error. An invalid schema returns a schema parse error. A valid schema returns a report with [valid] and [errors], even when the data fails validation. Each error has [instance_path], [schema_path], [keyword] and [message]. This function validates JSON; it does not decode an invoice record.
+
+TypeScript:
+
+{[
+export function validateInvoiceJson(text: string) {
+  const data: unknown = JSON.parse(text);
+  return JsonSchema.validate(Schema.toJSON(Invoice), data);
+}
+]}
+
+Here [JSON.parse] throws for malformed input text. [JsonSchema.validate] returns [valid] and an [errors] array with [instancePath], [schemaPath], [keyword] and [message]. The built-in validator targets Draft 2020-12. Format is an annotation by default; enable [format_assertion] in OCaml validator options or [formatAssertion] in JS options to request format assertions.
+
+CI runs the official {{:https://github.com/json-schema-org/JSON-Schema-Test-Suite}JSON Schema Test Suite} through [npm run test:json-schema-suite]. The {{:https://github.com/Anonyfox/chatoyant/blob/main/scripts/ensure-json-schema-test-suite.mjs}suite setup script} pins the checkout, and {{:https://github.com/Anonyfox/chatoyant/blob/main/.github/workflows/ci.yml}CI} runs it as part of [npm test]. No suite totals are claimed here.
+
+{1 Provider differences}
+
+The native {{:https://github.com/Anonyfox/chatoyant/blob/main/lib/eio/chatoyant_native.ml}structured_extra} function sends OpenAI Responses requests with [text.format.type = "json_schema"], a schema name and [strict = true] by default. It projects the schema for OpenAI strict mode. xAI receives [response_format.type = "json_schema"] with a nested [json_schema] object containing the name, projected schema and strict flag.
+
+Native Anthropic receives a system instruction containing the original JSON Schema, followed by local validation. It does not receive a forced tool from [Chatoyant.gen_data]. Setting [strict] does not add an Anthropic wire option on this path.
+
+JS {{:https://github.com/Anonyfox/chatoyant/blob/main/js/chatoyant_internal.ml}generateData} forces Anthropic's [response] tool using [tools] and [tool_choice]. It validates the returned tool arguments against the original schema. For xAI it sends [response_format] with [json_schema], [name = "response"] and [strict = true], after strict projection.
+
+JS normally sends OpenAI structured output to [/chat/completions] using the same [response_format] envelope as xAI. The {{:https://github.com/Anonyfox/chatoyant/blob/main/js/chatoyant_internal.ml}provider routing code} switches some OpenAI calls with tools to Responses. On that branch, {{:https://github.com/Anonyfox/chatoyant/blob/main/js/chatoyant_internal.ml}_callOpenAIResponses} copies [extra] without translating [response_format] to [text.format]. Avoid assuming that combination works. Native OpenAI explicitly builds [text.format]. Provider acceptance and model support depend on the selected model; local validation still runs on returned data.
+
+{1 Related documentation}
+
+See {{:ocaml_llm_guide.html}the OCaml LLM guide} and {{:js_llm_sdk_size.html}the JavaScript SDK size guide}. The language references are {{:https://github.com/Anonyfox/chatoyant/blob/main/OCAML.md}OCAML.md} and {{:https://github.com/Anonyfox/chatoyant/blob/main/JAVASCRIPT.md}JAVASCRIPT.md}.
+
+Use {!module:Chatoyant} for native shortcuts and {!module:Chatoyant_native} for the Eio integration. {!module:Chatoyant_schema.Codec} defines typed codecs; {!module:Chatoyant_schema.Json_schema} exposes standalone validation. {!module:Chatoyant_schema.Json_schema.Output} describes validation reports. {!module:Chatoyant_core.Chat} and {!module:Chatoyant_core.Result} document core chat state and generation metadata.

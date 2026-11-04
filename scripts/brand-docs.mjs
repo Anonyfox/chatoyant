@@ -27,6 +27,12 @@ const CSS_SRC = join(ROOT, "doc/odoc-brand.css");
 const ODOC_CSS = join(OUT, "odoc.support/odoc.css");
 const INDEX = join(OUT, "index.html");
 const GUIDES = new Map([
+  [join(OUT, "chatoyant/structured_outputs.html"), {
+    title: "Structured LLM output with JSON Schema in OCaml and TypeScript | Chatoyant",
+    description: "Get typed JSON objects from an LLM in OCaml and TypeScript with Chatoyant codecs and schemas. Covers validation errors and provider request differences.",
+    label: "Structured LLM output with JSON Schema in OCaml and TypeScript",
+    summary: "typed invoice examples, JSON Schema validation and provider differences",
+  }],
   [join(OUT, "chatoyant/ocaml_llm_guide.html"), {
     title: "Call GPT-6, Claude 5.5 and Grok 4.7 from OCaml (Eio) | Chatoyant",
     description: "Call OpenAI, Anthropic and xAI from OCaml with Eio: compiled examples, model presets, tools, JSON schemas, streaming limits and token costs.",
@@ -390,6 +396,7 @@ await writeFile(
     `- [README](${blob("README.md")}): overview, install, providers, package size table`,
     `- [JAVASCRIPT.md](${blob("JAVASCRIPT.md")}): JavaScript and TypeScript guide for the npm package`,
     `- [OCAML.md](${blob("OCAML.md")}): OCaml guide (Eio runtime, ppx codecs, typed tools)`,
+    `- [Structured LLM output](${SITE}chatoyant/structured_outputs.html): typed JSON Schema examples in OCaml and TypeScript, validation errors and provider differences`,
     `- [OCaml LLM guide](${SITE}chatoyant/ocaml_llm_guide.html): GPT-6, Claude 5.5 and Grok 4.7 with Eio`,
     `- [JavaScript LLM SDK sizes](${SITE}chatoyant/js_llm_sdk_size.html): measured install and bundle bytes, method and TypeScript example`,
     `- [API reference](${SITE}chatoyant/): odoc reference for every OCaml library in the package`,
