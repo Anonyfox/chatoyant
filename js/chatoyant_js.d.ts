@@ -231,7 +231,6 @@ export interface ToolCall {
   arguments?: unknown;
 }
 
-/** JSON representation accepted by `Message.fromJSON()` and emitted by `Message.toJSON()`. */
 /**
  * Provider-neutral image/file attachment on a message. Exactly one of `url`,
  * `data` (base64, with `mediaType`), or `fileId` identifies the payload.
@@ -260,6 +259,7 @@ export type AttachmentInput = Attachment | string | {
   kind?: "image" | "file";
 };
 
+/** JSON representation accepted by Message.fromJSON() and emitted by Message.toJSON(). */
 export interface MessageJSON {
   role: Role;
   content: string;
@@ -492,6 +492,18 @@ export function createTool<P extends SchemaLike, Result = unknown>(
   definition: ToolDefinition<P, Result>
 ): Tool<InferSchemaInput<P>, Result>;
 
+/** Serialized conversation state emitted by Chat.toJSON() and accepted by Chat.fromJSON(). */
+export interface ChatJSON {
+  /** Model identifier selected for this conversation. */
+  model: string;
+  /** Messages in conversation order. */
+  messages: MessageJSON[];
+  /** Generation defaults retained for future calls. */
+  config: { defaults: GenerationOptions };
+  /** Last generation result; omitted before generation and by fork(). */
+  lastResult?: GenerationResult;
+}
+
 /**
  * Stateful/fluent high-level chat facade.
  *
@@ -502,29 +514,53 @@ export function createTool<P extends SchemaLike, Result = unknown>(
  * ```
  */
 export class Chat {
+  /** Create a conversation with a model and optional generation defaults. */
   constructor(config?: ChatConfig);
+  /** Restore model, messages, defaults, and last result from serialized chat state. */
   static fromJSON(json: unknown): Chat;
+  /** Model identifier used for subsequent generation requests. */
   model: string;
+  /** Return a copy of the message list; message objects are shared. */
   readonly messages: Message[];
+  /** Return a copy of the registered tool list. */
   readonly tools: Tool[];
+  /** Most recent generation result, or null before generation. */
   readonly lastResult: GenerationResult | null;
+  /** Append a system message and return this chat. */
   system(content: string, metadata?: unknown): this;
+  /** Append a user message with optional attachments or metadata and return this chat. */
   user(content: string, options?: UserMessageOptions | unknown): this;
+  /** Append an assistant message and return this chat. */
   assistant(content: string, metadata?: unknown): this;
+  /** Append a Message or deserialize a message object and return this chat. */
   addMessage(message: Message | MessageJSON): this;
+  /** Append messages in order and return this chat. */
   addMessages(messages: Array<Message | MessageJSON>): this;
+  /** Remove all messages and return this chat. */
   clearMessages(): this;
+  /** Register a tool for generation and return this chat. */
   addTool(tool: Tool): this;
+  /** Register tools in order and return this chat. */
   addTools(tools: Tool[]): this;
+  /** Remove all registered tools and return this chat. */
   clearTools(): this;
+  /** Generate a reply, append it to history, and return its text. */
   generate(options?: GenerationOptions): Promise<string>;
+  /** Generate a reply with tool execution and retain the result and assistant message. */
   generateWithResult(options?: GenerationOptions): Promise<GenerationResult>;
+  /** Yield reply text chunks and retain the completed reply in conversation history. */
   stream(options?: GenerationOptions): AsyncIterable<string>;
+  /** Collect streamed reply chunks into text, calling onDelta when supplied. */
   streamAccumulate(options?: GenerationOptions): Promise<string>;
+  /** Generate and validate structured output against a schema; invalid output throws. */
   generateData<S extends SchemaLike>(schema: S, options?: GenerationOptions): Promise<InferSchemaInput<S>>;
-  toJSON(): unknown;
+  /** Serialize model, messages, generation defaults, and the last result when present; tools are omitted. */
+  toJSON(): ChatJSON;
+  /** Return JSON.stringify of the serialized chat state. */
   stringify(): string;
+  /** Restore a new chat from this chat’s serialized state; tools are omitted. */
   clone(): Chat;
+  /** Copy serialized conversation state into a new chat without the last result or tools. */
   fork(): Chat;
 }
 
@@ -592,20 +628,30 @@ export const PRICING: Readonly<Record<string, ModelPricing>>;
 
 /** Fast heuristic token estimate for text. */
 export function estimateTokens(text: string): number;
+/** Sum heuristic token estimates for a list of texts. */
 export function estimateTokensMany(texts: string[]): number;
+/** Estimate tokens using an explicit number of characters per token. */
 export function estimateTokensWithRatio(text: string, charsPerToken: number): number;
+/** Estimate input, output, and total tokens for a prompt and optional response. */
 export function estimatePromptTokens(prompt: string, response?: string): { input: number; output: number; total: number };
+/** Estimate content tokens plus provider-specific message overhead. */
 export function estimateMessageTokens(message: TokenMessage, provider?: ProviderId): number;
+/** Estimate tokens for all messages, including conversation overhead. */
 export function estimateChatTokens(messages: TokenMessage[], provider?: ProviderId): number;
+/** Estimate tokens for a system message with provider overhead. */
 export function estimateSystemPromptTokens(systemPrompt: string, provider?: ProviderId): number;
+/** Return per-message and conversation token overhead for a provider. */
 export function getMessageOverhead(provider?: ProviderId): { perMessage: number; conversation: number };
+/** Subtract system, history, and response reserves from a context window. */
 export function calculateAvailableTokens(params: {
   contextWindow: number;
   systemPromptTokens?: number;
   reserveForResponse?: number;
   historyTokens?: number;
 }): number;
+/** Check whether the estimated conversation fits the given token budget. */
 export function messagesFitBudget(messages: TokenMessage[], maxTokens: number, provider?: ProviderId): boolean;
+/** Calculate USD token costs using the model pricing table. */
 export function calculateCost(params: {
   model: string;
   inputTokens: number;
@@ -614,6 +660,7 @@ export function calculateCost(params: {
   cacheWriteTokens?: number;
   actualCostUsd?: number;
 }): CostResult;
+/** Calculate USD token costs using caller-supplied pricing or a reported actual cost. */
 export function calculateCostCustom(params: {
   inputTokens: number;
   outputTokens: number;
@@ -622,22 +669,36 @@ export function calculateCostCustom(params: {
   actualCostUsd?: number;
   pricing: ModelPricing;
 }): CostResult;
+/** Sum request token counts and calculate their cost for one model. */
 export function calculateBatchCost(
   requests: Array<{ inputTokens: number; outputTokens: number; cachedTokens?: number; cacheWriteTokens?: number }>,
   model: string
 ): CostResult;
+/** Multiply image count by the model price per image; return zero if unavailable. */
 export function calculateImageCost(params: { model: string; count: number }): number;
+/** Multiply duration by the model price per second; return zero if unavailable. */
 export function calculateVideoCost(params: { model: string; durationSeconds: number }): number;
+/** Estimate USD cost from input text or token counts and expected output tokens. */
 export function estimateCost(params: { model: string; inputTokens?: number; inputText?: string; expectedOutputTokens: number }): CostResult;
+/** Return USD prices per token, or undefined when the model has no pricing. */
 export function getCostPerToken(model: string): { input: number; output: number; cached: number; cacheWrite: number } | undefined;
+/** Look up the model pricing row, or return undefined when absent. */
 export function getPricing(model: string): ModelPricing | undefined;
+/** Check whether a model has a pricing row. */
 export function hasPricing(model: string): boolean;
+/** Look up the model context window in tokens, or return undefined when absent. */
 export function getContextWindow(model: string): number | undefined;
+/** Check whether the context-window table contains a model. */
 export function hasContextWindow(model: string): boolean;
+/** Split text at word boundaries to a token budget, with optional overlap. */
 export function splitText(text: string, options: ChunkOptions): string[];
+/** Shorten text to an estimated token budget and append an ellipsis. */
 export function truncateContent(content: string, maxTokens: number, ellipsis?: string): string;
+/** Keep recent messages within the response-adjusted budget, preserving a leading system message. */
 export function fitMessages<T extends TokenMessage>(messages: T[], options: FitOptions): T[];
+/** Group consecutive messages into pages using estimated token counts. */
 export function paginateMessages<T extends TokenMessage>(messages: T[], tokensPerPage: number, provider?: ProviderId): T[][];
+/** Return the number of chunks produced by splitText with these options. */
 export function estimateChunkCount(text: string, options: ChunkOptions): number;
 
 /** Error thrown when provider configuration or HTTP operations fail. */
@@ -666,15 +727,25 @@ export const XAI_MODELS: readonly string[];
 export const META_MODELS: readonly string[];
 export const MODELS_BY_PROVIDER: Readonly<Record<ProviderId, readonly string[]>>;
 
+/** Detect a provider from model-name signatures; names containing a slash select OpenRouter. */
 export function detectProviderByModel(model: string): ProviderId | null;
+/** Check whether the environment supplies configuration for a provider. */
 export function isProviderActive(providerId: ProviderId): boolean;
+/** List providers whose environment configuration is available. */
 export function activeProviders(): ProviderId[];
+/** Throw ProviderError when the provider lacks environment configuration. */
 export function assertProviderActive(providerId: ProviderId): void;
+/** Read the configured API key; an active local provider defaults to the key "local". */
 export function getApiKey(providerId: ProviderId): string;
+/** Return the provider base URL, using LOCAL_BASE_URL for local inference. */
 export function getBaseUrl(providerId: ProviderId): string;
+/** Resolve an active provider for a model, falling back to configured local inference. */
 export function resolveProvider(model: string): ProviderId;
+/** Return the known model identifiers for a provider. */
 export function getModelsForProvider(providerId: ProviderId): readonly string[];
+/** Return the combined known OpenAI, Anthropic, xAI, and Meta model identifiers. */
 export function getAllKnownModels(): readonly string[];
+/** Check whether a model identifier appears in the known model lists. */
 export function isKnownModel(model: string): boolean;
 
 /** Common provider-client interface. */
@@ -798,18 +869,31 @@ export class OpenRouterClient implements ProviderClient {
 }
 export interface OpenRouterClient extends ProviderClient {}
 
+/** Create an OpenAI client with the supplied generation defaults. */
 export function createOpenAIClient(config?: GenerationOptions): OpenAIClient;
+/** Create an Anthropic client with the supplied generation defaults. */
 export function createAnthropicClient(config?: GenerationOptions): AnthropicClient;
+/** Create an xAI client with the supplied generation defaults. */
 export function createXAIClient(config?: GenerationOptions): XAIClient;
+/** Create a Meta client with the supplied generation defaults. */
 export function createMetaClient(config?: GenerationOptions): MetaClient;
+/** Create a local OpenAI-compatible client with the supplied generation defaults. */
 export function createLocalClient(config?: GenerationOptions): LocalClient;
+/** Create an OpenRouter client with the supplied generation defaults. */
 export function createOpenRouterClient(config?: GenerationOptions): OpenRouterClient;
+/** Create the client for a provider identifier with the supplied configuration. */
 export function createProviderClient(provider: "openai", config?: GenerationOptions): OpenAIClient;
+/** Create the client for a provider identifier with the supplied configuration. */
 export function createProviderClient(provider: "anthropic", config?: GenerationOptions): AnthropicClient;
+/** Create the client for a provider identifier with the supplied configuration. */
 export function createProviderClient(provider: "xai", config?: GenerationOptions): XAIClient;
+/** Create the client for a provider identifier with the supplied configuration. */
 export function createProviderClient(provider: "meta", config?: GenerationOptions): MetaClient;
+/** Create the client for a provider identifier with the supplied configuration. */
 export function createProviderClient(provider: "local", config?: GenerationOptions): LocalClient;
+/** Create the client for a provider identifier with the supplied configuration. */
 export function createProviderClient(provider: "openrouter", config?: GenerationOptions): OpenRouterClient;
+/** Create the client for a provider identifier with the supplied configuration. */
 export function createProviderClient(provider: string, config?: GenerationOptions): ProviderClient;
 
 /** Package version for the OCaml/Melange port. */

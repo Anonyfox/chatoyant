@@ -104,6 +104,7 @@ include S`);
     const fixture = await mkdtemp(path.join(tmpdir(), "chatoyant-api-"));
     try {
       for (const dir of ["scripts", "js", "lib/public", "lib/private", "dist"]) await mkdir(path.join(fixture, dir), { recursive: true });
+      await writeFile(path.join(fixture, "package.json"), "{}");
       const source = 'export interface X { member: string; }\n';
       await writeFile(path.join(fixture, "js/chatoyant_js.d.ts"), source);
       await writeFile(path.join(fixture, "lib/public/dune"), '(library (name api) (public_name chatoyant.api))');

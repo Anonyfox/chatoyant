@@ -6,6 +6,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+### Added
+
+- Export `ChatJSON` for serialized conversation state and use it as the return type of `Chat.toJSON()`.
+
 ### Fixed
 
 - Pricing for OpenAI's GPT-6 Rosalind (`gpt-6-rosalind`, $15 / $75 / $1.50 cached per 1M tokens, released 2026-10-30), `gpt-rosalind-research` and `gpt-rosalind-discovery` ($5 / $25 / $0.50), and the `gpt-6-astra-law` configuration ($10 / $50 / $1). They used to fall back to the `gpt-6.1-sol` or `gpt-5.4` family price, which undercounted Rosalind cost by 7.5x. OCaml and JS tables match.

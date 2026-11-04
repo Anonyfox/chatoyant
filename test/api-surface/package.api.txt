@@ -1,0 +1,24 @@
+# Public API surface. Update deliberately with npm run api:update and commit this snapshot.
+exports.. order ["default","import"]: ["import","default"]
+exports.. order ["default","require"]: ["require","default"]
+exports.. order ["default","types"]: ["types","default"]
+exports.. order ["import","require"]: ["import","require"]
+exports.. order ["import","types"]: ["types","import"]
+exports.. order ["require","types"]: ["types","require"]
+exports...default: "./dist/index.js"
+exports...import: "./dist/index.js"
+exports...require order ["default","types"]: ["types","default"]
+exports...require.default: "./dist/index.cjs"
+exports...require.types: "./dist/index.d.cts"
+exports...require: {}
+exports...types: "./dist/index.d.ts"
+exports..: {}
+exports: {}
+files["JAVASCRIPT.md"]: "JAVASCRIPT.md"
+files["LICENSE"]: "LICENSE"
+files["OCAML.md"]: "OCAML.md"
+files["README.md"]: "README.md"
+files["dist"]: "dist"
+main: "./dist/index.cjs"
+module: "./dist/index.js"
+types: "./dist/index.d.ts"

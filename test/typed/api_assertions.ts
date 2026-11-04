@@ -2,7 +2,7 @@ import {
   Chat, Message, Schema, Tool, createTool, genData, calculateCost, estimateCost,
   getPricing, estimateTokens, fitMessages, detectProviderByModel,
   type ProviderId, type Role, type GenerationOptions, type GenerationResult,
-  type MessageJSON, type CostResult, type Usage, type ModelPricing,
+  type ChatJSON, type MessageJSON, type CostResult, type Usage, type ModelPricing,
   type InferSchemaInput, type ToolExecutionResult,
 } from 'chatoyant';
 
@@ -111,7 +111,7 @@ export type ChatLast = Expect<Equal<Chat['lastResult'], GenerationResult | null>
 export type ChatMessages = Expect<Equal<Chat['messages'], Message[]>>;
 export type ChatClone = Expect<Equal<ReturnType<Chat['clone']>, Chat>>;
 export type ChatFork = Expect<Equal<ReturnType<Chat['fork']>, Chat>>;
-export type ChatJson = Expect<Equal<ReturnType<Chat['toJSON']>, unknown>>;
+export type ChatJson = Expect<Equal<ReturnType<Chat['toJSON']>, ChatJSON>>;
 export type ChatStringify = Expect<Equal<ReturnType<Chat['stringify']>, string>>;
 class SpecializedChat extends Chat { readonly marker = true; }
 const fluent = new SpecializedChat().system('x').user('y').assistant('z').clearMessages().clearTools();
@@ -120,3 +120,22 @@ export type FluentSubclass = Expect<Equal<typeof fluent, SpecializedChat>>;
 export type ChatStructured = Expect<Equal<typeof chatData, Promise<RecordValue>>>;
 // @ts-expect-error Message role must be valid when adding JSON messages.
 fluent.addMessage({ role: 'invalid', content: 'x' });
+
+export type ChatJsonModel = Expect<Equal<ChatJSON['model'], string>>;
+export type ChatJsonMessages = Expect<Equal<ChatJSON['messages'], MessageJSON[]>>;
+export type ChatJsonConfig = Expect<Equal<ChatJSON['config'], { defaults: GenerationOptions }>>;
+export type ChatJsonLast = Expect<Equal<ChatJSON['lastResult'], GenerationResult | undefined>>;
+export type ChatFromJsonInput = Expect<Equal<Parameters<typeof Chat.fromJSON>[0], unknown>>;
+const serializedChat: ChatJSON = new Chat().toJSON();
+Chat.fromJSON(serializedChat);
+Chat.fromJSON({}); // Preserve permissive restoration input.
+// @ts-expect-error Serialized model identifiers are strings.
+serializedChat.model = 42;
+// @ts-expect-error Serialized messages retain the closed role union.
+serializedChat.messages.push({ role: 'invalid', content: 'x' });
+// @ts-expect-error Defaults retain generation option types.
+serializedChat.config.defaults.temperature = 'hot';
+// @ts-expect-error Absent results are omitted, not serialized as null.
+serializedChat.lastResult = null;
+// @ts-expect-error Tool registrations are not part of serialized chat state.
+serializedChat.tools;

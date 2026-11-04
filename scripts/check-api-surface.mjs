@@ -70,12 +70,12 @@ function normalize(source, ocaml = false) {
 
 // A lightweight declaration scanner for regex-free .d.ts files. => is not an
 // angle close. Braces inside generic constraints are not declaration bodies.
-function jsParts(source, members = false, enumBody = false) {
+function jsParts(source, members = false, enumBody = false, raw = false) {
   const { text, mask } = lex(source);
   const parts = [];
   let start = 0, brace = 0, paren = 0, bracket = 0, angle = 0;
   const flush = (end) => {
-    const part = text.slice(start, end).trim();
+    const part = (raw ? source : text).slice(start, end).trim();
     if (part && part !== ";") parts.push(part);
     start = end;
   };
@@ -133,6 +133,84 @@ export function extractJSEntries(source) {
       }
       i = end - 1;
     }
+  }
+  return entries.sort(compare);
+}
+
+// Use the same delimiter scanner as the signature gate, retaining comments so
+// only a JSDoc block immediately before a declaration counts as documentation.
+export function undocumentedEntries(source) {
+  const missing = [];
+  const hasDoc = (raw) => {
+    const { mask } = lex(raw);
+    const start = mask.search(/\S/);
+    return start >= 0 && /\/\*\*(?:(?!\*\/)[\s\S])*\*\/\s*$/.test(raw.slice(0, start));
+  };
+  const record = (raw, key) => {
+    if (!hasDoc(raw)) missing.push(key);
+  };
+  for (const raw of jsParts(source, false, false, true)) {
+    const declaration = stripJSComments(raw).trim();
+    const identity = jsIdentity(declaration);
+    if (!identity || !/^export\b/.test(declaration)) continue;
+    record(raw, `${identity[1]} ${identity[2]}`);
+    if (!['class', 'interface'].includes(identity[1])) continue;
+    const { mask } = lex(raw);
+    let angle = 0;
+    for (let i = 0; i < mask.length; i++) {
+      if (mask[i] === '<') angle++;
+      if (mask[i] === '>' && mask[i - 1] !== '=' && angle) angle--;
+      if (mask[i] !== '{' || angle) continue;
+      let end = i + 1, depth = 1;
+      for (; end < mask.length && depth; end++) {
+        if (mask[end] === '{') depth++;
+        if (mask[end] === '}') depth--;
+      }
+      for (const member of jsParts(raw.slice(i + 1, end - 1), true, false, true)) {
+        const clean = stripJSComments(member).trim();
+        if (!clean || clean === ';' || /^private\b/.test(clean)) continue;
+        const name = clean.match(/^(?:(?:public|protected|static|readonly|abstract|override|get|set)\s+)*([\w$]+|"[^"]+"|'[^']+'|\[[^\]]+\])/)?.[1] ?? '(call)';
+        record(member, `${identity[2]}.${name}`);
+      }
+      break;
+    }
+  }
+  // Number occurrences so adding an undocumented overload is a new item.
+  const seen = new Map();
+  return missing.sort(compare).map((key) => {
+    const count = (seen.get(key) ?? 0) + 1;
+    seen.set(key, count);
+    return `${key} #${count}`;
+  });
+}
+
+export function documentationRegressions(previous, current, maximum = previous.length) {
+  return current.length > maximum || current.some((item) => !previous.includes(item));
+}
+
+export function extractPackageEntries(pkg) {
+  const entries = [];
+  const walk = (key, value) => {
+    if (Array.isArray(value)) {
+      if (!value.length) entries.push(`${key}: []`);
+      for (const [index, item] of value.entries()) {
+        if (key === "files") entries.push(`${key}[${JSON.stringify(item)}]: ${JSON.stringify(item)}`);
+        else walk(`${key}[${index}]`, item);
+      }
+    } else if (value && typeof value === 'object') {
+      // Conditional export order affects Node resolution; preserve it separately.
+      entries.push(`${key}: {}`);
+      const keys = Object.keys(value);
+      for (let i = 0; i < keys.length; i++) {
+        for (let j = i + 1; j < keys.length; j++) {
+          entries.push(`${key} order ${JSON.stringify([keys[i], keys[j]].sort(compare))}: ${JSON.stringify([keys[i], keys[j]])}`);
+        }
+      }
+      for (const [name, child] of Object.entries(value)) walk(`${key}.${name}`, child);
+    } else entries.push(`${key}: ${JSON.stringify(value)}`);
+  };
+  for (const field of ['exports', 'files', 'main', 'module', 'types']) {
+    if (Object.hasOwn(pkg, field)) walk(field, pkg[field]);
   }
   return entries.sort(compare);
 }
@@ -217,7 +295,12 @@ async function ocamlEntries(directory, baseRoot = root) {
 
 export async function main(args = process.argv.slice(2), baseRoot = root, logger = console) {
   const root = baseRoot;
-  if (args.some((arg) => arg !== "--update")) throw new Error("Usage: node scripts/check-api-surface.mjs [--update]");
+  const allowIndex = args.indexOf("--allow-raise");
+  const reason = allowIndex < 0 ? null : args[allowIndex + 1];
+  const flags = args.filter((_, i) => i !== allowIndex && !(allowIndex >= 0 && i === allowIndex + 1));
+  if (flags.some((arg) => arg !== "--update") || (allowIndex >= 0 && (!args.includes("--update") || !reason?.trim() || reason.startsWith("--")))) {
+    throw new Error('Usage: node scripts/check-api-surface.mjs [--update [--allow-raise "reason"]]');
+  }
   const source = await readFile(path.join(root, "js/chatoyant_js.d.ts"));
   let failed = false;
   for (const file of ["dist/index.d.ts", "dist/index.d.cts"]) {
@@ -227,7 +310,26 @@ export async function main(args = process.argv.slice(2), baseRoot = root, logger
       failed = true;
     }
   }
-  for (const [name, entries] of [["js", extractJSEntries(source.toString())], ["ocaml", await ocamlEntries(path.join(root, "lib"), root)]]) {
+  const missing = undocumentedEntries(source.toString());
+  const docFile = path.join(root, "test/api-surface/undocumented.txt");
+  const baseline = await optionalRead(docFile);
+  const lines = baseline?.toString().split("\n") ?? [];
+  const maximum = Number(lines.find((line) => line.startsWith("# Maximum: "))?.slice(11));
+  const previousDocs = lines.filter((line) => line && !line.startsWith("#"));
+  if (baseline && (!Number.isInteger(maximum) || maximum !== previousDocs.length)) throw new Error("Invalid documentation baseline maximum");
+  const regression = baseline && documentationRegressions(previousDocs, missing, maximum);
+  if (args.includes("--update") && (!regression || reason)) {
+    await mkdir(path.dirname(docFile), { recursive: true });
+    await writeFile(docFile, `# Undocumented public declarations and class/interface members.\n# Maximum: ${missing.length}\n${reason ? `# Raise reason: ${reason.replace(/[\r\n]/g, " ")}\n` : ""}${missing.join("\n")}\n`);
+    if (reason) logger.log(`documentation: raise authorized: ${reason}`);
+  } else if (!baseline || regression) {
+    logger.error("documentation: new undocumented API or count increase; document it, or update with --allow-raise and a reason");
+    for (const item of missing.filter((item) => !previousDocs.includes(item))) logger.error(`UNDOCUMENTED ${item}`);
+    failed = true;
+  }
+  logger.log(`documentation: ${missing.length} undocumented items`);
+  const pkg = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
+  for (const [name, entries] of [["package", extractPackageEntries(pkg)], ["js", extractJSEntries(source.toString())], ["ocaml", await ocamlEntries(path.join(root, "lib"), root)]]) {
     const file = path.join(root, `test/api-surface/${name}.api.txt`);
     if (args.includes("--update")) {
       await mkdir(path.dirname(file), { recursive: true });
