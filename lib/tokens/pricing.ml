@@ -9,6 +9,10 @@ let all =
   [
     (* OpenAI bills >272K input at a higher long-context tier not modelled here. *)
     ("gpt-6-astra", p ~input:10.0 ~output:50.0 ~cached:1.0 ());
+    ("gpt-6-astra-law", p ~input:10.0 ~output:50.0 ~cached:1.0 ());
+    ("gpt-6-rosalind", p ~input:15.0 ~output:75.0 ~cached:1.5 ());
+    ("gpt-rosalind-research", p ~input:5.0 ~output:25.0 ~cached:0.5 ());
+    ("gpt-rosalind-discovery", p ~input:5.0 ~output:25.0 ~cached:0.5 ());
     ("gpt-6.1-terra", p ~input:1.0 ~output:5.0 ~cached:0.05 ());
     ("gpt-6.1-sol", p ~input:2.0 ~output:10.0 ~cached:0.1 ());
     ("gpt-6-sol", p ~input:2.0 ~output:10.0 ~cached:0.2 ());

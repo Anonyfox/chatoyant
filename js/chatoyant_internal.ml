@@ -865,7 +865,7 @@ const PROVIDERS = Object.freeze({
 const PROVIDER_IDS = Object.freeze(Object.keys(PROVIDERS));
 
 const OPENAI_MODELS = Object.freeze([
-  "gpt-6-astra", "gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-cyber", "gpt-5.5-cyber", "gpt-5.3-codex", "chat-latest", "gpt-5-search-api",
+  "gpt-6-astra", "gpt-6-astra-law", "gpt-6-rosalind", "gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-cyber", "gpt-5.5-cyber", "gpt-5.3-codex", "chat-latest", "gpt-5-search-api",
   "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna",
   "gpt-5.5", "gpt-5.5-pro",
   "gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano", "gpt-5.4-pro",
@@ -922,6 +922,10 @@ const MODELS_BY_PROVIDER = Object.freeze({
 const PRICING = Object.freeze({
   // OpenAI bills >272K input at a higher long-context tier not modelled here.
   "gpt-6-astra": { input: 10, output: 50, cached: 1 },
+  "gpt-6-astra-law": { input: 10, output: 50, cached: 1 },
+  "gpt-6-rosalind": { input: 15, output: 75, cached: 1.5 },
+  "gpt-rosalind-research": { input: 5, output: 25, cached: 0.5 },
+  "gpt-rosalind-discovery": { input: 5, output: 25, cached: 0.5 },
   "gpt-6.1-terra": { input: 1, output: 5, cached: 0.05 },
   "gpt-6.1-sol": { input: 2, output: 10, cached: 0.1 },
   "gpt-6-sol": { input: 2, output: 10, cached: 0.2 },
