@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Fixed
+
+- Update xAI Imagine quality/pro estimates to $0.04 per image after their November 2 redirect to Imagine 2.0 low billing.
+
 ## 0.17.0 — 2026-11-04
 
 ### Added

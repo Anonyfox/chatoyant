@@ -950,7 +950,7 @@ const PRICING = Object.freeze({
   "muse-spark-1.3-contributor": { input: 0.1, output: 0.2, cached: 0.002 },
   "muse-wonder-1.0": { input: 4, output: 20, cached: 0.2 },
   "grok-imagine-image-2.0": { input: 0, output: 0, perImage: 0.04 },
-  "grok-imagine-image-quality": { input: 0, output: 0, perImage: 0.05 },
+  "grok-imagine-image-quality": { input: 0, output: 0, perImage: 0.04 },
   "grok-imagine-video-1.5": { input: 0, output: 0, perSecond: 0.08 },
   "grok-imagine-video-1.5-lite": { input: 0, output: 0, perSecond: 0.02 },
   // OpenAI promotional price, at least through 2026-11-21.
@@ -1061,7 +1061,7 @@ const PRICING = Object.freeze({
   "grok-3-mini": { input: 0.3, output: 0.5, cached: 0.07 },
   "grok-2-vision-1212": { input: 2, output: 10 },
   "grok-imagine-image": { input: 0, output: 0, perImage: 0.02 },
-  "grok-imagine-image-pro": { input: 0, output: 0, perImage: 0.07 },
+  "grok-imagine-image-pro": { input: 0, output: 0, perImage: 0.04 },
   "grok-imagine-video": { input: 0, output: 0, perSecond: 0.05 },
   "grok-embedding-1": { input: 0, output: 0 },
 });

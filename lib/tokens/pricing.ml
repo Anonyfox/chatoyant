@@ -49,7 +49,7 @@ let all =
     ("muse-spark-1.3-contributor", p ~input:0.1 ~output:0.2 ~cached:0.002 ());
     ("muse-wonder-1.0", p ~input:4.0 ~output:20.0 ~cached:0.2 ());
     ("grok-imagine-image-2.0", p ~input:0.0 ~output:0.0 ~per_image:0.04 ());
-    ("grok-imagine-image-quality", p ~input:0.0 ~output:0.0 ~per_image:0.05 ());
+    ("grok-imagine-image-quality", p ~input:0.0 ~output:0.0 ~per_image:0.04 ());
     ("grok-imagine-video-1.5", p ~input:0.0 ~output:0.0 ~per_second:0.08 ());
     ("grok-imagine-video-1.5-lite", p ~input:0.0 ~output:0.0 ~per_second:0.02 ());
     (* OpenAI promotional price, at least through 2026-11-21. *)
@@ -203,7 +203,7 @@ let all =
     ("grok-3-mini", p ~input:0.3 ~output:0.5 ~cached:0.07 ());
     ("grok-2-vision-1212", p ~input:2.0 ~output:10.0 ());
     ("grok-imagine-image", p ~input:0.0 ~output:0.0 ~per_image:0.02 ());
-    ("grok-imagine-image-pro", p ~input:0.0 ~output:0.0 ~per_image:0.07 ());
+    ("grok-imagine-image-pro", p ~input:0.0 ~output:0.0 ~per_image:0.04 ());
     ("grok-imagine-video", p ~input:0.0 ~output:0.0 ~per_second:0.05 ());
     ("grok-embedding-1", p ~input:0.0 ~output:0.0 ());
   ]
