@@ -85,7 +85,11 @@ const HERO =
   `<a href="${REPO}">GitHub</a>` +
   '<a href="https://www.npmjs.com/package/chatoyant">npm</a>' +
   '<a href="https://opam.ocaml.org/packages/chatoyant/">opam</a>' +
-  "</div></div>";
+  "</div>" +
+  '<p class="chatoyant-hero-related">Sibling libraries by the same author: ' +
+  '<a href="https://anonyfox.github.io/celestine/">Celestine</a>, a TypeScript astrology library, and ' +
+  '<a href="https://ghostpaw.dev/">GhostPaw</a>, small tools for AI agents.</p>' +
+  "</div>";
 
 if (!existsSync(SRC)) {
   console.error(`brand-docs: ${SRC} not found — run \`dune build @doc\` first`);
