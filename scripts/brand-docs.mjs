@@ -86,6 +86,21 @@ const HERO =
   '<a href="https://www.npmjs.com/package/chatoyant">npm</a>' +
   '<a href="https://opam.ocaml.org/packages/chatoyant/">opam</a>' +
   "</div>" +
+  '<p>Chatoyant puts LLM calls in your application code. The OCaml-first SDK uses Eio ' +
+  'for native I/O; its JavaScript twin is generated from OCaml by Melange and has zero ' +
+  'runtime dependencies. Use it to add a model call to an OCaml service or a JavaScript ' +
+  'application while keeping prompts, tool execution and application logic in your own code.</p>' +
+  '<p>Choose typed provider clients or the shared Chat session API for OpenAI, Anthropic, ' +
+  'xAI, Meta, OpenRouter and local OpenAI-compatible servers. Structured outputs use codecs ' +
+  'and JSON Schema to turn model responses into typed data. Tool calling lets a model request ' +
+  'application functions; streaming exposes responses as they arrive. Token usage and cost ' +
+  'accounting help you inspect each request. Provider capabilities and request formats differ; ' +
+  'the guides show concrete calls and explain those differences.</p>' +
+  '<h2>Guides and examples</h2>' +
+  '<ul>' +
+  [...GUIDES].map(([path, guide]) =>
+    `<li><a href="${relative(dirname(INDEX), path).split(sep).join("/")}">${guide.label}</a>: ${guide.summary}.</li>`).join("") +
+  '</ul>' +
   '<p class="chatoyant-hero-related">Sibling libraries by the same author: ' +
   '<a href="https://anonyfox.github.io/celestine/">Celestine</a>, a TypeScript astrology library, and ' +
   '<a href="https://ghostpaw.dev/">GhostPaw</a>, small tools for AI agents.</p>' +
