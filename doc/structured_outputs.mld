@@ -2,6 +2,21 @@
 
 As of 4 November 2026, use [Chatoyant.gen_data ~codec] in OCaml and [genData(prompt, schema, options)] in JavaScript or TypeScript to request typed, schema-validated JSON objects from an LLM. OCaml returns a decoded record in a result; JS resolves to a plain object whose type is inferred from the schema. The examples below use xAI with the same invoice fields in both languages.
 
+{1 What goes over the wire}
+
+With a schema supplied, native [gen_data] and JS [genData] send the following fields.
+
+{table
+{tr {th Provider} {th Request field Chatoyant sends} {th Strict mode} {th Notes}}
+{tr {td OpenAI (chat completions)} {td JS: [response_format.type = "json_schema"] with nested [json_schema].} {td JS: [strict = true], with a projected schema.} {td Native [gen_data] uses Responses instead.}}
+{tr {td OpenAI (Responses-routed calls)} {td Native: [text.format.type = "json_schema"]. JS: translates [response_format] into [text.format].} {td Native: [strict = true] by default, configurable; projects when true. JS: preserves [strict = true] from [genData].} {td JS keeps an explicit [extra.text] instead of translating.}}
+{tr {td Anthropic} {td Native: system instruction containing JSON Schema. JS: [tools] with [input_schema] and forced [tool_choice] for the [response] tool.} {td Native: no added strict wire field. JS: no strict field in the generated tool.} {td Native uses the original schema in the instruction; JS uses the original schema as tool input.}}
+{tr {td xAI} {td [response_format.type = "json_schema"] with nested [json_schema].} {td Native: configurable, true by default. JS: true. Both project the schema for strict mode.} {td Native schema name defaults to [data]; JS uses [response].}}
+{tr {td Meta Muse} {td Native: [text.format.type = "json_schema"]. JS: [response_format] for chat completions; [text.format] when routed to Responses.} {td Native: configurable, true by default. JS: true. Both project the schema for strict mode.} {td JS routes Meta web-search calls to Responses.}}
+{tr {td OpenRouter} {td [response_format.type = "json_schema"] with nested [json_schema].} {td Native: configurable, true by default. JS: true. Both project the schema for strict mode.} {td Native schema name defaults to [data]; JS uses [response].}}
+{tr {td Local OpenAI-compatible} {td [response_format.type = "json_schema"] with nested [json_schema].} {td Native: configurable, true by default. JS: true. Both project the schema for strict mode.} {td Native also adds a system instruction containing the original JSON Schema.}}
+}
+
 {1 Install}
 
 For OCaml, run [opam install chatoyant eio_main] with OCaml 5.3 or later. Link [chatoyant] and [eio.unix] in your dune executable. Run native requests inside [Eio_main.run].

@@ -33,45 +33,34 @@ Run [node scripts/measure-sdk-size.mjs] from the repository root. Add [--json] f
 
 {1 The five bundled scripts}
 
-chatoyant
-
-{[
+{table
+{tr {th SDK} {th Script}}
+{tr {td chatoyant} {td {v
 import { genText } from "chatoyant";
 console.log(await genText("Hello", { model: "gpt-6.1-sol" }));
-]}
-
-openai
-
-{[
+v}}}
+{tr {td openai} {td {v
 import OpenAI from "openai";
 const r = await new OpenAI().responses.create({ model: "gpt-6.1-sol", input: "Hello" });
 console.log(r.output_text);
-]}
-
-[@anthropic-ai/sdk]
-
-{[
+v}}}
+{tr {td [@anthropic-ai/sdk]} {td {v
 import Anthropic from "@anthropic-ai/sdk";
 const r = await new Anthropic().messages.create({ model: "claude-sonnet-5-5", max_tokens: 256, messages: [{ role: "user", content: "Hello" }] });
 console.log(r.content);
-]}
-
-[ai + @ai-sdk/openai]
-
-{[
+v}}}
+{tr {td [ai + @ai-sdk/openai]} {td {v
 import { generateText } from "ai";
 import { openai } from "@ai-sdk/openai";
 const r = await generateText({ model: openai("gpt-6.1-sol"), prompt: "Hello" });
 console.log(r.text);
-]}
-
-[langchain + @langchain/openai]
-
-{[
+v}}}
+{tr {td [langchain + @langchain/openai]} {td {v
 import { ChatOpenAI } from "@langchain/openai";
 const r = await new ChatOpenAI({ model: "gpt-6.1-sol" }).invoke("Hello");
 console.log(r.content);
-]}
+v}}}
+}
 
 {1 What the size buys}
 
