@@ -2993,7 +2993,20 @@ class Chat {
     }));
     if (provider === "meta" && options.webSearch) tools.push({ type: "web_search" });
     if (tools.length) body.tools = tools;
-    if (options.extra && typeof options.extra === "object") Object.assign(body, options.extra);
+    if (options.extra && typeof options.extra === "object") {
+      const { response_format, ...extra } = options.extra;
+      Object.assign(body, extra);
+      if (response_format && !Object.prototype.hasOwnProperty.call(extra, "text")) {
+        if (response_format.type === "json_schema") {
+          const { name, description, schema, strict } = response_format.json_schema;
+          const format = { type: "json_schema", name, schema, strict: strict ?? true };
+          if (description !== undefined) format.description = description;
+          body.text = { format };
+        } else if (response_format.type === "json_object" || response_format.type === "text") {
+          body.text = { format: { type: response_format.type } };
+        }
+      }
+    }
     const json = await this._fetchJson(`${baseUrl}/responses`, {
       method: "POST",
       headers,

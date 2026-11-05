@@ -8,6 +8,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Translate JavaScript chat structured output formats when requests route to the Responses API.
+
 - Update xAI Imagine quality/pro estimates to $0.04 per image after their November 2 redirect to Imagine 2.0 low billing.
 
 ## 0.17.0 — 2026-11-04

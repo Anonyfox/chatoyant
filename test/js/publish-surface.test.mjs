@@ -598,6 +598,70 @@ describe("publish package surface", () => {
     assert.deepEqual(anthropicCall.body.tool_choice, { type: "tool", name: "response" });
   });
 
+  it("translates structured output for Responses-routed chats with tools", async () => {
+    class Person extends Schema {
+      name = Schema.String();
+      age = Schema.Integer();
+    }
+    const originalFetch = globalThis.fetch;
+    const seen = [];
+    const person = { name: "Alice", age: 30 };
+    globalThis.fetch = async (url, init) => {
+      assert.equal(String(url), "https://api.openai.com/v1/responses");
+      seen.push(JSON.parse(init.body));
+      return new Response(JSON.stringify({
+        status: "completed",
+        output: [{ type: "message", content: [{ type: "output_text", text: JSON.stringify(person) }] }],
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    };
+    const chat = () => new Chat({ model: "gpt-6-astra" }).user("Extract Alice, age 30").addTool(createTool({
+      name: "noop",
+      description: "Do nothing",
+      parameters: {},
+      async execute() { return {}; },
+    }));
+    try {
+      assert.deepEqual(await chat().generateData(Person, { apiKey: "k" }), person);
+      const format = seen[0].text.format;
+      assert.equal(Object.hasOwn(seen[0], "response_format"), false);
+      assert.equal(format.type, "json_schema");
+      assert.equal(format.name, "response");
+      assert.equal(format.strict, true);
+      assert.deepEqual(format.schema, JsonSchema.projectOpenAIStrict(Schema.toJSON(Person)).schema);
+      assert.equal(format.schema.additionalProperties, false);
+
+      const schema = { type: "object" };
+      const cases = [
+        [{ type: "json_schema", json_schema: { name: "result", description: "A result", schema } },
+          { type: "json_schema", name: "result", description: "A result", schema, strict: true }],
+        [{ type: "json_schema", json_schema: { name: "result", schema, strict: false } },
+          { type: "json_schema", name: "result", schema, strict: false }],
+        [{ type: "json_object" }, { type: "json_object" }],
+        [{ type: "text" }, { type: "text" }],
+      ];
+      for (const [response_format, expected] of cases) {
+        const extra = { response_format, metadata: { test: "translation" } };
+        await chat().generate({ apiKey: "k", extra });
+        const body = seen.at(-1);
+        assert.equal(Object.hasOwn(body, "response_format"), false);
+        assert.deepEqual(body.text.format, expected);
+        assert.deepEqual(body.metadata, extra.metadata);
+        assert.deepEqual(extra.response_format, response_format);
+      }
+      const text = { format: { type: "text" }, verbosity: "low" };
+      for (const extra of [
+        { text },
+        { text, response_format: { type: "json_object" } },
+      ]) {
+        await chat().generate({ apiKey: "k", extra });
+        assert.deepEqual(seen.at(-1).text, text);
+        assert.equal(Object.hasOwn(seen.at(-1), "response_format"), false);
+      }
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it("enforces and validates structured output in generateData", async () => {
     class Person extends Schema {
       name = Schema.String({ minLength: 2 });
