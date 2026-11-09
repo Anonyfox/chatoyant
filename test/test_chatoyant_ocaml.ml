@@ -1569,6 +1569,10 @@ let () =
   assert_equal_int 1_050_000
     (Option.get (Chatoyant.Tokens.Context_window.get "gpt-6-astra"));
   assert_equal_int 1_050_000
+    (Option.get (Chatoyant.Tokens.Context_window.get "gpt-6-cyber"));
+  assert_equal_int 1_048_576
+    (Option.get (Chatoyant.Tokens.Context_window.get "muse-ember-1.0"));
+  assert_equal_int 1_050_000
     (Option.get (Chatoyant.Tokens.Context_window.get "gpt-6.1-sol"));
   assert_equal_int 1_050_000
     (Option.get (Chatoyant.Tokens.Context_window.get "gpt-6-sol"));

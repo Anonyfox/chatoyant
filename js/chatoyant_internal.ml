@@ -1074,6 +1074,8 @@ const PRICING = Object.freeze({
 });
 
 const CONTEXT_WINDOWS = Object.freeze({
+  // https://developers.openai.com/api/docs/models/gpt-6-cyber (2026-11-09)
+  "gpt-6-cyber": 1050000,
   "claude-fable-5-2": 1000000,
   "claude-mythos-5-2": 1000000,
   "gpt-6-astra": 1050000,
@@ -1090,6 +1092,8 @@ const CONTEXT_WINDOWS = Object.freeze({
   "muse-spark-1.3": 1048576,
   "muse-spark-1.3-contributor": 1048576,
   "muse-wonder-1.0": 1048576,
+  // https://dev.meta.ai/docs/muse-ember (2026-11-09)
+  "muse-ember-1.0": 1048576,
   "gpt-5.6-cyber": 400000,
   "gpt-5.3-codex": 400000,
   "chat-latest": 400000,

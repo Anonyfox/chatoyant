@@ -1,5 +1,7 @@
 let all =
   [
+    (* https://developers.openai.com/api/docs/models/gpt-6-cyber (2026-11-09) *)
+    ("gpt-6-cyber", 1_050_000);
     ("gpt-6-astra", 1_050_000);
     ("gpt-6.1-terra", 1_050_000);
     ("gpt-6.1-sol", 1_050_000);
@@ -16,6 +18,8 @@ let all =
     ("muse-spark-1.3", 1_048_576);
     ("muse-spark-1.3-contributor", 1_048_576);
     ("muse-wonder-1.0", 1_048_576);
+    (* https://dev.meta.ai/docs/muse-ember (2026-11-09) *)
+    ("muse-ember-1.0", 1_048_576);
     ("gpt-5.6-cyber", 400_000);
     ("gpt-5.3-codex", 400_000);
     ("chat-latest", 400_000);

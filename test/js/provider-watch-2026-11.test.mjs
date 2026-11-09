@@ -22,8 +22,18 @@ test("November provider prices and confirmed contexts match in both source table
   for (const model of ["claude-fable-5-2", "claude-mythos-5-2"]) {
     assert.equal(result.models[model].contextWindow, 1000000);
   }
+  // First-party context specs verified on 2026-11-09; exercise the JS table too.
+  const contexts = { "gpt-6-cyber": 1050000, "muse-ember-1.0": 1048576 };
+  for (const [model, context] of Object.entries(contexts)) {
+    assert.equal(result.models[model].contextWindow, context);
+  }
   // Execute the actual JS table declarations without requiring generated dist.
   const source = await readFile(new URL("../../js/chatoyant_internal.ml", import.meta.url), "utf8");
+  const contextDeclaration = source.match(/const CONTEXT_WINDOWS = Object.freeze\(\{[\s\S]*?\}\);/)?.[0];
+  assert.ok(contextDeclaration);
+  for (const [model, context] of Object.entries(contexts)) {
+    assert.equal(vm.runInNewContext(`${contextDeclaration} CONTEXT_WINDOWS[${JSON.stringify(model)}]`), context);
+  }
   for (const [name, models] of Object.entries({
     OPENAI_MODELS: ["gpt-6-cyber"],
     ANTHROPIC_MODELS: ["claude-fable-5-2", "claude-mythos-5-2"],
