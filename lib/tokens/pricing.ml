@@ -8,6 +8,7 @@ let p ?cached ?cache_write_5m ?cache_write_1h ?per_image ?per_second ~input
 let all =
   [
     (* OpenAI bills >272K input at a higher long-context tier not modelled here. *)
+    ("gpt-6-cyber", p ~input:20.0 ~output:100.0 ~cached:2.0 ());
     ("gpt-6-astra", p ~input:10.0 ~output:50.0 ~cached:1.0 ());
     ("gpt-6-astra-law", p ~input:10.0 ~output:50.0 ~cached:1.0 ());
     ("gpt-6-rosalind", p ~input:15.0 ~output:75.0 ~cached:1.5 ());
@@ -22,6 +23,12 @@ let all =
     ("gpt-5.3-codex", p ~input:1.75 ~output:14.0 ~cached:0.175 ());
     ("chat-latest", p ~input:5.0 ~output:30.0 ~cached:0.5 ());
     ("gpt-5-search-api", p ~input:1.25 ~output:10.0 ~cached:0.125 ());
+    ( "claude-fable-5-2",
+      p ~input:8.0 ~output:40.0 ~cached:0.2 ~cache_write_5m:10.0
+        ~cache_write_1h:16.0 () );
+    ( "claude-mythos-5-2",
+      p ~input:8.0 ~output:40.0 ~cached:0.2 ~cache_write_5m:10.0
+        ~cache_write_1h:16.0 () );
     ( "claude-fable-5-1",
       p ~input:10.0 ~output:50.0 ~cached:0.25 ~cache_write_5m:12.5
         ~cache_write_1h:20.0 () );
@@ -47,12 +54,14 @@ let all =
     ("grok-build-0.1", p ~input:1.0 ~output:2.0 ~cached:0.2 ());
     ("muse-spark-1.3", p ~input:1.25 ~output:4.25 ~cached:0.15 ());
     ("muse-spark-1.3-contributor", p ~input:0.1 ~output:0.2 ~cached:0.002 ());
+    (* >200K input (including cached tokens) bills 0.30/1.50/0.012, not modelled. *)
+    ("muse-ember-1.0", p ~input:0.1 ~output:0.5 ~cached:0.004 ());
     ("muse-wonder-1.0", p ~input:4.0 ~output:20.0 ~cached:0.2 ());
     ("grok-imagine-image-2.0", p ~input:0.0 ~output:0.0 ~per_image:0.04 ());
     ("grok-imagine-image-quality", p ~input:0.0 ~output:0.0 ~per_image:0.04 ());
     ("grok-imagine-video-1.5", p ~input:0.0 ~output:0.0 ~per_second:0.08 ());
     ("grok-imagine-video-1.5-lite", p ~input:0.0 ~output:0.0 ~per_second:0.02 ());
-    (* OpenAI promotional price, at least through 2026-11-21. *)
+    (* OpenAI promotional price, until 2026-11-30. *)
     ("gpt-5.6-sol", p ~input:4.0 ~output:20.0 ~cached:0.4 ());
     ("gpt-5.6-terra", p ~input:2.0 ~output:12.0 ~cached:0.2 ());
     ("gpt-5.6-luna", p ~input:0.2 ~output:1.2 ~cached:0.02 ());

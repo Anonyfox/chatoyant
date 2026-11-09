@@ -865,6 +865,7 @@ const PROVIDERS = Object.freeze({
 const PROVIDER_IDS = Object.freeze(Object.keys(PROVIDERS));
 
 const OPENAI_MODELS = Object.freeze([
+  "gpt-6-cyber",
   "gpt-6-astra", "gpt-6-astra-law", "gpt-6-rosalind", "gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-cyber", "gpt-5.5-cyber", "gpt-5.3-codex", "chat-latest", "gpt-5-search-api",
   "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna",
   "gpt-5.5", "gpt-5.5-pro",
@@ -882,6 +883,7 @@ const OPENAI_MODELS = Object.freeze([
   "gpt-oss-120b", "gpt-oss-20b", "gpt-image-1", "gpt-image-1-mini", "chatgpt-4o-latest",
 ]);
 const ANTHROPIC_MODELS = Object.freeze([
+  "claude-fable-5-2", "claude-mythos-5-2",
   "claude-fable-5-1", "claude-mythos-5-1", "claude-opus-5-5", "claude-opus-5", "claude-sonnet-5-5", "claude-haiku-5-5",
   "claude-fable-5",
   "claude-opus-4-8", "claude-opus-4-7", "claude-sonnet-5",
@@ -907,7 +909,7 @@ const XAI_MODELS = Object.freeze([
   "grok-code-fast-1", "grok-imagine-image", "grok-imagine-image-pro", "grok-imagine-video",
 ]);
 const META_MODELS = Object.freeze([
-  "muse-spark-1.3", "muse-spark-1.3-contributor", "muse-wonder-1.0",
+  "muse-spark-1.3", "muse-spark-1.3-contributor", "muse-wonder-1.0", "muse-ember-1.0",
   "muse-spark-1.2", "muse-spark-1.1", "muse-spark-1.2-contributor",
 ]);
 const MODELS_BY_PROVIDER = Object.freeze({
@@ -920,6 +922,11 @@ const MODELS_BY_PROVIDER = Object.freeze({
 });
 
 const PRICING = Object.freeze({
+  "gpt-6-cyber": { input: 20, output: 100, cached: 2 },
+  "claude-fable-5-2": { input: 8, output: 40, cached: 0.2, cacheWrite5m: 10, cacheWrite1h: 16 },
+  "claude-mythos-5-2": { input: 8, output: 40, cached: 0.2, cacheWrite5m: 10, cacheWrite1h: 16 },
+  // >200K input (including cached tokens) bills 0.30/1.50/0.012, not modelled.
+  "muse-ember-1.0": { input: 0.1, output: 0.5, cached: 0.004 },
   // OpenAI bills >272K input at a higher long-context tier not modelled here.
   "gpt-6-astra": { input: 10, output: 50, cached: 1 },
   "gpt-6-astra-law": { input: 10, output: 50, cached: 1 },
@@ -953,7 +960,7 @@ const PRICING = Object.freeze({
   "grok-imagine-image-quality": { input: 0, output: 0, perImage: 0.04 },
   "grok-imagine-video-1.5": { input: 0, output: 0, perSecond: 0.08 },
   "grok-imagine-video-1.5-lite": { input: 0, output: 0, perSecond: 0.02 },
-  // OpenAI promotional price, at least through 2026-11-21.
+  // OpenAI promotional price, until 2026-11-30.
   "gpt-5.6-sol": { input: 4, output: 20, cached: 0.4 },
   "gpt-5.6-terra": { input: 2, output: 12, cached: 0.2 },
   "gpt-5.6-luna": { input: 0.2, output: 1.2, cached: 0.02 },
@@ -1067,6 +1074,8 @@ const PRICING = Object.freeze({
 });
 
 const CONTEXT_WINDOWS = Object.freeze({
+  "claude-fable-5-2": 1000000,
+  "claude-mythos-5-2": 1000000,
   "gpt-6-astra": 1050000,
   "gpt-6.1-sol": 1050000,
   "gpt-6.1-terra": 1050000,

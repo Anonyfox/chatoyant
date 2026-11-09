@@ -373,7 +373,7 @@ describe("publish package surface", () => {
 
   it("shapes Meta Model API (Muse Spark) requests per its wire rules", async () => {
     assert.equal(detectProviderByModel("muse-spark-1.2"), "meta");
-    assert.deepEqual([...META_MODELS], ["muse-spark-1.3", "muse-spark-1.3-contributor", "muse-wonder-1.0", "muse-spark-1.2", "muse-spark-1.1", "muse-spark-1.2-contributor"]);
+    assert.deepEqual([...META_MODELS], ["muse-spark-1.3", "muse-spark-1.3-contributor", "muse-wonder-1.0", "muse-ember-1.0", "muse-spark-1.2", "muse-spark-1.1", "muse-spark-1.2-contributor"]);
     assert.equal(CONTEXT_WINDOWS["muse-spark-1.2"], 1048576);
 
     const originalFetch = globalThis.fetch;

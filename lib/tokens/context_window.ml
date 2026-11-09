@@ -5,6 +5,8 @@ let all =
     ("gpt-6.1-sol", 1_050_000);
     ("gpt-6-sol", 1_050_000);
     ("gpt-6-luna", 1_050_000);
+    ("claude-fable-5-2", 1_000_000);
+    ("claude-mythos-5-2", 1_000_000);
     ("claude-fable-5-1", 1_000_000);
     ("claude-mythos-5-1", 1_000_000);
     ("claude-opus-5-5", 1_000_000);
