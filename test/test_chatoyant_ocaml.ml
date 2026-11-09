@@ -1526,10 +1526,11 @@ let () =
   check_price "muse-ember-1.0" 0.1 0.5 (Some 0.004) None None;
   check_price "claude-fable-5-2" 8.0 40.0 (Some 0.2) (Some 10.0) (Some 16.0);
   check_price "claude-mythos-5-2" 8.0 40.0 (Some 0.2) (Some 10.0) (Some 16.0);
-  List.iter (fun model ->
-    assert_true (model ^ " exact price") (Chatoyant.Tokens.Pricing.has model);
-    assert_equal_int 1_000_000
-      (Option.get (Chatoyant.Tokens.Context_window.get model)))
+  List.iter
+    (fun model ->
+      assert_true (model ^ " exact price") (Chatoyant.Tokens.Pricing.has model);
+      assert_equal_int 1_000_000
+        (Option.get (Chatoyant.Tokens.Context_window.get model)))
     [ "claude-fable-5-2"; "claude-mythos-5-2" ];
   check_price "gpt-6-astra" 10.0 50.0 (Some 1.0) None None;
   check_price "gpt-6.1-terra" 1.0 5.0 (Some 0.05) None None;
