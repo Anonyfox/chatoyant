@@ -372,6 +372,7 @@ class Message {
     this.toolCallId = options.toolCallId ?? options.tool_call_id;
     this.toolCalls = options.toolCalls ?? options.tool_calls;
     this.metadata = options.metadata;
+    if (options.providerReplay !== undefined) this.providerReplay = JSON.parse(JSON.stringify(options.providerReplay));
     const attachments = normalizeAttachmentList(options);
     if (attachments.length) this.attachments = attachments;
   }
@@ -382,6 +383,7 @@ class Message {
     if (this.toolCallId !== undefined) json.toolCallId = this.toolCallId;
     if (this.toolCalls !== undefined) json.toolCalls = this.toolCalls;
     if (this.metadata !== undefined) json.metadata = this.metadata;
+    if (this.providerReplay !== undefined) json.providerReplay = JSON.parse(JSON.stringify(this.providerReplay));
     if (this.attachments !== undefined) json.attachments = this.attachments;
     return json;
   }
@@ -2384,7 +2386,7 @@ class Chat {
     result.timing.latencyMs = Date.now() - start;
     result.timing.latency_ms = result.timing.latencyMs;
     this._lastResult = result;
-    this._messages.push(Message.assistant(result.content || ""));
+    this._messages.push(new Message("assistant", result.content || "", { providerReplay: result.providerReplay }));
     this._syncStateFromMessages();
     return result;
   }
@@ -2396,11 +2398,12 @@ class Chat {
     }
     let content = "";
     const start = Date.now();
-    for await (const chunk of this._streamDirect(options || {})) {
+    let providerReplay;
+    for await (const chunk of this._streamDirect(options || {}, (replay) => { providerReplay = replay; })) {
       content += chunk;
       yield chunk;
     }
-    this._messages.push(Message.assistant(content));
+    this._messages.push(new Message("assistant", content, { providerReplay }));
     this._lastResult = {
       content,
       reasoningContent: "",
@@ -2524,11 +2527,17 @@ class Chat {
   _syncStateFromMessages() {
     let response = JSON.parse(js_chat_set_model(js_chat_create_state(JSON.stringify({ model: this._model })), this._model));
     let state = response.ok ? response.state : js_chat_create_state(JSON.stringify({ model: this._model }));
-    for (const message of this._messages) {
-      if (message.role === "tool") continue;
-      const added = JSON.parse(js_chat_add_message(state, message.role, message.content));
-      if (added.ok) state = added.state;
-    }
+    const json = JSON.parse(state);
+    json.messages = this._messages.map((message) => ({
+      ...message.toJSON(),
+      tool_call_id: message.toolCallId,
+      tool_calls: (message.toolCalls || []).map((call) => ({
+        id: call.id, name: call.name,
+        arguments_json: typeof call.arguments === "string" ? call.arguments : JSON.stringify(call.args ?? call.arguments ?? {}),
+      })),
+      provider_replay: message.providerReplay,
+    }));
+    state = JSON.stringify(json);
     this._state = state;
   }
 
@@ -2746,6 +2755,9 @@ class Chat {
             content: [{ type: "tool_result", tool_use_id: m.toolCallId, content: m.content }],
           };
         }
+        if (m.role === "assistant" && m.providerReplay?.provider === "anthropic" && Array.isArray(m.providerReplay.content)) {
+          return { role: "assistant", content: JSON.parse(JSON.stringify(m.providerReplay.content)) };
+        }
         if (m.toolCalls?.length) {
           const content = [];
           if (m.content) content.push({ type: "text", text: m.content });
@@ -2854,7 +2866,7 @@ class Chat {
         return result;
       }
 
-      messages = messages.concat([new Message("assistant", result.content || "", { toolCalls: result.toolCalls })]);
+      messages = messages.concat([new Message("assistant", result.content || "", { toolCalls: result.toolCalls, providerReplay: result.providerReplay })]);
       for (const call of result.toolCalls) {
         const tool = this._tools.find((candidate) => candidate.name === call.name);
         let toolResult;
@@ -2880,10 +2892,10 @@ class Chat {
     return this._callOpenAICompatible(provider, messages, options);
   }
 
-  async *_streamDirect(options = {}) {
+  async *_streamDirect(options = {}, onReplay) {
     const provider = this._detectProvider(options);
     if (provider === "anthropic") {
-      yield* this._streamAnthropic(this._messages, options);
+      yield* this._streamAnthropic(this._messages, options, onReplay);
     } else {
       yield* this._streamOpenAICompatible(provider, this._messages, options);
     }
@@ -3246,10 +3258,11 @@ class Chat {
       toolCalls,
       finishReason: json.stop_reason,
       raw: json,
+      providerReplay: { provider: "anthropic", model: json.model || model, content: JSON.parse(JSON.stringify(blocks)) },
     };
   }
 
-  async *_streamAnthropic(messages, options = {}) {
+  async *_streamAnthropic(messages, options = {}, onReplay) {
     const model = this._resolvedModel(options, "anthropic");
     const apiKey = this._apiKey("anthropic", options);
     if (!apiKey) throw new Error("Missing API key for anthropic");
@@ -3283,10 +3296,29 @@ class Chat {
     if (!response.ok) {
       throw ProviderError.fromHttp("anthropic", response.status, await response.text());
     }
+    const blocks = [];
+    const inputFragments = new Map();
+    let responseModel = model;
     yield* this._parseSse(response, (json) => {
-      if (json.type === "content_block_delta" && json.delta?.type === "text_delta") return json.delta.text || "";
+      if (json.type === "message_start") responseModel = json.message?.model || model;
+      if (json.type === "content_block_start") {
+        blocks[json.index] = JSON.parse(JSON.stringify(json.content_block));
+      }
+      if (json.type === "content_block_delta") {
+        const block = blocks[json.index];
+        const delta = json.delta;
+        if (block && delta?.type === "text_delta") block.text = (block.text || "") + (delta.text || "");
+        if (block && delta?.type === "thinking_delta") block.thinking = (block.thinking || "") + (delta.thinking || "");
+        if (block && delta?.type === "signature_delta") block.signature = (block.signature || "") + (delta.signature || "");
+        if (block && delta?.type === "input_json_delta") {
+          inputFragments.set(json.index, (inputFragments.get(json.index) || "") + (delta.partial_json || ""));
+        }
+        if (delta?.type === "text_delta") return delta.text || "";
+      }
       return "";
     });
+    for (const [index, fragments] of inputFragments) blocks[index].input = JSON.parse(fragments);
+    if (onReplay) onReplay({ provider: "anthropic", model: responseModel, content: blocks });
   }
 
   async *_parseSse(response, selectText) {

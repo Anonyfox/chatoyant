@@ -352,6 +352,66 @@ let test_response_decode () =
   assert_equal_int 11 response.response_usage.input_tokens;
   assert_equal_int 3 (List.length response.response_content)
 
+let test_signed_thinking_roundtrip () =
+  let module Json = Chatoyant.Runtime.Json in
+  let module Anthropic = Chatoyant.Provider.Anthropic in
+  let blocks =
+    match
+      Json.parse
+        {|[{"type":"thinking","thinking":"  first\nβ  ","signature":"opaque+/==\nA","extra":{"keep":true}},
+           {"type":"redacted_thinking","data":"opaque-redacted+/==","extra":[1,2]},
+           {"type":"text","text":"Checking"},
+           {"type":"thinking","thinking":"second","signature":"sig-B"},
+           {"type":"tool_use","id":"toolu_1","name":"lookup","input":{"q":"x"}}]|}
+    with
+    | Ok (Json.Array blocks) -> blocks
+    | _ -> failwith "invalid replay fixture"
+  in
+  List.iter
+    (fun json ->
+      let encoded =
+        Anthropic.content_block_of_json json |> Anthropic.content_block_json
+      in
+      if encoded <> json then failwith "signed block changed during roundtrip")
+    blocks;
+  let cached =
+    Json.Object
+      [
+        ("type", Json.String "thinking");
+        ("thinking", Json.String "signed");
+        ("signature", Json.String "opaque");
+        ( "cache_control",
+          Json.Object
+            [
+              ("type", Json.String "ephemeral");
+              ("unknown", Json.String "preserve");
+            ] );
+      ]
+  in
+  if
+    (Anthropic.content_block_of_json cached |> Anthropic.content_block_json)
+    <> cached
+  then failwith "signed thinking cache fields changed";
+  let response =
+    Anthropic.response_of_json
+      (Json.Object [ ("content", Json.Array blocks) ])
+  in
+  let generation = Anthropic.generation_of_response response in
+  assert_equal_string "  first\nβ  second" generation.reasoning_content;
+  (match
+     Anthropic.content_block_of_json
+       (Json.Object
+          [
+            ("type", Json.String "thinking");
+            ("thinking", Json.String "unsigned");
+          ])
+   with
+  | Anthropic.Thinking "unsigned" -> ()
+  | _ -> failwith "legacy unsigned thinking changed");
+  let legacy = Anthropic.content_block_json (Anthropic.Thinking "unsigned") in
+  if Json.field "signature" legacy <> None then
+    failwith "signature must never be synthesized"
+
 let test_models_and_batches_decode () =
   let models =
     Chatoyant.Provider.Anthropic.model_list_of_json
@@ -719,6 +779,7 @@ let () =
   test_cache_control_json ();
   test_server_tools_and_admin_helpers ();
   test_response_decode ();
+  test_signed_thinking_roundtrip ();
   test_models_and_batches_decode ();
   test_files_decode ();
   test_stream_chunks ();

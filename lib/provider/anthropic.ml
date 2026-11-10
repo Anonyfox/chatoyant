@@ -522,8 +522,17 @@ let content_block_of_json json =
   let block =
     match string_field "type" json with
     | Some "text" -> Text (Option.value (string_field "text" json) ~default:"")
+    | Some "thinking" when field "signature" json <> None -> Raw_block json
     | Some "thinking" ->
         Thinking (Option.value (string_field "thinking" json) ~default:"")
+    | Some "redacted_thinking"
+      when (match json with
+           | Chatoyant_runtime.Json.Object fields ->
+               List.exists
+                 (fun (name, _) -> name <> "type" && name <> "data")
+                 fields
+           | _ -> false) ->
+        Raw_block json
     | Some "redacted_thinking" ->
         Redacted_thinking (Option.value (string_field "data" json) ~default:"")
     | Some "tool_use" ->
@@ -589,11 +598,12 @@ let content_block_of_json json =
         Container_upload { file_id = string_field "file_id" json; raw = json }
     | _ -> Raw_block json
   in
-  match field "cache_control" json with
-  | Some cache_control ->
+  match (block, field "cache_control" json) with
+  | Raw_block _, _ -> block
+  | _, Some cache_control ->
       Cached_block
         { block; cache_control = cache_control_of_json cache_control }
-  | None -> block
+  | _, None -> block
 
 let response_of_json json =
   let content =
@@ -1023,7 +1033,11 @@ let generation_of_response response =
     Provider.content = text_of_response response;
     reasoning_content =
       response.response_content
-      |> List.filter_map (function Thinking text -> Some text | _ -> None)
+      |> List.filter_map (function
+           | Thinking text -> Some text
+           | Raw_block json when string_field "type" json = Some "thinking" ->
+               string_field "thinking" json
+           | _ -> None)
       |> String.concat "";
     usage = response.response_usage;
     usage_source = Chatoyant_tokens.Cost.Provider_reported;

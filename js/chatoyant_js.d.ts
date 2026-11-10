@@ -259,6 +259,16 @@ export type AttachmentInput = Attachment | string | {
   kind?: "image" | "file";
 };
 
+/** Original provider content retained for lossless assistant replay. Opaque signatures must not be edited. */
+export interface ProviderReplay {
+  /** Originating provider. */
+  provider: string;
+  /** Originating model. */
+  model: string;
+  /** Entire original ordered content array, including opaque fields. */
+  content: unknown[];
+}
+
 /** JSON representation accepted by Message.fromJSON() and emitted by Message.toJSON(). */
 export interface MessageJSON {
   role: Role;
@@ -270,6 +280,8 @@ export interface MessageJSON {
   tool_calls?: ToolCall[];
   metadata?: unknown;
   attachments?: Attachment[];
+  /** Original content for provider-specific replay, when available. */
+  providerReplay?: ProviderReplay;
 }
 
 /** Structured second argument for `Chat.user()`: attachments plus metadata.
@@ -298,6 +310,8 @@ export class Message {
   toolCalls?: ToolCall[];
   metadata?: unknown;
   attachments?: Attachment[];
+  /** Original content for provider-specific replay, when available. */
+  providerReplay?: ProviderReplay;
   toJSON(): MessageJSON;
   static fromJSON(json: MessageJSON): Message;
   static system(content: string, metadata?: unknown): Message;
@@ -341,6 +355,8 @@ export interface GenerationResult {
   finishReason?: string;
   finish_reason?: string;
   raw?: unknown;
+  /** Original content for provider-specific replay, when available. */
+  providerReplay?: ProviderReplay;
   [key: string]: unknown;
 }
 
