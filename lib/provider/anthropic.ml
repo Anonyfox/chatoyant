@@ -531,8 +531,7 @@ let content_block_of_json json =
     | Some "thinking" when field "signature" json <> None -> Raw_block json
     | Some "thinking" ->
         Thinking (Option.value (string_field "thinking" json) ~default:"")
-    | Some "redacted_thinking"
-      when has_extra_redacted_fields json ->
+    | Some "redacted_thinking" when has_extra_redacted_fields json ->
         Raw_block json
     | Some "redacted_thinking" ->
         Redacted_thinking (Option.value (string_field "data" json) ~default:"")
