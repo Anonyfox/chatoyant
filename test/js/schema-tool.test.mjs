@@ -51,6 +51,65 @@ describe("Schema and JsonSchema", () => {
     assert.equal(new JsonSchema(schema).validate({ q: "x" }), true);
   });
 
+  it("reuses schemas while keeping data, detailed errors and options fresh", () => {
+    const schema = new JsonSchema({ type: "string", format: "email" });
+    for (let i = 0; i < 3; i++) {
+      assert.equal(schema.validate("person@example.com"), true);
+      assert.equal(schema.validate("invalid", { formatAssertion: true }), false);
+      assert.deepEqual(schema.validateDetailed("invalid"), { valid: true, errors: [] });
+      const rejected = schema.validateDetailed(42);
+      assert.equal(rejected.valid, false);
+      assert.equal(rejected.errors.some(error => error.keyword === "type"), true);
+    }
+    const resources = [{ uri: "https://example.com/value", schema: { type: "string" } }];
+    const referenced = new JsonSchema({ $ref: resources[0].uri });
+    assert.equal(referenced.validate("ok", { resources }), true);
+    resources[0].schema.type = "integer";
+    assert.equal(referenced.validate("ok", { resources }), false);
+    assert.equal(referenced.validate(42, { resources }), true);
+  });
+
+  it("invalidates cached schemas after nested edits and schema replacement", () => {
+    const raw = {
+      type: "object",
+      properties: { count: { type: "integer", minimum: 1 } },
+      required: ["count"],
+    };
+    const schema = new JsonSchema(raw);
+    const other = new JsonSchema({ type: "integer" });
+    assert.equal(schema.validate({ count: 1 }), true);
+    assert.equal(schema.validate({ count: 1 }), true);
+    raw.properties.count.minimum = 2;
+    assert.equal(schema.validate({ count: 1 }), false);
+    assert.equal(JsonSchema.validate(raw, { count: 1 }).valid, false);
+    schema.toJSON().required.push("missing");
+    assert.equal(schema.validate({ count: 2 }), false);
+    schema.toJSON().required.pop();
+    assert.equal(schema.validate({ count: 2 }), true);
+    delete raw.properties.count.minimum;
+    assert.equal(schema.validate({ count: 0 }), true);
+    schema.schema = false;
+    assert.equal(schema.validate({ count: 2 }), false);
+    schema.schema = true;
+    assert.equal(schema.validate(null), true);
+    schema.schema = { type: "string" };
+    assert.equal(schema.validate("ok"), true);
+    assert.equal(schema.validate(42), false);
+    assert.equal(other.validate(42), true);
+  });
+
+  it("observes custom schema serialization changes on repeated calls", () => {
+    let type = "string";
+    const schema = new JsonSchema({
+      type: "object",
+      properties: { value: { toJSON: () => ({ type }) } },
+    });
+    assert.equal(schema.validate({ value: "ok" }), true);
+    type = "integer";
+    assert.equal(schema.validate({ value: "ok" }), false);
+    assert.equal(schema.validate({ value: 42 }), true);
+  });
+
   it("resolves external refs, dynamic refs, and vocabulary toggles", () => {
     const resources = [
       { uri: "http://example.com/integer.json", schema: { type: "integer" } },

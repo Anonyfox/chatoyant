@@ -179,22 +179,23 @@ let json_schema_options_of_text text =
     resources;
   }
 
-let json_schema_validate schema_text data_text options_text =
-  match
-    ( Chatoyant_js_base.Runtime.Json.parse schema_text,
-      Chatoyant_js_base.Runtime.Json.parse data_text )
-  with
-  | Error message, _ -> json_schema_error_result "schema" message
-  | _, Error message -> json_schema_error_result "data" message
-  | Ok schema, Ok data -> (
-      let options = json_schema_options_of_text options_text in
-      match
-        Chatoyant_js_base.Schema.Json_schema.validate_json ~options schema data
-      with
-      | Error error -> json_schema_error_result "schema" error.message
-      | Ok result ->
-          Chatoyant_js_base.Schema.Json_schema.Output.to_json result
-          |> Chatoyant_js_base.Runtime.Json.to_string)
+(* The JS bridge retains this closure only while the schema's serialized value
+   is unchanged. Options/resources and data are deliberately parsed per call. *)
+let json_schema_compile schema_text =
+  let parsed = Chatoyant_js_base.Runtime.Json.parse schema_text in
+  let compiled =
+    Result.map Chatoyant_js_base.Schema.Json_schema.of_json parsed
+  in
+  fun data_text options_text ->
+    match (compiled, Chatoyant_js_base.Runtime.Json.parse data_text) with
+    | Error message, _ -> json_schema_error_result "schema" message
+    | _, Error message -> json_schema_error_result "data" message
+    | Ok (Error error), Ok _ -> json_schema_error_result "schema" error.message
+    | Ok (Ok schema), Ok data ->
+        let options = json_schema_options_of_text options_text in
+        Chatoyant_js_base.Schema.Json_schema.validate ~options schema data
+        |> Chatoyant_js_base.Schema.Json_schema.Output.to_json
+        |> Chatoyant_js_base.Runtime.Json.to_string
 
 let json_schema_project_openai_strict schema_text =
   match Chatoyant_js_base.Runtime.Json.parse schema_text with
@@ -441,6 +442,9 @@ class SchemaError extends Error {
 let json_schema_class : js_function =
   [%mel.raw
     {|
+// Keep only the latest serialized version per object; WeakMap entries do not
+// retain schemas. Serialization detects nested edits, replacements and toJSON.
+const jsonSchemaValidators = new WeakMap();
 class JsonSchema {
   constructor(schema = true) {
     this.schema = Schema.toJSON(schema);
@@ -455,7 +459,15 @@ class JsonSchema {
   }
 
   static validate(schema, data, options = {}) {
-    return JSON.parse(json_schema_validate(JSON.stringify(Schema.toJSON(schema)), JSON.stringify(data), JSON.stringify(options || {})));
+    const json = Schema.toJSON(schema);
+    const text = JSON.stringify(json);
+    const cacheable = json !== null && typeof json === "object";
+    let cached = cacheable ? jsonSchemaValidators.get(json) : undefined;
+    if (!cached || cached.text !== text) {
+      cached = { text, validate: json_schema_compile(text) };
+      if (cacheable) jsonSchemaValidators.set(json, cached);
+    }
+    return JSON.parse(cached.validate(JSON.stringify(data), JSON.stringify(options || {})));
   }
 
   static projectOpenAIStrict(schema) {
