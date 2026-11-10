@@ -883,7 +883,7 @@ const PROVIDER_IDS = Object.freeze(Object.keys(PROVIDERS));
 
 const OPENAI_MODELS = Object.freeze([
   "gpt-6-cyber",
-  "gpt-6-astra", "gpt-6-astra-law", "gpt-6-rosalind", "gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-cyber", "gpt-5.5-cyber", "gpt-5.3-codex", "chat-latest", "gpt-5-search-api",
+  "gpt-6-astra", "gpt-6-astra-law", "gpt-6-rosalind", "gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-cyber", "gpt-5.5-cyber", "gpt-5.5-cyber-preview", "gpt-5.3-codex", "chat-latest", "gpt-5-search-api",
   "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna",
   "gpt-5.5", "gpt-5.5-pro",
   "gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano", "gpt-5.4-pro",
@@ -956,6 +956,7 @@ const PRICING = Object.freeze({
   "gpt-6-luna": { input: 0.1, output: 0.5, cached: 0.01 },
   "gpt-5.6-cyber": { input: 12.5, output: 75, cached: 1.25 },
   "gpt-5.5-cyber": { input: 12.5, output: 75, cached: 1.25 },
+  "gpt-5.5-cyber-preview": { input: 12.5, output: 75, cached: 1.25 },
   "gpt-5.3-codex": { input: 1.75, output: 14, cached: 0.175 },
   "chat-latest": { input: 5, output: 30, cached: 0.5 },
   "gpt-5-search-api": { input: 1.25, output: 10, cached: 0.125 },

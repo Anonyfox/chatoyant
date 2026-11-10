@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- Add the official OpenAI model id `gpt-5.5-cyber-preview` at $12.50 input / $75 output / $1.25 cached per 1M tokens, matching the published Daybreak short-context price so cost estimates no longer fall back to GPT-5.4.
+
 ## 0.17.2 — 2026-11-10
 
 ### Added

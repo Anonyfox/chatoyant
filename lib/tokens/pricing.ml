@@ -20,6 +20,7 @@ let all =
     ("gpt-6-luna", p ~input:0.1 ~output:0.5 ~cached:0.01 ());
     ("gpt-5.6-cyber", p ~input:12.5 ~output:75.0 ~cached:1.25 ());
     ("gpt-5.5-cyber", p ~input:12.5 ~output:75.0 ~cached:1.25 ());
+    ("gpt-5.5-cyber-preview", p ~input:12.5 ~output:75.0 ~cached:1.25 ());
     ("gpt-5.3-codex", p ~input:1.75 ~output:14.0 ~cached:0.175 ());
     ("chat-latest", p ~input:5.0 ~output:30.0 ~cached:0.5 ());
     ("gpt-5-search-api", p ~input:1.25 ~output:10.0 ~cached:0.125 ());

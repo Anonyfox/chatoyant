@@ -1542,6 +1542,9 @@ let () =
   check_price "gpt-6-astra-law" 10.0 50.0 (Some 1.0) None None;
   check_price "gpt-rosalind-research" 5.0 25.0 (Some 0.5) None None;
   check_price "gpt-5.5-cyber" 12.5 75.0 (Some 1.25) None None;
+  check_price "gpt-5.5-cyber-preview" 12.5 75.0 (Some 1.25) None None;
+  assert_true "gpt-5.5-cyber-preview exact price"
+    (Chatoyant.Tokens.Pricing.has "gpt-5.5-cyber-preview");
   check_price "gpt-5.3-codex" 1.75 14.0 (Some 0.175) None None;
   check_price "chat-latest" 5.0 30.0 (Some 0.5) None None;
   check_price "gpt-5-search-api" 1.25 10.0 (Some 0.125) None None;

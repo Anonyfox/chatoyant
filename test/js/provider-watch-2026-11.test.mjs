@@ -12,6 +12,7 @@ test("November provider prices and confirmed contexts match in both source table
   }), 0);
   const expected = {
     "gpt-6-cyber": { input: 20, output: 100, cached: 2 },
+    "gpt-5.5-cyber-preview": { input: 12.5, output: 75, cached: 1.25 },
     "claude-fable-5-2": { input: 8, output: 40, cached: 0.2, cacheWrite5m: 10, cacheWrite1h: 16 },
     "claude-mythos-5-2": { input: 8, output: 40, cached: 0.2, cacheWrite5m: 10, cacheWrite1h: 16 },
     "muse-ember-1.0": { input: 0.1, output: 0.5, cached: 0.004 },
