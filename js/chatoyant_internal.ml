@@ -442,6 +442,7 @@ class SchemaError extends Error {
 let json_schema_class : js_function =
   [%mel.raw
     {|
+(() => {
 // Keep only the latest serialized version per object; WeakMap entries do not
 // retain schemas. Serialization detects nested edits, replacements and toJSON.
 const jsonSchemaValidators = new WeakMap();
@@ -490,6 +491,8 @@ class JsonSchema {
     return JSON.stringify(this.schema);
   }
 }
+return JsonSchema;
+})()
 |}]
 [@@mel.as "JsonSchema"]
 
