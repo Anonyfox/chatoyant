@@ -102,7 +102,7 @@ const HERO =
     `<li><a href="${relative(dirname(INDEX), path).split(sep).join("/")}">${guide.label}</a>: ${guide.summary}.</li>`).join("") +
   '</ul>' +
   '<p class="chatoyant-hero-related">Sibling libraries by the same author: ' +
-  '<a href="https://anonyfox.github.io/celestine/">Celestine</a>, a TypeScript astrology library, and ' +
+  '<a href="https://anonyfox.github.io/celestine/">Celestine</a>, a TypeScript astrology library (<a href="https://anonyfox.github.io/celestine/accuracy/">verified against JPL Horizons</a>), and ' +
   '<a href="https://ghostpaw.dev/">GhostPaw</a>, small tools for AI agents.</p>' +
   "</div>";
 
