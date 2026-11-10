@@ -109,15 +109,24 @@ Intent presets resolve to provider-specific model names:
 | best / reasoning | gpt-6-astra | claude-fable-5-1 | grok-4.7 | muse-spark-1.3 |
 
 Also recognized: gpt-6.1-terra (text/image input, 1,050,000 context tokens,
-128,000 max output tokens), gpt-6-sol, gpt-5.6-cyber, gpt-5.5-cyber, gpt-5.3-codex,
-chat-latest, gpt-5-search-api, claude-mythos-5-1, claude-opus-5-5,
+128,000 max output tokens), gpt-6-cyber, gpt-6-sol, gpt-5.6-cyber, gpt-5.5-cyber, gpt-5.3-codex,
+chat-latest, gpt-5-search-api, claude-fable-5-2, claude-mythos-5-2,
+claude-mythos-5-1, claude-opus-5-5,
 claude-opus-5, grok-4.6, grok-build-0.1, muse-spark-1.3-contributor,
-muse-wonder-1.0, grok-imagine-image-2.0, grok-imagine-image-quality,
+muse-wonder-1.0, muse-ember-1.0, grok-imagine-image-2.0, grok-imagine-image-quality,
 grok-imagine-video-1.5, and grok-imagine-video-1.5-lite.
+
+GPT-6 Cyber has 1,050,000 context tokens and costs $20/$100/$2 per
+million input/output/cached input tokens. Claude Fable/Mythos 5.2 have
+1,000,000 context tokens and cost $8/$40/$0.20, with 5m/1h cache writes
+at $10/$16. Muse Ember 1.0 has 1,048,576 context tokens and costs
+$0.10/$0.50/$0.004; input above 200K tokens (including cached tokens)
+uses $0.30/$1.50/$0.012 rates that the accounting table does not model.
+These explicit IDs do not change the preset mappings above.
 
 OpenAI prices use the short-context tier (up to 272K input tokens); higher
 long-context rates are not modelled. GPT-5.6 Sol uses OpenAI's promotional
-price, at least through 2026-11-21. Haiku 5.5 prompts above 100K tokens
+price through 2026-11-30. Haiku 5.5 prompts above 100K tokens
 and Grok Build prompts at or above 200K tokens have higher rates not modelled here.
 
 Retired on first-party APIs (ids still resolve for pricing/detection): claude-opus-4-1, claude-opus-4, claude-sonnet-4, claude-3-5-haiku/claude-3-*; xAI no longer lists grok-4-1-fast-*, grok-code-fast-1, grok-3*, grok-4-0709.

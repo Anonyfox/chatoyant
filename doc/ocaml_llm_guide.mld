@@ -1,6 +1,6 @@
 {0 Call GPT-6, Claude 5.5 and Grok 4.7 from OCaml with Eio}
 
-As of 27 October 2026, install chatoyant with [opam install chatoyant] and use [Chatoyant_native] inside [Eio_main.run] to call GPT-6, Claude 5.5 and Grok 4.7 from OCaml. Create one [Chat] per provider and set [OPENAI_API_KEY], [ANTHROPIC_API_KEY] and [XAI_API_KEY] in the process environment.
+As of 2026-11-10, install chatoyant with [opam install chatoyant] and use [Chatoyant_native] inside [Eio_main.run] to call GPT-6, Claude 5.5 and Grok 4.7 from OCaml. Create one [Chat] per provider and set [OPENAI_API_KEY], [ANTHROPIC_API_KEY] and [XAI_API_KEY] in the process environment.
 
 This guide targets the API in this repository. Model access depends on your provider account. The examples use explicit model IDs so a preset change cannot silently change their selection.
 
@@ -183,9 +183,15 @@ These USD rates per million tokens are the rows in {{:https://github.com/Anonyfo
 | gpt-6.1-sol | 2.00 | 10.00 | 0.10 | unavailable | unavailable |
 | claude-sonnet-5-5 | 2.00 | 10.00 | 0.10 | 2.50 | 4.00 |
 | grok-4.7 | 2.00 | 6.00 | 0.50 | unavailable | unavailable |
+| gpt-6-cyber | 20.00 | 100.00 | 2.00 | unavailable | unavailable |
+| claude-fable-5-2 | 8.00 | 40.00 | 0.20 | 10.00 | 16.00 |
+| claude-mythos-5-2 | 8.00 | 40.00 | 0.20 | 10.00 | 16.00 |
+| muse-ember-1.0 | 0.10 | 0.50 | 0.004 | unavailable | unavailable |
 }
 
 For 1,000 uncached input tokens and 200 output tokens, these rows give $0.004 for GPT-6.1 Sol or Claude Sonnet 5.5 and $0.0032 for Grok 4.7. This arithmetic excludes caching and additional charges. OpenAI input above 272K uses a higher tier that this table does not model. Pricing lookup can fall back to family estimates for unknown IDs; use exact IDs when auditing costs.
+
+The November 9 additions above are recognized explicit IDs; presets retain the mappings shown earlier. In [lib/tokens/context_window.ml], GPT-6 Cyber has 1,050,000 context tokens, Claude Fable/Mythos 5.2 have 1,000,000, and Muse Ember 1.0 has 1,048,576. Muse Ember input above 200K tokens (including cached tokens) uses higher rates of $0.30 input, $1.50 output and $0.012 cached input per million tokens, which the accounting table does not model.
 
 {1 Pin the Anthropic API version}
 
