@@ -296,8 +296,6 @@ val request_json_with_raw_tools :
 
 val request_json : request -> Chatoyant_runtime.Json.t
 val authorization_headers : api_key:string -> (string * string) list
-(** Signed thinking is retained as [Raw_block] so signatures and unknown fields
-    round-trip unchanged. Unsigned thinking retains the legacy [Thinking] shape. *)
 val content_block_of_json : Chatoyant_runtime.Json.t -> content_block
 val response_of_json : Chatoyant_runtime.Json.t -> response
 val api_error_of_json : Chatoyant_runtime.Json.t -> api_error

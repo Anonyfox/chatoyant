@@ -518,6 +518,12 @@ let cache_control_of_json json =
       Ephemeral_cache (Option.map cache_ttl_of_string (string_field "ttl" json))
   | _ -> Raw_cache_control json
 
+let has_extra_redacted_fields json =
+  match json with
+  | Chatoyant_runtime.Json.Object fields ->
+      List.exists (fun (name, _) -> name <> "type" && name <> "data") fields
+  | _ -> false
+
 let content_block_of_json json =
   let block =
     match string_field "type" json with
@@ -526,12 +532,7 @@ let content_block_of_json json =
     | Some "thinking" ->
         Thinking (Option.value (string_field "thinking" json) ~default:"")
     | Some "redacted_thinking"
-      when (match json with
-           | Chatoyant_runtime.Json.Object fields ->
-               List.exists
-                 (fun (name, _) -> name <> "type" && name <> "data")
-                 fields
-           | _ -> false) ->
+      when has_extra_redacted_fields json ->
         Raw_block json
     | Some "redacted_thinking" ->
         Redacted_thinking (Option.value (string_field "data" json) ~default:"")
@@ -1034,10 +1035,10 @@ let generation_of_response response =
     reasoning_content =
       response.response_content
       |> List.filter_map (function
-           | Thinking text -> Some text
-           | Raw_block json when string_field "type" json = Some "thinking" ->
-               string_field "thinking" json
-           | _ -> None)
+        | Thinking text -> Some text
+        | Raw_block json when string_field "type" json = Some "thinking" ->
+            string_field "thinking" json
+        | _ -> None)
       |> String.concat "";
     usage = response.response_usage;
     usage_source = Chatoyant_tokens.Cost.Provider_reported;

@@ -389,12 +389,11 @@ let test_signed_thinking_roundtrip () =
       ]
   in
   if
-    (Anthropic.content_block_of_json cached |> Anthropic.content_block_json)
-    <> cached
+    Anthropic.content_block_of_json cached
+    |> Anthropic.content_block_json <> cached
   then failwith "signed thinking cache fields changed";
   let response =
-    Anthropic.response_of_json
-      (Json.Object [ ("content", Json.Array blocks) ])
+    Anthropic.response_of_json (Json.Object [ ("content", Json.Array blocks) ])
   in
   let generation = Anthropic.generation_of_response response in
   assert_equal_string "  first\nβ  second" generation.reasoning_content;
