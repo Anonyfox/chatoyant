@@ -262,7 +262,7 @@ Model presets resolve as follows:
 | best / reasoning | gpt-6-astra | claude-fable-5-1 | grok-4.7 | muse-spark-1.3 |
 
 Also recognized: gpt-6.1-terra (text/image input, 1,050,000 context tokens,
-128,000 max output tokens), gpt-6-cyber, gpt-6-sol, gpt-5.6-cyber, gpt-5.5-cyber, gpt-5.3-codex,
+128,000 max output tokens), gpt-6-cyber, gpt-6-sol, gpt-5.6-cyber, gpt-5.5-cyber, gpt-5.5-cyber-preview, gpt-5.3-codex,
 chat-latest, gpt-5-search-api, claude-fable-5-2, claude-mythos-5-2,
 claude-mythos-5-1, claude-opus-5-5,
 claude-opus-5, grok-4.6, grok-build-0.1, muse-spark-1.3-contributor,

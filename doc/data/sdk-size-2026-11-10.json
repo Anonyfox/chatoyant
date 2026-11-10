@@ -1,0 +1,59 @@
+{
+  "date": "2026-11-10",
+  "node": "v24.22.1",
+  "rows": [
+    {
+      "name": "chatoyant",
+      "versions": [
+        "chatoyant@0.17.2"
+      ],
+      "packages": 1,
+      "installBytes": 615250,
+      "bundleBytes": 223194,
+      "gzipBytes": 56253
+    },
+    {
+      "name": "openai",
+      "versions": [
+        "openai@7.55.0"
+      ],
+      "packages": 1,
+      "installBytes": 24026741,
+      "bundleBytes": 394206,
+      "gzipBytes": 86225
+    },
+    {
+      "name": "@anthropic-ai/sdk",
+      "versions": [
+        "@anthropic-ai/sdk@1.7.0"
+      ],
+      "packages": 8,
+      "installBytes": 18488645,
+      "bundleBytes": 423407,
+      "gzipBytes": 99649
+    },
+    {
+      "name": "ai + @ai-sdk/openai",
+      "versions": [
+        "ai@7.0.166",
+        "@ai-sdk/openai@4.0.111"
+      ],
+      "packages": 12,
+      "installBytes": 23637988,
+      "bundleBytes": 938210,
+      "gzipBytes": 213211
+    },
+    {
+      "name": "langchain + @langchain/openai",
+      "versions": [
+        "langchain@1.6.3",
+        "@langchain/core@1.3.6",
+        "@langchain/openai@1.8.2"
+      ],
+      "packages": 25,
+      "installBytes": 81934702,
+      "bundleBytes": 1557087,
+      "gzipBytes": 364640
+    }
+  ]
+}
