@@ -4,11 +4,16 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## 0.17.2 — 2026-11-10
 
 ### Added
 
 - Add matching OCaml and JavaScript prices for GPT-6 Cyber, Claude Fable/Mythos 5.2, and Muse Ember 1.0 (up to 200K input tokens), plus the confirmed 1M context windows for Fable/Mythos 5.2. Existing presets remain unchanged.
+- Add context windows for GPT-6 Cyber and Muse Ember.
+
+### Fixed
+
+- Preserve Anthropic thinking blocks, including signatures, when JavaScript chat sessions replay tool calls; OCaml provider types carry signed thinking blocks too.
 
 ## 0.17.1 — 2026-11-05
 
