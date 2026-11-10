@@ -41,7 +41,7 @@ const GUIDES = new Map([
   }],
   [join(OUT, "chatoyant/js_llm_sdk_size.html"), {
     title: "Smallest JavaScript LLM SDK: install and bundle size measured | Chatoyant",
-    description: "JavaScript LLM SDK install and bundle sizes measured on 27 October 2026, with exact versions, rerunnable scripts and a typechecked Chatoyant example.",
+    description: "JavaScript LLM SDK install and bundle sizes measured on 10 November 2026, with exact versions, rerunnable scripts and a typechecked Chatoyant example.",
     label: "Smallest JavaScript LLM SDK: install and bundle size measured",
     summary: "measured bytes, method and a typechecked TypeScript example",
   }],
