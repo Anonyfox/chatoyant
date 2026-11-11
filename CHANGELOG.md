@@ -10,6 +10,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Add the official OpenAI model id `gpt-5.5-cyber-preview` at $12.50 input / $75 output / $1.25 cached per 1M tokens, matching the published Daybreak short-context price so cost estimates no longer fall back to GPT-5.4.
 
+### Fixed
+
+- Keep the JavaScript result and `toJSON()` message shape unchanged for Anthropic responses without thinking blocks; `providerReplay` is now only attached when a response contains `thinking` or `redacted_thinking` blocks.
+
+### Changed
+
+- Cache the parsed JSON Schema per schema object in JavaScript `validate`, so repeated validation against the same schema skips re-parsing.
+
 ## 0.17.2 — 2026-11-10
 
 ### Added
