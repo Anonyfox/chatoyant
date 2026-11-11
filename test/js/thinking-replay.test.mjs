@@ -1,14 +1,14 @@
+import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import { it } from "node:test";
 import { Chat, Message, Schema, createTool } from "chatoyant";
 
-const fixture = (id = "toolu_1") => [
-  { type: "thinking", thinking: "  first\nβ  ", signature: "opaque+/==\nA", extra: { untouched: true } },
-  { type: "redacted_thinking", data: "opaque-redacted+/==", extra: [1, 2] },
-  { type: "text", text: "Checking" },
-  { type: "thinking", thinking: "second", signature: "sig-B" },
-  { type: "tool_use", id, name: "lookup", input: { q: "x" } },
-];
+const replayFixture = JSON.parse(readFileSync(new URL("./fixtures/anthropic-thinking-replay.json", import.meta.url), "utf8"));
+const fixture = (id = "toolu_1") => {
+  const blocks = structuredClone(replayFixture);
+  blocks.at(-1).id = id;
+  return blocks;
+};
 const lookup = () => createTool({
   name: "lookup", description: "Lookup", parameters: { q: Schema.String() },
   execute: async ({ args }) => args.q,
@@ -162,5 +162,47 @@ it("assembles direct streaming thinking/signature fragments, redactions and tool
     restored.user("continue");
     await restored.generate(options);
     assert.equal(calls, 2);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+it("keeps ordinary Anthropic result and message JSON free of replay fields", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (_url, init) => JSON.parse(init.body).stream
+    ? new Response('data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}\n\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"plain"}}\n\n', { headers: { "content-type": "text/event-stream" } })
+    : jsonResponse({ content: [{ type: "text", text: "plain" }], stop_reason: "end_turn" });
+  try {
+    const chat = new Chat({ model: "claude-sonnet-4-6" }).user("hello");
+    const result = await chat.generateWithResult(options);
+    assert.equal(Object.hasOwn(result, "providerReplay"), false);
+    assert.deepEqual(chat.toJSON().messages.at(-1), { role: "assistant", content: "plain" });
+    let streamed = "";
+    for await (const chunk of chat.stream(options)) streamed += chunk;
+    assert.equal(streamed, "plain");
+    assert.deepEqual(chat.toJSON().messages.at(-1), { role: "assistant", content: "plain" });
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+it("snapshots replay envelopes on Message construction and serialization", () => {
+  const envelope = { provider: "anthropic", model: "claude-sonnet-4-6", content: fixture() };
+  const message = Message.fromJSON({ role: "assistant", content: "Checking", providerReplay: envelope });
+  envelope.content[0].signature = "caller mutation";
+  const serialized = message.toJSON();
+  serialized.providerReplay.content[1].data = "serialized mutation";
+  assert.deepEqual(message.toJSON().providerReplay.content, fixture());
+});
+
+it("retains redacted-only responses without synthesizing signatures", async () => {
+  const originalFetch = globalThis.fetch;
+  const blocks = [{ type: "redacted_thinking", data: "opaque+/==", unknown: { keep: true } }];
+  let calls = 0;
+  globalThis.fetch = async (_url, init) => {
+    if (++calls === 2) assert.deepEqual(JSON.parse(init.body).messages[1].content, blocks);
+    return jsonResponse({ content: blocks, stop_reason: "end_turn" });
+  };
+  try {
+    const chat = new Chat({ model: "claude-sonnet-4-6" }).user("hello");
+    const result = await chat.generateWithResult(options);
+    assert.deepEqual(result.providerReplay.content, blocks);
+    await chat.user("continue").generate(options);
   } finally { globalThis.fetch = originalFetch; }
 });

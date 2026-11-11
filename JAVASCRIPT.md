@@ -208,6 +208,15 @@ console.log(chat.toJSON());
 `generateWithResult`, `stream`, `streamAccumulate`, `generateData`, JSON
 roundtrip, clone, and fork.
 
+Anthropic responses containing `thinking` or `redacted_thinking` retain the entire
+ordered content array in an optional `providerReplay` envelope. Tool continuations,
+JSON roundtrips, clone/fork, and direct streams preserve opaque signatures and
+redacted data. Leave these fields unmodified. Only Anthropic requests consume the
+envelope; ordinary text responses keep their existing JSON shape. Preserving
+history across model changes does not guarantee server acceptance by another model.
+The OCaml provider preserves signed blocks at the low-level JSON boundary;
+high-level OCaml session replay does not yet carry these envelopes.
+
 ## Provider Namespaces
 
 Provider helpers are available both as direct exports and through namespaces:

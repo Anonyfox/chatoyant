@@ -1,0 +1,7 @@
+[
+  {"type":"thinking","thinking":"  first\nβ  ","signature":"opaque+/==\nA","extra":{"untouched":true}},
+  {"type":"redacted_thinking","data":"opaque-redacted+/==","extra":[1,2]},
+  {"type":"text","text":"Checking"},
+  {"type":"thinking","thinking":"second","signature":"sig-B"},
+  {"type":"tool_use","id":"toolu_1","name":"lookup","input":{"q":"x"}}
+]

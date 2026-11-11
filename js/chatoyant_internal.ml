@@ -3274,7 +3274,9 @@ class Chat {
       toolCalls,
       finishReason: json.stop_reason,
       raw: json,
-      providerReplay: { provider: "anthropic", model: json.model || model, content: JSON.parse(JSON.stringify(blocks)) },
+      ...(blocks.some((block) => block.type === "thinking" || block.type === "redacted_thinking")
+        ? { providerReplay: { provider: "anthropic", model: json.model || model, content: JSON.parse(JSON.stringify(blocks)) } }
+        : {}),
     };
   }
 
@@ -3334,7 +3336,9 @@ class Chat {
       return "";
     });
     for (const [index, fragments] of inputFragments) blocks[index].input = JSON.parse(fragments);
-    if (onReplay) onReplay({ provider: "anthropic", model: responseModel, content: blocks });
+    if (onReplay && blocks.some((block) => block.type === "thinking" || block.type === "redacted_thinking")) {
+      onReplay({ provider: "anthropic", model: responseModel, content: blocks });
+    }
   }
 
   async *_parseSse(response, selectText) {
