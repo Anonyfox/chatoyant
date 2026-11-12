@@ -17,6 +17,28 @@ token/cost accounting, and root-only npm exports.
 
 _chatoyant_ /shuh-TOY-uhnt/ - having a changeable lustre.
 
+## Install
+
+```bash
+npm install chatoyant            # JavaScript/TypeScript: Node 18+, no runtime dependencies
+opam install chatoyant eio_main  # OCaml 5.3+
+```
+
+Set the API key for the provider you call (`OPENAI_API_KEY`,
+`ANTHROPIC_API_KEY`, `XAI_API_KEY`, `META_API_KEY` or `OPENROUTER_API_KEY`),
+then make a first call:
+
+```ts
+import { genText } from "chatoyant";
+
+console.log(await genText("Say hello in three words.", { model: "fast" }));
+```
+
+In OCaml, add `(libraries chatoyant eio_main)` to your dune stanza, plus
+`(preprocess (pps chatoyant.ppx))` for `module%tool` and derived codecs. Full
+examples: [OCaml Quick Start](#ocaml-quick-start) and
+[JavaScript Quick Start](#javascript-quick-start).
+
 ## Highlights
 
 - Native OCaml API built around Eio, result-returning calls, `.mli` contracts,
