@@ -1550,6 +1550,9 @@ let () =
   check_price "gpt-5-search-api" 1.25 10.0 (Some 0.125) None None;
   check_price "claude-fable-5-1" 10.0 50.0 (Some 0.25) (Some 12.5) (Some 20.0);
   check_price "claude-mythos-5-1" 10.0 50.0 (Some 0.25) (Some 12.5) (Some 20.0);
+  check_price "claude-mythos-5" 10.0 50.0 (Some 1.0) (Some 12.5) (Some 20.0);
+  assert_true "claude-mythos-5 exact price"
+    (Chatoyant.Tokens.Pricing.has "claude-mythos-5");
   check_price "claude-opus-5-5" 4.0 20.0 (Some 0.2) (Some 5.0) (Some 8.0);
   check_price "claude-opus-5" 5.0 25.0 (Some 0.5) (Some 6.25) (Some 10.0);
   check_price "claude-sonnet-5-5" 2.0 10.0 (Some 0.1) (Some 2.5) (Some 4.0);
@@ -1585,6 +1588,8 @@ let () =
     (Option.get (Chatoyant.Tokens.Context_window.get "claude-fable-5-1"));
   assert_equal_int 1_000_000
     (Option.get (Chatoyant.Tokens.Context_window.get "claude-mythos-5-1"));
+  assert_equal_int 1_000_000
+    (Option.get (Chatoyant.Tokens.Context_window.get "claude-mythos-5"));
   assert_equal_int 1_000_000
     (Option.get (Chatoyant.Tokens.Context_window.get "claude-opus-5-5"));
   assert_equal_int 1_000_000

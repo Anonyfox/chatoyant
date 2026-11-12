@@ -902,7 +902,7 @@ const OPENAI_MODELS = Object.freeze([
 const ANTHROPIC_MODELS = Object.freeze([
   "claude-fable-5-2", "claude-mythos-5-2",
   "claude-fable-5-1", "claude-mythos-5-1", "claude-opus-5-5", "claude-opus-5", "claude-sonnet-5-5", "claude-haiku-5-5",
-  "claude-fable-5",
+  "claude-fable-5", "claude-mythos-5",
   "claude-opus-4-8", "claude-opus-4-7", "claude-sonnet-5",
   "claude-opus-4-6", "claude-sonnet-4-6",
   "claude-opus-4-5-20251101", "claude-opus-4-5",
@@ -1039,6 +1039,7 @@ const PRICING = Object.freeze({
   "text-embedding-3-large": { input: 0.13, output: 0 },
   "text-embedding-ada-002": { input: 0.1, output: 0 },
   "claude-fable-5": { input: 10, output: 50, cached: 1, cacheWrite5m: 12.5, cacheWrite1h: 20 },
+  "claude-mythos-5": { input: 10, output: 50, cached: 1, cacheWrite5m: 12.5, cacheWrite1h: 20 },
   "claude-opus-4-8": { input: 5, output: 25, cached: 0.5, cacheWrite5m: 6.25, cacheWrite1h: 10 },
   "claude-opus-4-7": { input: 5, output: 25, cached: 0.5, cacheWrite5m: 6.25, cacheWrite1h: 10 },
   // Standard price, including the former introductory discount.
@@ -1174,6 +1175,7 @@ const CONTEXT_WINDOWS = Object.freeze({
   "gpt-oss-120b": 131072,
   "gpt-oss-20b": 131072,
   "claude-fable-5": 1000000,
+  "claude-mythos-5": 1000000,
   "claude-opus-4-8": 1000000,
   "claude-opus-4-7": 1000000,
   "claude-sonnet-5": 1000000,

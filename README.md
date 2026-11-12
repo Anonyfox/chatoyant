@@ -115,7 +115,7 @@ Model presets are available for quick intent-based calls: `fast`, `cheap`,
 Also recognized: gpt-6.1-terra (text/image input, 1,050,000 context tokens,
 128,000 max output tokens), gpt-6-cyber, gpt-6-sol, gpt-5.6-cyber, gpt-5.5-cyber, gpt-5.5-cyber-preview, gpt-5.3-codex,
 chat-latest, gpt-5-search-api, claude-fable-5-2, claude-mythos-5-2,
-claude-mythos-5-1, claude-opus-5-5,
+claude-mythos-5-1, claude-mythos-5, claude-opus-5-5,
 claude-opus-5, grok-4.6, grok-build-0.1, muse-spark-1.3-contributor,
 muse-wonder-1.0, muse-ember-1.0, grok-imagine-image-2.0, grok-imagine-image-quality,
 grok-imagine-video-1.5, and grok-imagine-video-1.5-lite.

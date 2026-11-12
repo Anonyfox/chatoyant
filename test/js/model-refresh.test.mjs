@@ -24,6 +24,7 @@ describe("2026-10 model refresh", () => {
     assert.equal(getPricing("claude-haiku-4-5").cacheWrite1h, 2);
     assert.equal(getPricing("claude-opus-4-8").cacheWrite1h, 10);
     assert.equal(getPricing("claude-fable-5").cacheWrite1h, 20);
+    assert.deepEqual(getPricing("claude-mythos-5"), { input: 10, output: 50, cached: 1, cacheWrite5m: 12.5, cacheWrite1h: 20 });
   });
 
   it("exposes refreshed token, cache, and media prices", () => {

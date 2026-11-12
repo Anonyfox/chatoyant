@@ -125,6 +125,9 @@ let all =
     ( "claude-fable-5",
       p ~input:10.0 ~output:50.0 ~cached:1.0 ~cache_write_5m:12.5
         ~cache_write_1h:20.0 () );
+    ( "claude-mythos-5",
+      p ~input:10.0 ~output:50.0 ~cached:1.0 ~cache_write_5m:12.5
+        ~cache_write_1h:20.0 () );
     ( "claude-opus-4-8",
       p ~input:5.0 ~output:25.0 ~cached:0.5 ~cache_write_5m:6.25
         ~cache_write_1h:10.0 () );

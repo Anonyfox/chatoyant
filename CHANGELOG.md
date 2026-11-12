@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Fixed
+
+- Add the official Anthropic model id `claude-mythos-5` at $10 input / $50 output / $1 cache hits / $12.50 5m and $20 1h cache writes per 1M tokens, with its 1M context window, in OCaml and JavaScript. Cost estimates previously fell back to Claude Fable 5.1 and undercounted cache hits at $0.25.
+
 ## 0.17.3 — 2026-11-11
 
 ### Added
