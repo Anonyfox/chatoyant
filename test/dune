@@ -83,3 +83,8 @@
  (name smoke_xai_real)
  (modules smoke_xai_real)
  (libraries chatoyant unix))
+
+(test
+ (name test_thinking_replay)
+ (modules test_thinking_replay)
+ (libraries chatoyant))

@@ -283,3 +283,27 @@ price through 2026-11-30. Haiku 5.5 prompts above 100K tokens
 and Grok Build prompts at or above 200K tokens have higher rates not modelled here.
 
 Retired on first-party APIs (ids still resolve for pricing/detection): claude-opus-4-1, claude-opus-4, claude-sonnet-4, claude-3-5-haiku/claude-3-*; xAI no longer lists grok-4-1-fast-*, grok-code-fast-1, grok-3*, grok-4-0709.
+
+### Anthropic thinking replay
+
+OCaml sessions retain an assistant's complete ordered Anthropic content array
+when it contains `thinking` or `redacted_thinking`. The envelope is stored under
+`Message.metadata["providerReplay"]` as `{ "provider": "anthropic", "model":
+"...", "content": [...] }`. Signatures, redacted data, and unknown block fields
+are preserved. Session save/restore, clone/fork, and model changes retain this
+metadata. Legacy messages continue using their text and tool-call projections.
+
+`Generator.Make_with_raw.generate_with_raw` returns the normal generation and
+its original provider JSON together, without changing `Result.generation`.
+The generator forwards per-message envelopes through the reserved
+`Options.extra` key `chatoyant_provider_replay`; the Anthropic adapter consumes
+and removes this key before sending HTTP JSON. Other providers ignore the
+metadata and receive no extra replay option from the generator.
+
+For `Session.stream_accumulate`, populate each frame's existing `raw` field with
+the decoded Anthropic SSE event object, including its `type`. The session uses
+these events to retain ordered blocks and concatenate thinking, signature, and
+tool-input fragments. Provider-neutral deltas alone cannot recover opaque
+signatures. Preserve the metadata when manually editing message histories;
+changing a model retains the signed blocks but does not establish server-side
+compatibility with that model.

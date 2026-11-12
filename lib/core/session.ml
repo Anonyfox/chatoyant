@@ -115,7 +115,7 @@ module Make
     (Provider : Chatoyant_provider.Provider.CHAT)
     (Clock : Chatoyant_runtime.Effect.CLOCK) =
 struct
-  module Generator = Generator.Make (Provider) (Clock)
+  module Generator = Generator.Make_with_raw (Provider) (Clock)
 
   let create ?(model = "gpt-4o") ?(defaults = Options.default) () =
     {
@@ -290,6 +290,36 @@ struct
       Message.assistant_with_tool_calls ~content:result.content
         result.tool_calls
 
+  let with_replay ~model raw message =
+    if Provider.id <> Chatoyant_provider.Provider.Anthropic then message
+    else
+      match Option.bind raw (field "content") with
+      | Some (Chatoyant_runtime.Json.Array blocks as content)
+        when List.exists
+               (fun block ->
+                 match string_field "type" block with
+                 | Some "thinking" | Some "redacted_thinking" -> true
+                 | _ -> false)
+               blocks ->
+          let model =
+            Option.value (Option.bind raw (string_field "model")) ~default:model
+          in
+          let envelope =
+            Chatoyant_runtime.Json.Object
+              [
+                ("provider", string "anthropic");
+                ("model", string model);
+                ("content", content);
+              ]
+          in
+          {
+            message with
+            Message.metadata =
+              ("providerReplay", envelope)
+              :: List.remove_assoc "providerReplay" message.Message.metadata;
+          }
+      | _ -> message
+
   let generate_with_result ?(options = Options.default) session =
     let options = merged_options session options in
     let model = Option.value options.model ~default:session.session_model in
@@ -304,16 +334,21 @@ struct
              ^ " turns"))
       else
         match
-          Generator.generate ~options (immutable_chat_with messages session)
+          Generator.generate_with_raw ~options
+            (immutable_chat_with messages session)
         with
         | Error _ as err -> err
-        | Ok result ->
+        | Ok (result, raw) ->
             let accumulated =
               match accumulated with
               | None -> result
               | Some previous -> combine_results previous result
             in
-            let messages = messages @ [ assistant_message_of_result result ] in
+            let assistant =
+              assistant_message_of_result result
+              |> with_replay ~model:result.model raw
+            in
+            let messages = messages @ [ assistant ] in
             if result.tool_calls = [] then (
               session.session_messages <- messages;
               session.session_last_result <- Some accumulated;
@@ -353,9 +388,35 @@ struct
       Stream.to_generation ~provider:Provider.id ~model ~started_ms ~finished_ms
         state
     in
+    let raw =
+      if Provider.id <> Chatoyant_provider.Provider.Anthropic then None
+      else
+        let module A = Chatoyant_provider.Anthropic in
+        (* Frames retain decoded provider SSE JSON in their existing raw slot.
+           Accumulate it independently of the provider-neutral projections. *)
+        let state =
+          List.fold_left
+            (fun state (frame : Stream.frame) ->
+              match frame.raw with
+              | None -> state
+              | Some json -> (
+                  let event =
+                    {
+                      Chatoyant_runtime.Sse.event = string_field "type" json;
+                      data = [ Chatoyant_runtime.Json.to_string json ];
+                    }
+                  in
+                  match A.stream_event_of_sse event with
+                  | Ok event -> A.apply_stream_event state event
+                  | Error _ -> state))
+            A.empty_stream_state frames
+        in
+        Some (A.stream_state_to_response state).response_raw
+    in
     session.session_last_result <- Some result;
     session.session_messages <-
-      session.session_messages @ [ Message.assistant result.content ];
+      session.session_messages
+      @ [ with_replay ~model raw (assistant_message_of_result result) ];
     result
 
   let to_json session =

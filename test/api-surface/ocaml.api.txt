@@ -43,6 +43,7 @@ lib/core/chatoyant_core.mli::module Shortcuts: module Shortcuts = Shortcuts
 lib/core/chatoyant_core.mli::module Stream: module Stream = Stream
 lib/core/chatoyant_core.mli::module Tool: module Tool = Tool
 lib/core/generator.mli::module Make: module Make (Provider : Chatoyant_provider.Provider.CHAT) (Clock : Chatoyant_runtime.Effect.CLOCK) : sig val generate : ?options:Options.t -> Chat.t -> (Result.generation, Chatoyant_provider.Provider.error) result end
+lib/core/generator.mli::module Make_with_raw: module Make_with_raw (Provider : Chatoyant_provider.Provider.CHAT) (Clock : Chatoyant_runtime.Effect.CLOCK) : sig val generate_with_raw : ?options:Options.t -> Chat.t -> ( Result.generation * Chatoyant_runtime.Json.t option, Chatoyant_provider.Provider.error ) result end
 lib/core/message.mli::type attachment: type attachment = Chatoyant_provider.Provider.attachment
 lib/core/message.mli::type role: type role = System | User | Assistant | Tool
 lib/core/message.mli::type t: type t = { role : role; content : string; name : string option; tool_call_id : string option; tool_result_error : bool option; tool_calls : tool_call list; metadata : (string * Chatoyant_runtime.Json.t) list; attachments : attachment list; }

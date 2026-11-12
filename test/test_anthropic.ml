@@ -395,6 +395,23 @@ let test_signed_thinking_roundtrip () =
   let response =
     Anthropic.response_of_json (Json.Object [ ("content", Json.Array blocks) ])
   in
+  let request =
+    {
+      (request_fixture ()) with
+      messages =
+        [
+          {
+            Anthropic.message_role = Anthropic.Assistant;
+            message_content = response.response_content;
+          };
+        ];
+    }
+  in
+  (match Json.field "messages" (Anthropic.request_json request) with
+  | Some (Json.Array [ message ]) ->
+      if Json.field "content" message <> Some (Json.Array blocks) then
+        failwith "typed response to request lost thinking replay"
+  | _ -> failwith "missing typed replay request");
   let generation = Anthropic.generation_of_response response in
   assert_equal_string "  first\nβ  second" generation.reasoning_content;
   (match

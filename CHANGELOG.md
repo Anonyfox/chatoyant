@@ -8,6 +8,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Preserve OCaml Anthropic signed thinking and redacted blocks in tool continuations, saved sessions, model changes, and streaming replay without changing existing public record or variant types.
+
 - Add the official Anthropic model id `claude-mythos-5` at $10 input / $50 output / $1 cache hits / $12.50 5m and $20 1h cache writes per 1M tokens, with its 1M context window, in OCaml and JavaScript. Cost estimates previously fell back to Claude Fable 5.1 and undercounted cache hits at $0.25.
 
 ## 0.17.3 — 2026-11-11

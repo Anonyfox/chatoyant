@@ -832,7 +832,13 @@ let stream_event_of_json event_type json =
           Content_block_start
             {
               index = Option.value (int_field "index" json) ~default:0;
-              block = content_block_of_json block;
+              block =
+                (let decoded = content_block_of_json block in
+                 match decoded with
+                 | Cached_block _ -> Raw_block block
+                 | _ ->
+                     if content_block_json decoded = block then decoded
+                     else Raw_block block);
             }
       | None -> Unknown_event { event_type; raw = json })
   | Some "content_block_delta" -> (
@@ -920,19 +926,38 @@ let append_text_to_block text = function
   | Thinking existing -> Thinking (existing ^ text)
   | block -> block
 
+let append_block_field name text block =
+  let json = content_block_json block in
+  let existing = Option.value (string_field name json) ~default:"" in
+  let fields =
+    Option.value (Chatoyant_runtime.Json.as_object json) ~default:[]
+  in
+  let value = string (existing ^ text) in
+  let fields =
+    if List.mem_assoc name fields then
+      List.map
+        (fun (key, old) -> (key, if key = name then value else old))
+        fields
+    else fields @ [ (name, value) ]
+  in
+  Raw_block (Chatoyant_runtime.Json.Object fields)
+
 let append_delta index delta blocks =
   let current =
     match List.nth_opt blocks index with Some block -> block | None -> Text ""
   in
   let replacement =
     match delta with
-    | Text_delta text -> append_text_to_block text current
-    | Thinking_delta text -> (
+    | Text_delta text -> (
         match current with
-        | Thinking existing -> Thinking (existing ^ text)
-        | _ -> Thinking text)
+        | Raw_block _ -> append_block_field "text" text current
+        | _ -> append_text_to_block text current)
+    | Thinking_delta text -> append_block_field "thinking" text current
+    | Signature_delta text -> append_block_field "signature" text current
     | Input_json_delta part -> (
         match current with
+        | Raw_block json when string_field "type" json = Some "tool_use" ->
+            append_block_field "input" part current
         | Tool_use { id; name; input = Chatoyant_runtime.Json.String existing }
           ->
             Tool_use
@@ -944,7 +969,7 @@ let append_delta index delta blocks =
         | Tool_use { id; name; input = _ } ->
             Tool_use { id; name; input = Chatoyant_runtime.Json.String part }
         | _ -> current)
-    | Signature_delta _ | Unknown_delta _ -> current
+    | Unknown_delta _ -> current
   in
   replace_nth index replacement blocks
 
@@ -993,15 +1018,37 @@ let apply_stream_event state = function
   | Message_stop -> state
 
 let stream_state_to_response state =
+  let blocks =
+    List.map
+      (fun block ->
+        let json = content_block_json block in
+        match (string_field "type" json, field "input" json) with
+        | Some "tool_use", Some (Chatoyant_runtime.Json.String text) -> (
+            match
+              ( Chatoyant_runtime.Json.parse text,
+                Chatoyant_runtime.Json.as_object json )
+            with
+            | Ok input, Some fields ->
+                Chatoyant_runtime.Json.Object
+                  (List.map
+                     (fun (key, value) ->
+                       (key, if key = "input" then input else value))
+                     fields)
+            | _ -> json)
+        | _ -> json)
+      state.stream_content
+  in
   {
     response_id = state.stream_id;
     response_model = state.stream_model;
     response_role = state.stream_role;
-    response_content = state.stream_content;
+    response_content = List.map content_block_of_json blocks;
     response_stop_reason = state.stream_stop_reason;
     response_stop_sequence = state.stream_stop_sequence;
     response_usage = state.stream_usage;
-    response_raw = Chatoyant_runtime.Json.Null;
+    response_raw =
+      Chatoyant_runtime.Json.Object
+        [ ("content", Chatoyant_runtime.Json.Array blocks) ];
   }
 
 let response_of_stream_chunks chunks =
@@ -1432,7 +1479,8 @@ let provider_thinking ~family (options : Provider.options) =
 
 let provider_extra_fields (options : Provider.options) =
   match options.extra with
-  | Some (Chatoyant_runtime.Json.Object fields) -> fields
+  | Some (Chatoyant_runtime.Json.Object fields) ->
+      List.remove_assoc "chatoyant_provider_replay" fields
   | _ -> []
 
 (* Reasoning depth for the 4.6+ generation maps to output_config.effort. *)
@@ -1479,10 +1527,35 @@ struct
     in
     let family = model_family options.model in
     let allow_sampling = sampling_allowed family in
+    let replay =
+      Option.bind
+        (Option.bind options.extra (field "chatoyant_provider_replay"))
+        Chatoyant_runtime.Json.as_list
+      |> Option.value ~default:[]
+    in
+    let messages =
+      List.mapi
+        (fun index (message : Provider.message) ->
+          let original = anthropic_message_of_provider_message message in
+          match List.nth_opt replay index with
+          | Some envelope
+            when message.role = Provider.Assistant
+                 && string_field "provider" envelope = Some "anthropic" -> (
+              match field "content" envelope with
+              | Some (Chatoyant_runtime.Json.Array blocks) ->
+                  {
+                    original with
+                    message_content =
+                      List.map (fun block -> Raw_block block) blocks;
+                  }
+              | _ -> original)
+          | _ -> original)
+        non_system
+    in
     let request =
       {
         model = options.model;
-        messages = List.map anthropic_message_of_provider_message non_system;
+        messages;
         system;
         system_blocks = [];
         max_tokens = Option.value options.max_tokens ~default:4096;
