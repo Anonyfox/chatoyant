@@ -519,12 +519,12 @@ let () =
        (Chatoyant.Provider.Registry.resolve_by_model ~local_active:true
           "Qwen3-4B-MLX"));
 
-  assert_equal_string "gpt-6.1-sol"
+  assert_equal_string "gpt-6.2-sol"
     (Option.get
        (Chatoyant.Core.Preset.resolve_model_preset
           ~provider:Chatoyant.Provider.Provider.Openai
           Chatoyant.Core.Preset.Balanced));
-  assert_equal_string "claude-fable-5-1"
+  assert_equal_string "claude-fable-5-2"
     (Option.get
        (Chatoyant.Core.Preset.resolve_model_preset
           ~provider:Chatoyant.Provider.Provider.Anthropic
@@ -1426,17 +1426,17 @@ let () =
        (Chatoyant.Core.Preset.resolve_model_preset
           ~provider:Chatoyant.Provider.Provider.Openai
           Chatoyant.Core.Preset.Cheap));
-  assert_equal_string "gpt-6.1-sol"
+  assert_equal_string "gpt-6.2-sol"
     (Option.get
        (Chatoyant.Core.Preset.resolve_model_preset
           ~provider:Chatoyant.Provider.Provider.Openai
           Chatoyant.Core.Preset.Balanced));
-  assert_equal_string "gpt-6-astra"
+  assert_equal_string "gpt-6.2-astra"
     (Option.get
        (Chatoyant.Core.Preset.resolve_model_preset
           ~provider:Chatoyant.Provider.Provider.Openai
           Chatoyant.Core.Preset.Best));
-  assert_equal_string "gpt-6-astra"
+  assert_equal_string "gpt-6.2-astra"
     (Option.get
        (Chatoyant.Core.Preset.resolve_model_preset
           ~provider:Chatoyant.Provider.Provider.Openai
@@ -1456,12 +1456,12 @@ let () =
        (Chatoyant.Core.Preset.resolve_model_preset
           ~provider:Chatoyant.Provider.Provider.Anthropic
           Chatoyant.Core.Preset.Balanced));
-  assert_equal_string "claude-fable-5-1"
+  assert_equal_string "claude-fable-5-2"
     (Option.get
        (Chatoyant.Core.Preset.resolve_model_preset
           ~provider:Chatoyant.Provider.Provider.Anthropic
           Chatoyant.Core.Preset.Best));
-  assert_equal_string "claude-fable-5-1"
+  assert_equal_string "claude-fable-5-2"
     (Option.get
        (Chatoyant.Core.Preset.resolve_model_preset
           ~provider:Chatoyant.Provider.Provider.Anthropic
@@ -1532,6 +1532,9 @@ let () =
       assert_equal_int 1_000_000
         (Option.get (Chatoyant.Tokens.Context_window.get model)))
     [ "claude-fable-5-2"; "claude-mythos-5-2" ];
+  check_price "gpt-6.2-astra" 8.0 40.0 (Some 0.4) None None;
+  check_price "gpt-6.2-sol" 2.0 10.0 (Some 0.1) None None;
+  check_price "gpt-6.2-astra-law" 8.0 40.0 (Some 0.4) None None;
   check_price "gpt-6-astra" 10.0 50.0 (Some 1.0) None None;
   check_price "gpt-6.1-terra" 1.0 5.0 (Some 0.05) None None;
   check_price "gpt-6.1-sol" 2.0 10.0 (Some 0.1) None None;
@@ -1572,6 +1575,10 @@ let () =
   check_price "grok-4.5" 2.0 6.0 (Some 0.3) None None;
   check_price "claude-opus-9" 4.0 20.0 (Some 0.2) (Some 5.0) (Some 8.0);
   check_price "gpt-6-foo" 2.0 10.0 (Some 0.1) None None;
+  assert_equal_int 1_050_000
+    (Option.get (Chatoyant.Tokens.Context_window.get "gpt-6.2-astra"));
+  assert_equal_int 1_050_000
+    (Option.get (Chatoyant.Tokens.Context_window.get "gpt-6.2-sol"));
   assert_equal_int 1_050_000
     (Option.get (Chatoyant.Tokens.Context_window.get "gpt-6-astra"));
   assert_equal_int 1_050_000
@@ -1677,7 +1684,17 @@ let () =
             (not (contains_substring key body)))
         [ "temperature"; "top_p"; "frequency_penalty"; "presence_penalty" ];
       assert_contains "\"effort\":\"low\"" (body_for model "minimal"))
-    [ "gpt-6.1-terra"; "gpt-6-astra"; "gpt-6.1-sol"; "gpt-6-sol"; "gpt-6-luna" ];
+    [
+      "gpt-6.2-astra";
+      "gpt-6.2-sol";
+      "gpt-6.1-terra";
+      "gpt-6-astra";
+      "gpt-6.1-sol";
+      "gpt-6-sol";
+      "gpt-6-luna";
+    ];
+  assert_contains "\"effort\":\"low\"" (body_for "gpt-6.2-astra" "none");
+  assert_contains "\"effort\":\"low\"" (body_for "gpt-6.2-sol" "none");
   assert_contains "\"effort\":\"low\"" (body_for "gpt-6-astra" "none");
   assert_contains "\"effort\":\"low\"" (body_for "gpt-6.1-sol" "none");
   assert_contains "\"effort\":\"none\"" (body_for "gpt-6.1-terra" "none");

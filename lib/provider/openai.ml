@@ -3122,7 +3122,9 @@ let provider_reasoning_json (options : Provider.options) =
       let effort =
         if
           (effort = "minimal" && has "gpt-6")
-          || (effort = "none" && (has "gpt-6-astra" || has "gpt-6.1-sol"))
+          || (effort = "none"
+             && (has "gpt-6-astra" || has "gpt-6.1-sol" || has "gpt-6.2-astra"
+                || has "gpt-6.2-sol"))
         then "low"
         else effort
       in

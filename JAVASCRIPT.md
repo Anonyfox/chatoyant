@@ -105,12 +105,12 @@ Intent presets resolve to provider-specific model names:
 | Preset | OpenAI | Anthropic | xAI | Meta |
 | --- | --- | --- | --- | --- |
 | fast / cheap | gpt-6-luna | claude-haiku-5-5 | grok-4.20-0309-non-reasoning | muse-spark-1.3 |
-| balanced | gpt-6.1-sol | claude-sonnet-5-5 | grok-4.3 | muse-spark-1.3 |
-| best / reasoning | gpt-6-astra | claude-fable-5-1 | grok-4.7 | muse-spark-1.3 |
+| balanced | gpt-6.2-sol | claude-sonnet-5-5 | grok-4.3 | muse-spark-1.3 |
+| best / reasoning | gpt-6.2-astra | claude-fable-5-2 | grok-4.7 | muse-spark-1.3 |
 
 Also recognized: gpt-6.1-terra (text/image input, 1,050,000 context tokens,
 128,000 max output tokens), gpt-6-cyber, gpt-6-sol, gpt-5.6-cyber, gpt-5.5-cyber, gpt-5.5-cyber-preview, gpt-5.3-codex,
-chat-latest, gpt-5-search-api, claude-fable-5-2, claude-mythos-5-2,
+chat-latest, gpt-5-search-api, claude-mythos-5-2, gpt-6-astra, gpt-6.1-sol, claude-fable-5-1,
 claude-mythos-5-1, claude-mythos-5, claude-opus-5-5,
 claude-opus-5, grok-4.6, grok-build-0.1, muse-spark-1.3-contributor,
 muse-wonder-1.0, muse-ember-1.0, grok-imagine-image-2.0, grok-imagine-image-quality,
@@ -123,6 +123,10 @@ at $10/$16. Muse Ember 1.0 has 1,048,576 context tokens and costs
 $0.10/$0.50/$0.004; input above 200K tokens (including cached tokens)
 uses $0.30/$1.50/$0.012 rates that the accounting table does not model.
 These explicit IDs do not change the preset mappings above.
+
+GPT-6.2 Astra and Sol each support 128,000 output tokens in a 1,050,000-token
+context window. The pricing tables use Standard rates. GPT-6.2 Astra for Law
+uses promotional pricing through at least December 31, 2026.
 
 OpenAI prices use the short-context tier (up to 272K input tokens); higher
 long-context rates are not modelled. GPT-5.6 Sol uses OpenAI's promotional

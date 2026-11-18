@@ -883,6 +883,7 @@ const PROVIDER_IDS = Object.freeze(Object.keys(PROVIDERS));
 
 const OPENAI_MODELS = Object.freeze([
   "gpt-6-cyber",
+  "gpt-6.2-astra", "gpt-6.2-sol", "gpt-6.2-astra-law",
   "gpt-6-astra", "gpt-6-astra-law", "gpt-6-rosalind", "gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-cyber", "gpt-5.5-cyber", "gpt-5.5-cyber-preview", "gpt-5.3-codex", "chat-latest", "gpt-5-search-api",
   "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna",
   "gpt-5.5", "gpt-5.5-pro",
@@ -945,6 +946,9 @@ const PRICING = Object.freeze({
   // >200K input (including cached tokens) bills 0.30/1.50/0.012, not modelled.
   "muse-ember-1.0": { input: 0.1, output: 0.5, cached: 0.004 },
   // OpenAI bills >272K input at a higher long-context tier not modelled here.
+  "gpt-6.2-astra": { input: 8, output: 40, cached: 0.4 },
+  "gpt-6.2-sol": { input: 2, output: 10, cached: 0.1 },
+  "gpt-6.2-astra-law": { input: 8, output: 40, cached: 0.4 },
   "gpt-6-astra": { input: 10, output: 50, cached: 1 },
   "gpt-6-astra-law": { input: 10, output: 50, cached: 1 },
   "gpt-6-rosalind": { input: 15, output: 75, cached: 1.5 },
@@ -1097,6 +1101,8 @@ const CONTEXT_WINDOWS = Object.freeze({
   "gpt-6-cyber": 1050000,
   "claude-fable-5-2": 1000000,
   "claude-mythos-5-2": 1000000,
+  "gpt-6.2-astra": 1050000,
+  "gpt-6.2-sol": 1050000,
   "gpt-6-astra": 1050000,
   "gpt-6.1-sol": 1050000,
   "gpt-6.1-terra": 1050000,
@@ -2561,8 +2567,8 @@ class Chat {
 
   _resolvePreset(model, provider = "openai") {
     const presets = {
-      openai: { fast: "gpt-6-luna", cheap: "gpt-6-luna", best: "gpt-6-astra", balanced: "gpt-6.1-sol", reasoning: "gpt-6-astra" },
-      anthropic: { fast: "claude-haiku-5-5", cheap: "claude-haiku-5-5", best: "claude-fable-5-1", balanced: "claude-sonnet-5-5", reasoning: "claude-fable-5-1" },
+      openai: { fast: "gpt-6-luna", cheap: "gpt-6-luna", best: "gpt-6.2-astra", balanced: "gpt-6.2-sol", reasoning: "gpt-6.2-astra" },
+      anthropic: { fast: "claude-haiku-5-5", cheap: "claude-haiku-5-5", best: "claude-fable-5-2", balanced: "claude-sonnet-5-5", reasoning: "claude-fable-5-2" },
       xai: { fast: "grok-4.20-0309-non-reasoning", cheap: "grok-4.20-0309-non-reasoning", best: "grok-4.7", balanced: "grok-4.3", reasoning: "grok-4.7" },
       // Presets select Muse Spark 1.3; the -contributor variant trains on request
       // data, so presets never select it.
@@ -2596,7 +2602,7 @@ class Chat {
   _providerReasoningEffort(provider, value, model = "") {
     const effort = this._reasoningEffort(value);
     if (provider === "meta" && effort === "none") return undefined;
-    if (provider === "openai" && ((effort === "minimal" && model.startsWith("gpt-6")) || (effort === "none" && (model.startsWith("gpt-6-astra") || model.startsWith("gpt-6.1-sol"))))) return "low";
+    if (provider === "openai" && ((effort === "minimal" && model.startsWith("gpt-6")) || (effort === "none" && (model.startsWith("gpt-6.2-astra") || model.startsWith("gpt-6.2-sol") || model.startsWith("gpt-6-astra") || model.startsWith("gpt-6.1-sol"))))) return "low";
     return effort;
   }
 
@@ -3102,7 +3108,7 @@ class Chat {
     if (
       provider === "openai" &&
       tools?.length &&
-      (model.startsWith("gpt-6-astra") || model.startsWith("gpt-6.1-sol") || model.startsWith("gpt-6.1-terra") ||
+      (model.startsWith("gpt-6.2-astra") || model.startsWith("gpt-6.2-sol") || model.startsWith("gpt-6-astra") || model.startsWith("gpt-6.1-sol") || model.startsWith("gpt-6.1-terra") ||
         (reasoningEffort && reasoningEffort !== "none" && this._openaiToolsRejectReasoning(model)))
     ) {
       return this._callOpenAIResponses(messages, options, { model, apiKey, baseUrl, reasoningEffort });

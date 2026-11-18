@@ -9,6 +9,11 @@ let all =
   [
     (* OpenAI bills >272K input at a higher long-context tier not modelled here. *)
     ("gpt-6-cyber", p ~input:20.0 ~output:100.0 ~cached:2.0 ());
+    (* OpenAI short-context Standard rates. Astra Law promotional pricing is
+       available at least through 2026-12-31. *)
+    ("gpt-6.2-astra", p ~input:8.0 ~output:40.0 ~cached:0.4 ());
+    ("gpt-6.2-sol", p ~input:2.0 ~output:10.0 ~cached:0.1 ());
+    ("gpt-6.2-astra-law", p ~input:8.0 ~output:40.0 ~cached:0.4 ());
     ("gpt-6-astra", p ~input:10.0 ~output:50.0 ~cached:1.0 ());
     ("gpt-6-astra-law", p ~input:10.0 ~output:50.0 ~cached:1.0 ());
     ("gpt-6-rosalind", p ~input:15.0 ~output:75.0 ~cached:1.5 ());

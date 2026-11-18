@@ -3,8 +3,8 @@ import { describe, it } from "node:test";
 import { Chat, getPricing, getContextWindow, detectProviderByModel, getModelsForProvider, createTool } from "chatoyant";
 
 const presets = {
-  openai: ["gpt-6-luna", "gpt-6-luna", "gpt-6.1-sol", "gpt-6-astra", "gpt-6-astra"],
-  anthropic: ["claude-haiku-5-5", "claude-haiku-5-5", "claude-sonnet-5-5", "claude-fable-5-1", "claude-fable-5-1"],
+  openai: ["gpt-6-luna", "gpt-6-luna", "gpt-6.2-sol", "gpt-6.2-astra", "gpt-6.2-astra"],
+  anthropic: ["claude-haiku-5-5", "claude-haiku-5-5", "claude-sonnet-5-5", "claude-fable-5-2", "claude-fable-5-2"],
   xai: ["grok-4.20-0309-non-reasoning", "grok-4.20-0309-non-reasoning", "grok-4.3", "grok-4.7", "grok-4.7"],
   meta: Array(5).fill("muse-spark-1.3"),
 };
@@ -31,6 +31,9 @@ describe("2026-10 model refresh", () => {
     assert.deepEqual(getPricing("gpt-5.6-sol"), { input: 4, output: 20, cached: 0.4 });
     assert.deepEqual(getPricing("gpt-5.6-terra"), { input: 2, output: 12, cached: 0.2 });
     assert.deepEqual(getPricing("gpt-5.6-luna"), { input: 0.2, output: 1.2, cached: 0.02 });
+    assert.deepEqual(getPricing("gpt-6.2-astra"), { input: 8, output: 40, cached: 0.4 });
+    assert.deepEqual(getPricing("gpt-6.2-sol"), { input: 2, output: 10, cached: 0.1 });
+    assert.deepEqual(getPricing("gpt-6.2-astra-law"), { input: 8, output: 40, cached: 0.4 });
     assert.deepEqual(getPricing("gpt-6-astra"), { input: 10, output: 50, cached: 1 });
     assert.deepEqual(getPricing("gpt-6.1-terra"), { input: 1, output: 5, cached: 0.05 });
     assert.deepEqual(getPricing("gpt-6.1-sol"), { input: 2, output: 10, cached: 0.1 });
@@ -46,6 +49,8 @@ describe("2026-10 model refresh", () => {
 
   it("recognizes new models, contexts, and the precise chat-latest signature", () => {
     for (const [model, provider, context] of [
+      ["gpt-6.2-astra", "openai", 1050000],
+      ["gpt-6.2-sol", "openai", 1050000],
       ["gpt-6-astra", "openai", 1050000],
       ["gpt-6.1-terra", "openai", 1050000],
       ["claude-opus-5-5", "anthropic", 1000000],
@@ -74,7 +79,7 @@ describe("2026-10 model refresh", () => {
       return new Response(JSON.stringify(response), { status: 200, headers: { "content-type": "application/json" } });
     };
     try {
-      for (const model of ["gpt-6-astra", "gpt-6.1-sol", "gpt-6.1-terra"]) {
+      for (const model of ["gpt-6.2-astra", "gpt-6.2-sol", "gpt-6-astra", "gpt-6.1-sol", "gpt-6.1-terra"]) {
         for (const reasoning of [undefined, "off", "minimal", "high"]) {
           const chat = new Chat({ model, apiKey: "test" }).user("hello");
           chat.addTool(createTool({ name: "lookup", description: "Look up data", parameters: {}, execute: async () => "ok" }));

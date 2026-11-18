@@ -49,9 +49,9 @@ These are the mappings in {{:https://github.com/Anonyfox/chatoyant/blob/main/lib
 | Preset | OpenAI | Anthropic | xAI | Meta |
 | fast | gpt-6-luna | claude-haiku-5-5 | grok-4.20-0309-non-reasoning | muse-spark-1.3 |
 | cheap | gpt-6-luna | claude-haiku-5-5 | grok-4.20-0309-non-reasoning | muse-spark-1.3 |
-| balanced | gpt-6.1-sol | claude-sonnet-5-5 | grok-4.3 | muse-spark-1.3 |
-| best | gpt-6-astra | claude-fable-5-1 | grok-4.7 | muse-spark-1.3 |
-| reasoning | gpt-6-astra | claude-fable-5-1 | grok-4.7 | muse-spark-1.3 |
+| balanced | gpt-6.2-sol | claude-sonnet-5-5 | grok-4.3 | muse-spark-1.3 |
+| best | gpt-6.2-astra | claude-fable-5-2 | grok-4.7 | muse-spark-1.3 |
+| reasoning | gpt-6.2-astra | claude-fable-5-2 | grok-4.7 | muse-spark-1.3 |
 }
 
 Resolve presets explicitly before passing [~model]. Local and OpenRouter have no preset mapping. Selecting the [Reasoning] model preset is separate from setting the request's [Options.reasoning] effort.
@@ -180,6 +180,9 @@ These USD rates per million tokens are the rows in {{:https://github.com/Anonyfo
 
 {t
 | Model | Input | Output | Cached input | Cache write 5m | Cache write 1h |
+| gpt-6.2-astra | 8.00 | 40.00 | 0.40 | unavailable | unavailable |
+| gpt-6.2-sol | 2.00 | 10.00 | 0.10 | unavailable | unavailable |
+| gpt-6.2-astra-law | 8.00 | 40.00 | 0.40 | unavailable | unavailable |
 | gpt-6.1-sol | 2.00 | 10.00 | 0.10 | unavailable | unavailable |
 | claude-sonnet-5-5 | 2.00 | 10.00 | 0.10 | 2.50 | 4.00 |
 | grok-4.7 | 2.00 | 6.00 | 0.50 | unavailable | unavailable |

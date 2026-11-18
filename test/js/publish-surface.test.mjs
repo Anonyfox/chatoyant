@@ -68,9 +68,9 @@ describe("publish package surface", () => {
       else process.env.LOCAL_BASE_URL = previous;
     }
 
-    assert.equal(new Chat({ model: "best" }).model, "gpt-6-astra");
+    assert.equal(new Chat({ model: "best" }).model, "gpt-6.2-astra");
     assert.equal(new Chat({ model: "cheap" }).model, "gpt-6-luna");
-    assert.equal(new Chat({ model: "best", provider: "anthropic" }).model, "claude-fable-5-1");
+    assert.equal(new Chat({ model: "best", provider: "anthropic" }).model, "claude-fable-5-2");
     assert.equal(new Chat({ model: "balanced", provider: "anthropic" }).model, "claude-sonnet-5-5");
     assert.equal(new Chat({ model: "balanced", provider: "xai" }).model, "grok-4.3");
     assert.equal(new Chat({ model: "best", provider: "xai" }).model, "grok-4.7");

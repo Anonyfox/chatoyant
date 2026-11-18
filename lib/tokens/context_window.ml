@@ -2,6 +2,8 @@ let all =
   [
     (* https://developers.openai.com/api/docs/models/gpt-6-cyber (2026-11-09) *)
     ("gpt-6-cyber", 1_050_000);
+    ("gpt-6.2-astra", 1_050_000);
+    ("gpt-6.2-sol", 1_050_000);
     ("gpt-6-astra", 1_050_000);
     ("gpt-6.1-terra", 1_050_000);
     ("gpt-6.1-sol", 1_050_000);

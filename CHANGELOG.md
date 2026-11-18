@@ -4,6 +4,16 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- OpenAI `gpt-6.2-astra` and `gpt-6.2-sol` pricing ($8/$40/$0.40 and $2/$10/$0.10 per million tokens, Standard tier) and 1,050,000-token context windows, plus pricing for `gpt-6.2-astra-law`.
+
+### Changed
+
+- Presets follow the providers' current recommendations: OpenAI `best` and `reasoning` now resolve to `gpt-6.2-astra` (was `gpt-6-astra`), `balanced` to `gpt-6.2-sol` (was `gpt-6.1-sol`); Anthropic `best` and `reasoning` to `claude-fable-5-2` (was `claude-fable-5-1`). Each new target is cheaper per token than the model it replaces. Pass the old model id explicitly to keep the previous behaviour.
+
 ## 0.17.4 — 2026-11-12
 
 ### Fixed
