@@ -1533,11 +1533,15 @@ let () =
         (Option.get (Chatoyant.Tokens.Context_window.get model)))
     [ "claude-fable-5-2"; "claude-mythos-5-2" ];
   check_price "gpt-6.2-astra" 8.0 40.0 (Some 0.4) None None;
+  check_price "gpt-6.2-astra-healthcare" 8.0 40.0 (Some 0.4) None None;
   check_price "gpt-6.2-sol" 2.0 10.0 (Some 0.1) None None;
+  check_price "gpt-6.2-sol-healthcare" 2.0 10.0 (Some 0.1) None None;
   check_price "gpt-6.2-astra-law" 8.0 40.0 (Some 0.4) None None;
   check_price "gpt-6-astra" 10.0 50.0 (Some 1.0) None None;
+  check_price "gpt-6-astra-healthcare" 10.0 50.0 (Some 1.0) None None;
   check_price "gpt-6.1-terra" 1.0 5.0 (Some 0.05) None None;
   check_price "gpt-6.1-sol" 2.0 10.0 (Some 0.1) None None;
+  check_price "gpt-6.1-sol-healthcare" 2.0 10.0 (Some 0.1) None None;
   check_price "gpt-6-sol" 2.0 10.0 (Some 0.2) None None;
   check_price "gpt-6-luna" 0.1 0.5 (Some 0.01) None None;
   check_price "gpt-5.6-cyber" 12.5 75.0 (Some 1.25) None None;
@@ -1578,15 +1582,24 @@ let () =
   assert_equal_int 1_050_000
     (Option.get (Chatoyant.Tokens.Context_window.get "gpt-6.2-astra"));
   assert_equal_int 1_050_000
+    (Option.get
+       (Chatoyant.Tokens.Context_window.get "gpt-6.2-astra-healthcare"));
+  assert_equal_int 1_050_000
     (Option.get (Chatoyant.Tokens.Context_window.get "gpt-6.2-sol"));
   assert_equal_int 1_050_000
+    (Option.get (Chatoyant.Tokens.Context_window.get "gpt-6.2-sol-healthcare"));
+  assert_equal_int 1_050_000
     (Option.get (Chatoyant.Tokens.Context_window.get "gpt-6-astra"));
+  assert_equal_int 1_050_000
+    (Option.get (Chatoyant.Tokens.Context_window.get "gpt-6-astra-healthcare"));
   assert_equal_int 1_050_000
     (Option.get (Chatoyant.Tokens.Context_window.get "gpt-6-cyber"));
   assert_equal_int 1_048_576
     (Option.get (Chatoyant.Tokens.Context_window.get "muse-ember-1.0"));
   assert_equal_int 1_050_000
     (Option.get (Chatoyant.Tokens.Context_window.get "gpt-6.1-sol"));
+  assert_equal_int 1_050_000
+    (Option.get (Chatoyant.Tokens.Context_window.get "gpt-6.1-sol-healthcare"));
   assert_equal_int 1_050_000
     (Option.get (Chatoyant.Tokens.Context_window.get "gpt-6-sol"));
   assert_equal_int 1_050_000

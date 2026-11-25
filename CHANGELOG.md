@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- Add Standard pricing and 1,050,000-token context windows for OpenAI `gpt-6.2-astra-healthcare`, `gpt-6.2-sol-healthcare`, `gpt-6-astra-healthcare`, and `gpt-6.1-sol-healthcare`. Promotional rates apply at least through December 31, 2026.
+
 ## 0.18.0 — 2026-11-18
 
 ### Added

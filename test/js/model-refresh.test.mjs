@@ -32,11 +32,15 @@ describe("2026-10 model refresh", () => {
     assert.deepEqual(getPricing("gpt-5.6-terra"), { input: 2, output: 12, cached: 0.2 });
     assert.deepEqual(getPricing("gpt-5.6-luna"), { input: 0.2, output: 1.2, cached: 0.02 });
     assert.deepEqual(getPricing("gpt-6.2-astra"), { input: 8, output: 40, cached: 0.4 });
+    assert.deepEqual(getPricing("gpt-6.2-astra-healthcare"), { input: 8, output: 40, cached: 0.4 });
     assert.deepEqual(getPricing("gpt-6.2-sol"), { input: 2, output: 10, cached: 0.1 });
+    assert.deepEqual(getPricing("gpt-6.2-sol-healthcare"), { input: 2, output: 10, cached: 0.1 });
     assert.deepEqual(getPricing("gpt-6.2-astra-law"), { input: 8, output: 40, cached: 0.4 });
     assert.deepEqual(getPricing("gpt-6-astra"), { input: 10, output: 50, cached: 1 });
+    assert.deepEqual(getPricing("gpt-6-astra-healthcare"), { input: 10, output: 50, cached: 1 });
     assert.deepEqual(getPricing("gpt-6.1-terra"), { input: 1, output: 5, cached: 0.05 });
     assert.deepEqual(getPricing("gpt-6.1-sol"), { input: 2, output: 10, cached: 0.1 });
+    assert.deepEqual(getPricing("gpt-6.1-sol-healthcare"), { input: 2, output: 10, cached: 0.1 });
     assert.deepEqual(getPricing("gpt-6-luna"), { input: 0.1, output: 0.5, cached: 0.01 });
     assert.deepEqual(getPricing("claude-sonnet-5"), { input: 2, output: 10, cached: 0.2, cacheWrite5m: 2.5, cacheWrite1h: 4 });
     assert.equal(getPricing("claude-fable-5-1").cached, 0.25);
@@ -51,6 +55,10 @@ describe("2026-10 model refresh", () => {
     for (const [model, provider, context] of [
       ["gpt-6.2-astra", "openai", 1050000],
       ["gpt-6.2-sol", "openai", 1050000],
+      ["gpt-6.2-astra-healthcare", "openai", 1050000],
+      ["gpt-6.2-sol-healthcare", "openai", 1050000],
+      ["gpt-6-astra-healthcare", "openai", 1050000],
+      ["gpt-6.1-sol-healthcare", "openai", 1050000],
       ["gpt-6-astra", "openai", 1050000],
       ["gpt-6.1-terra", "openai", 1050000],
       ["claude-opus-5-5", "anthropic", 1000000],
