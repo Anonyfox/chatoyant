@@ -753,6 +753,7 @@ lib/schema/value.mli::val validate_object: val validate_object : (string * Schem
 lib/tokens/chatoyant_tokens.mli::module Chunking: module Chunking = Chunking
 lib/tokens/chatoyant_tokens.mli::module Context_window: module Context_window = Context_window
 lib/tokens/chatoyant_tokens.mli::module Cost: module Cost = Cost
+lib/tokens/chatoyant_tokens.mli::module Lifecycle: module Lifecycle = Lifecycle
 lib/tokens/chatoyant_tokens.mli::module Message_budget: module Message_budget = Message_budget
 lib/tokens/chatoyant_tokens.mli::module Pricing: module Pricing = Pricing
 lib/tokens/chatoyant_tokens.mli::module Token_estimate: module Token_estimate = Token_estimate
@@ -782,6 +783,12 @@ lib/tokens/cost.mli::val pricing: val pricing : ?cached_per_million:float -> ?ca
 lib/tokens/cost.mli::val result_to_json: val result_to_json : result -> Chatoyant_runtime.Json.t
 lib/tokens/cost.mli::val source_to_string: val source_to_string : source -> string
 lib/tokens/cost.mli::val usage_to_json: val usage_to_json : usage -> Chatoyant_runtime.Json.t
+lib/tokens/lifecycle.mli::type info: type info = { status : status; deprecated_on : string option; retires_on : string option; replacement : string option; note : string option; }
+lib/tokens/lifecycle.mli::type status: type status = Active | Deprecated | Retired
+lib/tokens/lifecycle.mli::val lifecycle: val lifecycle : string -> info option
+lib/tokens/lifecycle.mli::val set_warning_handler: val set_warning_handler : (string -> unit) -> unit
+lib/tokens/lifecycle.mli::val warn_once: val warn_once : string -> unit
+lib/tokens/lifecycle.mli::val warning: val warning : string -> string option
 lib/tokens/message_budget.mli::type message: type message = { role : string; content : string option; name : string option }
 lib/tokens/message_budget.mli::type overhead: type overhead = { per_message : int; conversation : int }
 lib/tokens/message_budget.mli::type provider: type provider = Openai | Anthropic | Xai

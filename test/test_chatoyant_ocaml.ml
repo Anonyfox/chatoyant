@@ -1362,6 +1362,34 @@ let () =
     (not (contains_substring "disabled" sonnet55_body));
   assert_true "sonnet 5.5 drops sampling"
     (not (contains_substring "temperature" sonnet55_body));
+  let module L = Chatoyant.Tokens.Lifecycle in
+  let retired = Option.get (L.lifecycle "grok-build-0.1") in
+  assert_true "Grok Build retirement"
+    (retired.status = Retired
+    && retired.retires_on = Some "2026-11-19"
+    && retired.replacement = None);
+  let opus = Option.get (L.lifecycle "claude-opus-4-5") in
+  assert_true "Opus deprecation"
+    (opus.status = Deprecated
+    && opus.deprecated_on = Some "2026-11-23"
+    && opus.retires_on = Some "2027-01-22"
+    && opus.replacement = Some "claude-opus-5-5");
+  let model = "claude-opus-4-5-20251101" in
+  assert_true "Opus snapshot" (L.lifecycle model = Some opus);
+  assert_true "current Opus" (L.lifecycle "claude-opus-5-5" = None);
+  let warnings = ref [] in
+  L.set_warning_handler (fun message -> warnings := message :: !warnings);
+  Fun.protect
+    ~finally:(fun () -> L.set_warning_handler prerr_endline)
+    (fun () ->
+      for _iteration = 1 to 2 do
+        let body =
+          anthropic_body_for ~model ~temperature:None ~reasoning_effort:None
+        in
+        assert_contains model body
+      done);
+  assert_equal_int 1 (List.length !warnings);
+  assert_contains "2027-01-22" (List.hd !warnings);
   let haiku_body =
     anthropic_body_for ~model:"claude-haiku-4-5" ~temperature:(Some 0.2)
       ~reasoning_effort:(Some "low")

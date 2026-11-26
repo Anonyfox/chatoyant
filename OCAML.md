@@ -201,6 +201,15 @@ The one-shot helpers `Chatoyant.gen_text`, `Chatoyant.gen_result`, and
 `Chatoyant.gen_data` do not mutate the chat history. Use `Chatoyant.Chat.*`
 when conversation state is the point.
 
+## Model lifecycle
+
+`Chatoyant.Tokens.Lifecycle.lifecycle "grok-build-0.1"` returns a retired
+entry with `retires_on = Some "2026-11-19"`. A missing entry returns `None`.
+Dates and replacement ids are optional. Request builders write a lifecycle
+warning to stderr once per affected model id. Use
+`Chatoyant.Tokens.Lifecycle.set_warning_handler ignore` to silence warnings,
+or pass a logging function to redirect them.
+
 ## Realtime And mTLS
 
 Native OCaml uses Eio for both HTTP and WebSocket effects. Low-level Realtime

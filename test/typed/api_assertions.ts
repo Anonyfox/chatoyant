@@ -1,5 +1,6 @@
 import {
   Chat, Message, Schema, Tool, createTool, genData, calculateCost, estimateCost,
+  modelLifecycle, type ModelLifecycle,
   getPricing, estimateTokens, fitMessages, detectProviderByModel,
   type ProviderId, type Role, type GenerationOptions, type GenerationResult,
   type ChatJSON, type MessageJSON, type CostResult, type Usage, type ModelPricing,
@@ -8,6 +9,15 @@ import {
 
 type Equal<A,B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
 type Expect<T extends true> = T;
+
+export type LifecycleLookup = Expect<Equal<ReturnType<typeof modelLifecycle>, ModelLifecycle | undefined>>;
+export type LifecycleFields = Expect<Equal<ModelLifecycle, {
+  status: "active" | "deprecated" | "retired";
+  deprecatedOn: string | undefined;
+  retiresOn: string | undefined;
+  replacement: string | undefined;
+  note: string | undefined;
+}>>;
 
 export type ProviderExact = Expect<Equal<ProviderId, 'openai' | 'anthropic' | 'xai' | 'meta' | 'local' | 'openrouter'>>;
 export type RoleExact = Expect<Equal<Role, 'system' | 'user' | 'assistant' | 'tool'>>;

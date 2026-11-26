@@ -365,6 +365,7 @@ export type GenerateResult = GenerationResult;
 
 /** Common high-level generation options. Unknown provider-specific options can be passed through `extra`. */
 export interface GenerationOptions {
+  /** Model id or preset to use for this request. See modelLifecycle for first-party availability. */
   model?: string;
   provider?: "openai" | "anthropic" | "xai" | "openrouter" | "local" | (string & {});
   system?: string;
@@ -698,6 +699,21 @@ export function calculateVideoCost(params: { model: string; durationSeconds: num
 export function estimateCost(params: { model: string; inputTokens?: number; inputText?: string; expectedOutputTokens: number }): CostResult;
 /** Return USD prices per token, or undefined when the model has no pricing. */
 export function getCostPerToken(model: string): { input: number; output: number; cached: number; cacheWrite: number } | undefined;
+/** Known lifecycle information for the provider's first-party API. */
+export interface ModelLifecycle {
+  /** Recorded availability status. */
+  status: "active" | "deprecated" | "retired";
+  /** ISO deprecation date, when announced. */
+  deprecatedOn: string | undefined;
+  /** ISO retirement date, when announced. */
+  retiresOn: string | undefined;
+  /** Provider-recommended replacement model id, when available. */
+  replacement: string | undefined;
+  /** Additional provider lifecycle details, when available. */
+  note: string | undefined;
+}
+/** Look up a model or dated snapshot, returning undefined without a lifecycle entry. */
+export function modelLifecycle(id: string): ModelLifecycle | undefined;
 /** Look up the model pricing row, or return undefined when absent. */
 export function getPricing(model: string): ModelPricing | undefined;
 /** Check whether a model has a pricing row. */

@@ -247,6 +247,11 @@ type stream_state = {
 }
 
 let string value = Chatoyant_runtime.Json.String value
+
+let model_json model =
+  Chatoyant_tokens.Lifecycle.warn_once model;
+  string model
+
 let bool value = Chatoyant_runtime.Json.Bool value
 let int value = Chatoyant_runtime.Json.Float (Float.of_int value)
 let float value = Chatoyant_runtime.Json.Float value
@@ -456,7 +461,7 @@ let system_json request =
 
 let request_json request =
   [
-    ("model", string request.model);
+    ("model", model_json request.model);
     ( "messages",
       Chatoyant_runtime.Json.Array (List.map message_json request.messages) );
     ("max_tokens", int request.max_tokens);

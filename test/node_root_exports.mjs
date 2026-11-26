@@ -64,6 +64,7 @@ const expectedExports = [
   "genStreamAccumulate",
   "genText",
   "mergeOptions",
+  "modelLifecycle",
   "version",
 ].sort();
 assert(

@@ -671,6 +671,11 @@ type fine_tuning_checkpoint_list = {
 }
 
 let string value = Chatoyant_runtime.Json.String value
+
+let model_json model =
+  Chatoyant_tokens.Lifecycle.warn_once model;
+  string model
+
 let bool value = Chatoyant_runtime.Json.Bool value
 let int value = Chatoyant_runtime.Json.Float (Float.of_int value)
 let float value = Chatoyant_runtime.Json.Float value
@@ -893,7 +898,7 @@ let chat_response_format_json = function
 
 let chat_request_json request =
   [
-    ("model", string request.chat_model);
+    ("model", model_json request.chat_model);
     ( "messages",
       Chatoyant_runtime.Json.Array
         (List.map chat_message_json request.chat_messages) );
@@ -952,7 +957,7 @@ let metadata_json values =
 
 let responses_request_json request =
   [
-    ("model", string request.responses_model);
+    ("model", model_json request.responses_model);
     ("input", responses_input_json request.responses_input);
     ("stream", bool request.responses_stream);
   ]
@@ -993,7 +998,7 @@ let image_response_format_json = function
 
 let image_request_json request =
   [
-    ("model", string request.image_model);
+    ("model", model_json request.image_model);
     ("prompt", string request.image_prompt);
   ]
   |> add_opt "background" string request.image_background
@@ -1021,7 +1026,7 @@ let audio_response_format_to_string = function
   | Audio_format value -> value
 
 let transcription_request_json request =
-  [ ("model", string request.transcription_model) ]
+  [ ("model", model_json request.transcription_model) ]
   |> add_opt "language" string request.transcription_language
   |> add_opt "prompt" string request.transcription_prompt
   |> add_opt "response_format"
@@ -1037,7 +1042,7 @@ let transcription_request_json request =
   |> fun fields -> Chatoyant_runtime.Json.Object fields
 
 let translation_request_json request =
-  [ ("model", string request.translation_model) ]
+  [ ("model", model_json request.translation_model) ]
   |> add_opt "prompt" string request.translation_prompt
   |> add_opt "response_format"
        (fun value -> string (audio_response_format_to_string value))
@@ -1049,7 +1054,7 @@ let translation_request_json request =
 
 let speech_request_json request =
   [
-    ("model", string request.speech_model);
+    ("model", model_json request.speech_model);
     ("input", string request.speech_input);
     ("voice", string request.speech_voice);
   ]
@@ -1073,7 +1078,7 @@ let embedding_encoding_format_json = function
 
 let embedding_request_json request =
   [
-    ("model", string request.embedding_model);
+    ("model", model_json request.embedding_model);
     ("input", embedding_input_json request.embedding_input);
   ]
   |> add_opt "encoding_format" embedding_encoding_format_json
@@ -1091,7 +1096,7 @@ let moderation_input_json = function
 
 let moderation_request_json request =
   [ ("input", moderation_input_json request.moderation_input) ]
-  |> add_opt "model" string request.moderation_model
+  |> add_opt "model" model_json request.moderation_model
   |> List.rev_append request.moderation_extra
   |> List.rev
   |> fun fields -> Chatoyant_runtime.Json.Object fields
@@ -1193,7 +1198,7 @@ let vector_store_search_request_json request =
 
 let fine_tuning_job_request_json request =
   [
-    ("model", string request.fine_tuning_model);
+    ("model", model_json request.fine_tuning_model);
     ("training_file", string request.fine_tuning_training_file);
   ]
   |> add_opt "validation_file" string request.fine_tuning_validation_file
@@ -1232,6 +1237,7 @@ let pct_encode text =
   Buffer.contents buffer
 
 let realtime_url ?(base_url = "wss://api.openai.com/v1/realtime") ~model () =
+  Chatoyant_tokens.Lifecycle.warn_once model;
   let separator = if String.contains base_url '?' then "&" else "?" in
   base_url ^ separator ^ "model=" ^ pct_encode model
 
@@ -2468,7 +2474,7 @@ module Make_client (Http : Chatoyant_runtime.Effect.HTTP) = struct
   let image_edit_parts request_body =
     let scalar =
       [
-        ("model", string request_body.edit_model);
+        ("model", model_json request_body.edit_model);
         ("prompt", string request_body.edit_prompt);
       ]
       |> add_opt "background" string request_body.edit_background
@@ -2497,7 +2503,7 @@ module Make_client (Http : Chatoyant_runtime.Effect.HTTP) = struct
   let image_variation_parts request_body =
     let scalar =
       []
-      |> add_opt "model" string request_body.variation_model
+      |> add_opt "model" model_json request_body.variation_model
       |> add_opt "n" int request_body.variation_n
       |> add_opt "response_format" image_response_format_json
            request_body.variation_response_format

@@ -215,6 +215,9 @@ let estimate_cost = Chatoyant_internal.public_estimate_cost
 let get_cost_per_token = Chatoyant_internal.public_get_cost_per_token
 [@@mel.as "getCostPerToken"]
 
+let model_lifecycle = Chatoyant_internal.model_lifecycle
+[@@mel.as "modelLifecycle"]
+
 let get_pricing = Chatoyant_internal.public_get_pricing [@@mel.as "getPricing"]
 let has_pricing = Chatoyant_internal.public_has_pricing [@@mel.as "hasPricing"]
 

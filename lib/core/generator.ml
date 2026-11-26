@@ -73,6 +73,7 @@ struct
                    :: List.remove_assoc "chatoyant_provider_replay" fields));
           }
     in
+    Chatoyant_tokens.Lifecycle.warn_once provider_options.model;
     match Provider.generate provider_messages provider_options with
     | Error error -> Error error
     | Ok generation ->

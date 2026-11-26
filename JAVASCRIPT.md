@@ -45,6 +45,14 @@ Provider is detected from the model name unless explicitly set.
 | OpenRouter | `OPENROUTER_API_KEY` | Slash notation such as `openai/gpt-4o` |
 | Local | `LOCAL_BASE_URL` | Explicit `provider: "local"` or local fallback |
 
+## Model lifecycle
+
+Import `modelLifecycle` from `chatoyant` to check a model id.
+For example, `modelLifecycle("claude-opus-4-5")?.replacement` returns
+`"claude-opus-5-5"`. A missing entry or unknown date is `undefined`.
+Requests emit a console warning once per affected model id. Set
+`CHATOYANT_SILENCE_MODEL_WARNINGS=1` in the environment to silence warnings.
+
 ## Images, Files, and the Responses API
 
 Messages accept image and file attachments; each provider adapter renders

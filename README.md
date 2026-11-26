@@ -137,6 +137,15 @@ long-context rates are not modelled. GPT-5.6 Sol uses OpenAI's promotional
 price through 2026-11-30. Haiku 5.5 prompts above 100K tokens
 and Grok Build prompts at or above 200K tokens have higher rates not modelled here.
 
+### Model lifecycle
+
+xAI retired `grok-build-0.1` on 2026-11-19. Anthropic deprecated
+`claude-opus-4-5` and `claude-opus-4-5-20251101` on 2026-11-23, with
+API retirement scheduled for 2027-01-22. Anthropic recommends `claude-opus-5-5`.
+Use `Chatoyant.Tokens.Lifecycle.lifecycle` in OCaml or `modelLifecycle` in
+JavaScript to look up an id. Requests retain the specified id and warn once
+per deprecated or retired id.
+
 Retired on first-party APIs (ids still resolve for pricing/detection): claude-opus-4-1, claude-opus-4, claude-sonnet-4, claude-3-5-haiku/claude-3-*; xAI no longer lists grok-4-1-fast-*, grok-code-fast-1, grok-3*, grok-4-0709.
 
 ## OCaml Quick Start

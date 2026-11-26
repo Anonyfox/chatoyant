@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- Expose first-party model lifecycle dates and recommended replacements in OCaml and JavaScript. Requests warn once per deprecated or retired model id.
+
 ## 0.18.1 — 2026-11-25
 
 ### Added

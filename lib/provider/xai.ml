@@ -505,6 +505,11 @@ type collection_search_response = {
 }
 
 let string value = Chatoyant_runtime.Json.String value
+
+let model_json model =
+  Chatoyant_tokens.Lifecycle.warn_once model;
+  string model
+
 let bool value = Chatoyant_runtime.Json.Bool value
 let int value = Chatoyant_runtime.Json.Float (Float.of_int value)
 let float value = Chatoyant_runtime.Json.Float value
@@ -631,7 +636,7 @@ let tts_request_json request =
 
 let chat_request_json request =
   [
-    ("model", string request.chat_model);
+    ("model", model_json request.chat_model);
     ( "messages",
       Chatoyant_runtime.Json.Array (List.map message_json request.chat_messages)
     );
@@ -663,7 +668,7 @@ let responses_text_json format =
 
 let responses_request_json request =
   [
-    ("model", string request.responses_model);
+    ("model", model_json request.responses_model);
     ("input", responses_input_json request.responses_input);
     ("stream", bool request.responses_stream);
   ]
@@ -850,7 +855,7 @@ let image_response_format_json = function
 
 let image_request_json request =
   [ ("prompt", string request.image_prompt) ]
-  |> add_opt "model" string request.image_model
+  |> add_opt "model" model_json request.image_model
   |> add_opt "n" int request.image_n
   |> add_opt "response_format" image_response_format_json
        request.image_response_format
@@ -877,7 +882,7 @@ let image_edit_request_json request =
   in
   [ ("prompt", string request.edit_prompt) ]
   |> List.rev_append image_field
-  |> add_opt "model" string request.edit_model
+  |> add_opt "model" model_json request.edit_model
   |> add_opt "n" int request.edit_n
   |> add_opt "response_format" image_response_format_json
        request.edit_response_format
@@ -889,7 +894,7 @@ let image_edit_request_json request =
 
 let video_request_json request =
   [ ("prompt", string request.video_prompt) ]
-  |> add_opt "model" string request.video_model
+  |> add_opt "model" model_json request.video_model
   |> add_opt "duration" int request.video_duration
   |> add_opt "aspect_ratio" string request.video_aspect_ratio
   |> add_opt "resolution" string request.video_resolution
@@ -934,6 +939,7 @@ let append_query base params =
       base ^ separator ^ String.concat "&" values
 
 let voice_agent_url ?(base_url = "wss://api.x.ai/v1/realtime") ~model () =
+  Chatoyant_tokens.Lifecycle.warn_once model;
   append_query base_url [ ("model", Some model) ]
 
 let streaming_tts_url ?(base_url = "wss://api.x.ai/v1/tts") ?(language = "en")

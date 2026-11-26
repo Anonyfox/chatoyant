@@ -831,6 +831,61 @@ class ProviderError extends Error {
 |}]
 [@@mel.as "ProviderError"]
 
+module Lifecycle = Chatoyant_tokens.Lifecycle
+
+let model_lifecycle model =
+  Option.map
+    (fun (info : Lifecycle.info) ->
+      let status =
+        match info.status with
+        | Active -> "active"
+        | Deprecated -> "deprecated"
+        | Retired -> "retired"
+      in
+      [%mel.obj
+        {
+          status;
+          deprecatedOn = info.deprecated_on;
+          retiresOn = info.retires_on;
+          replacement = info.replacement;
+          note = info.note;
+        }])
+    (Lifecycle.lifecycle model)
+
+let lifecycle_warning_sink : string -> unit =
+  [%mel.raw
+    {|message => {
+      if (globalThis.process?.env?.CHATOYANT_SILENCE_MODEL_WARNINGS !== "1") {
+        console.warn(message);
+      }
+    }|}]
+
+let () = Lifecycle.set_warning_handler lifecycle_warning_sink
+
+let make_model_request_encoder : (string -> unit) -> js_function =
+  [%mel.raw
+    {|warn => body => {
+      const isForm = typeof FormData !== "undefined" && body instanceof FormData;
+      const encoded = isForm || typeof body === "string" ? body : JSON.stringify(body);
+      try {
+        // Inspect ordinary model fields without reading request getters twice.
+        let model;
+        if (isForm) model = body.get("model");
+        else if (typeof body === "string") model = JSON.parse(body)?.model;
+        else if (body) {
+          const field = Object.getOwnPropertyDescriptor(body, "model");
+          if (field) model = "value" in field ? field.value : JSON.parse(encoded)?.model;
+        }
+        if (typeof model === "string") warn(model);
+      } catch (_) {
+        // Raw bodies can contain arbitrary text.
+      }
+      return encoded;
+    }|}]
+
+let encode_model_request = make_model_request_encoder Lifecycle.warn_once
+[@@mel.as "encode_model_request"]
+
 let compatibility_surface : js_value =
   [%mel.raw
     {|
@@ -1569,7 +1624,7 @@ async function providerRequestRaw(provider, path, options = {}) {
   const init = {
     method: options.method || (body === undefined ? "GET" : "POST"),
     headers,
-    body: body === undefined ? undefined : isFormData ? body : typeof body === "string" ? body : JSON.stringify(body),
+    body: encode_model_request(body),
   };
   const response = await fetch(url, init);
   if (!response.ok) {
@@ -3068,7 +3123,7 @@ class Chat {
     const json = await this._fetchJson(`${baseUrl}/responses`, {
       method: "POST",
       headers,
-      body: JSON.stringify(body),
+      body: encode_model_request(body),
     }, this._timeoutFor(provider, options), provider);
     const output = json.output || [];
     const content = output
@@ -3165,7 +3220,7 @@ class Chat {
     const json = await this._fetchJson(`${baseUrl}/chat/completions`, {
       method: "POST",
       headers,
-      body: JSON.stringify(body),
+      body: encode_model_request(body),
     }, this._timeoutFor(provider, options), provider);
     const choice = json.choices?.[0] || {};
     const message = choice.message || {};
@@ -3226,7 +3281,7 @@ class Chat {
     const response = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
       headers,
-      body: JSON.stringify(body),
+      body: encode_model_request(body),
     });
     if (!response.ok) {
       throw ProviderError.fromHttp(provider, response.status, await response.text());
@@ -3267,7 +3322,7 @@ class Chat {
         "anthropic-version": options.anthropicVersion || "2023-06-01",
         ...this._anthropicBetaHeaders(messages),
       },
-      body: JSON.stringify(body),
+      body: encode_model_request(body),
     }, this._timeoutFor("anthropic", options), "anthropic");
     const blocks = json.content || [];
     const text = blocks.filter((block) => block.type === "text").map((block) => block.text || "").join("");
@@ -3326,7 +3381,7 @@ class Chat {
         "anthropic-version": options.anthropicVersion || "2023-06-01",
         ...this._anthropicBetaHeaders(messages),
       },
-      body: JSON.stringify(body),
+      body: encode_model_request(body),
     });
     if (!response.ok) {
       throw ProviderError.fromHttp("anthropic", response.status, await response.text());

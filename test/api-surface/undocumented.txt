@@ -1,5 +1,5 @@
 # Undocumented public declarations and class/interface members.
-# Maximum: 629
+# Maximum: 628
 AnthropicClient.chat #1
 AnthropicClient.chatSimple #1
 AnthropicClient.config #1
@@ -180,7 +180,6 @@ GenerationOptions.maxAttempts #1
 GenerationOptions.maxTokens #1
 GenerationOptions.maxToolIterations #1
 GenerationOptions.max_tokens #1
-GenerationOptions.model #1
 GenerationOptions.onDelta #1
 GenerationOptions.poll #1
 GenerationOptions.pollIntervalMs #1

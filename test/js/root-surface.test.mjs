@@ -91,6 +91,7 @@ describe("public root package surface", () => {
       "isProviderActive",
       "mergeOptions",
       "messagesFitBudget",
+      "modelLifecycle",
       "paginateMessages",
       "resolveProvider",
       "splitText",
