@@ -1377,7 +1377,8 @@ let () =
   List.iter
     (fun id ->
       let image = Option.get (L.lifecycle id) in
-      assert_true ("xAI image retirement " ^ id)
+      assert_true
+        ("xAI image retirement " ^ id)
         (image.status = Retired
         && image.retires_on = Some "2026-11-02"
         && image.replacement = Some "grok-imagine-image-2.0"))
