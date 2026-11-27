@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Fixed
+
+- Mark xAI `grok-imagine-image-quality` and `grok-imagine-image-pro` as retired on 2026-11-02 with replacement `grok-imagine-image-2.0`; xAI now serves both as `grok-imagine-image-2.0` at low quality, at the same $0.04 per 1K image.
+
 ## 0.19.0 — 2026-11-26
 
 ### Added

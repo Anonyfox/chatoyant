@@ -19,6 +19,14 @@ let retired =
 
 let entry = function
   | "grok-build-0.1" -> Some { retired with retires_on = Some "2026-11-19" }
+  | "grok-imagine-image-quality" | "grok-imagine-image-pro" ->
+      Some
+        {
+          retired with
+          retires_on = Some "2026-11-02";
+          replacement = Some "grok-imagine-image-2.0";
+          note = Some "xAI serves it as grok-imagine-image-2.0 at low quality.";
+        }
   | "claude-opus-4-5" ->
       Some
         {

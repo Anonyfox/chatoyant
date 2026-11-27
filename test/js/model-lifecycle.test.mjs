@@ -10,6 +10,14 @@ test("first-party lifecycle entries preserve historical model lookups", () => {
   });
   assert.ok(getPricing(model));
   assert.ok(getContextWindow(model));
+  for (const id of ["grok-imagine-image-quality", "grok-imagine-image-pro"]) {
+    assert.deepEqual(modelLifecycle(id), {
+      status: "retired", deprecatedOn: undefined, retiresOn: "2026-11-02",
+      replacement: "grok-imagine-image-2.0",
+      note: "xAI serves it as grok-imagine-image-2.0 at low quality.",
+    });
+    assert.ok(getPricing(id));
+  }
   for (const id of ["claude-opus-4-5", "claude-opus-4-5-20251101"]) {
     assert.deepEqual(modelLifecycle(id), {
       status: "deprecated", deprecatedOn: "2026-11-23", retiresOn: "2027-01-22",

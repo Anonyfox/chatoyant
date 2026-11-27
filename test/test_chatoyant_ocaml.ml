@@ -1374,6 +1374,14 @@ let () =
     && opus.deprecated_on = Some "2026-11-23"
     && opus.retires_on = Some "2027-01-22"
     && opus.replacement = Some "claude-opus-5-5");
+  List.iter
+    (fun id ->
+      let image = Option.get (L.lifecycle id) in
+      assert_true ("xAI image retirement " ^ id)
+        (image.status = Retired
+        && image.retires_on = Some "2026-11-02"
+        && image.replacement = Some "grok-imagine-image-2.0"))
+    [ "grok-imagine-image-quality"; "grok-imagine-image-pro" ];
   let model = "claude-opus-4-5-20251101" in
   assert_true "Opus snapshot" (L.lifecycle model = Some opus);
   assert_true "current Opus" (L.lifecycle "claude-opus-5-5" = None);
