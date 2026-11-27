@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+## 0.19.1 — 2026-11-27
+
 ### Fixed
 
 - Mark xAI `grok-imagine-image-quality` and `grok-imagine-image-pro` as retired on 2026-11-02 with replacement `grok-imagine-image-2.0`; xAI now serves both as `grok-imagine-image-2.0` at low quality, at the same $0.04 per 1K image.
